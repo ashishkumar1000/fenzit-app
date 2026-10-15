@@ -31,13 +31,9 @@ export interface SendOtpResponse {
   otp_session_id: string;
   /** ISO timestamp — the OTP session expires 5 minutes after send. */
   expires_at: string;
-  /**
-   * ⚠️ Dev/testing only. The backend includes the real OTP here so testing
-   * doesn't require SMS delivery — this field will be removed before
-   * production. Do NOT read, display, or otherwise depend on this in any
-   * app code; it's typed here only because it's present on the wire today.
-   */
-  otp?: string;
+  // No `otp` field: the dev-echo response field is dead to this app (PRD
+  // FR-FE1). Real codes arrive over SMS; if a dev build needs a code, read
+  // the mock provider's log line or use the flag-gated master code.
 }
 
 /** `POST /auth/otp/send` — no auth required. */

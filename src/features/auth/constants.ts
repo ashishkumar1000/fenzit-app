@@ -3,8 +3,12 @@
  * No design values here — those live in `src/theme`.
  */
 
-/** Number of OTP digits. */
-export const OTP_LENGTH = 6;
+/**
+ * Number of OTP digits — 4 per the product call (2026-10-15), matching the
+ * backend's CSPRNG `randomInt(1000, 10000)`. Guessing is bounded server-side
+ * by the 5-attempt lockout, the 5-minute TTL, and the 5-sends/10-min cap.
+ */
+export const OTP_LENGTH = 4;
 
 /** Seconds before "Resend code" becomes available again. */
 export const RESEND_SECONDS = 45;

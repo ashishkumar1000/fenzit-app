@@ -8,7 +8,7 @@
  * main app.
  */
 import { useCallback, useState } from 'react';
-import { DIAL_CODE, OTP_LENGTH } from './constants';
+import { DIAL_CODE, OTP_LENGTH, RESEND_SECONDS } from './constants';
 import type { AuthResult, AuthStep, BusinessProfile } from './types';
 import { PhoneScreen } from './screens/PhoneScreen';
 import { OtpScreen } from './screens/OtpScreen';
@@ -39,6 +39,11 @@ function sendOtpErrorMessage(err: ApiError): string {
   if (err.code === 'RATE_LIMIT_EXCEEDED') {
     return 'Too many attempts. Please wait a few minutes and try again.';
   }
+  // The SMS gateway failed (502 OTP_SEND_FAILED) — retryable by contract:
+  // the session is gone and a resend starts a fresh one.
+  if (err.code === 'OTP_SEND_FAILED') {
+    return 'Couldn\u2019t send the code. Please try again.';
+  }
   return err.message;
 }
 
@@ -68,12 +73,11 @@ export default function AuthFlow({ onComplete }: Props) {
   // send back, per the backend contract (not the phone number).
   const [otpSessionId, setOtpSessionId] = useState('');
 
-  // DEV ONLY: the backend includes the real OTP in the sendOtp response
-  // while SMS delivery isn't wired up yet (see authApi.ts). Gated on __DEV__
-  // here too, in addition to the backend's own plan to remove the field —
-  // belt-and-braces so this can never render in a production build even if
-  // a stray dev/staging response reaches one.
-  const [devOtp, setDevOtp] = useState('');
+  // Seconds the OTP screen's resend countdown should restart with when a
+  // resend hits the backend's 429 — the `Retry-After` header, so the wait
+  // shown matches the server's actual window remainder (real delivery makes
+  // 429 a normal user path: resend-until-arrival reaches the 5/10-min cap).
+  const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
 
   const [sending, setSending] = useState(false);
   const [resending, setResending] = useState(false);
@@ -92,7 +96,6 @@ export default function AuthFlow({ onComplete }: Props) {
   const requestOtp = useCallback(async () => {
     const res = await authApi.sendOtp({ countryCode: DIAL_CODE, phoneNumber: phone });
     setOtpSessionId(res.otp_session_id);
-    setDevOtp(__DEV__ && res.otp ? res.otp : '');
   }, [phone]);
 
   const sendOtp = useCallback(async () => {
@@ -121,9 +124,16 @@ export default function AuthFlow({ onComplete }: Props) {
     setResending(true);
     try {
       await requestOtp();
+      setRateLimitSeconds(0);
     } catch (err) {
+      const apiError = err as ApiError;
       // Surface on the OTP screen — the person is already past step 1.
-      setOtpError(sendOtpErrorMessage(err as ApiError));
+      setOtpError(sendOtpErrorMessage(apiError));
+      // A 429 restarts the countdown at the server's window remainder (the
+      // header is authoritative; without it, fall back to the normal 45s).
+      if (apiError.code === 'RATE_LIMIT_EXCEEDED') {
+        setRateLimitSeconds(apiError.retryAfterSeconds ?? RESEND_SECONDS);
+      }
     } finally {
       setResending(false);
       done?.();
@@ -175,7 +185,6 @@ export default function AuthFlow({ onComplete }: Props) {
         // them stuck retrying a code that can never succeed.
         setCode('');
         setStep('phone');
-        setDevOtp('');
         setPhoneError(
           apiError.code === 'OTP_SESSION_LOCKED'
             ? 'Too many incorrect attempts. Please request a new code.'
@@ -277,7 +286,7 @@ export default function AuthFlow({ onComplete }: Props) {
         verifying={verifying}
         resending={resending}
         error={otpError}
-        devOtp={devOtp}
+        rateLimitSeconds={rateLimitSeconds}
       />
     );
   }

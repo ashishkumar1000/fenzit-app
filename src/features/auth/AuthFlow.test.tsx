@@ -66,7 +66,7 @@ async function renderAtProfileStep() {
   });
   const otpScreen = renderer.root.findByType(OtpScreen);
   await ReactTestRenderer.act(async () => {
-    otpScreen.props.onChangeCode('123456');
+    otpScreen.props.onChangeCode('1234');
   });
   await ReactTestRenderer.act(async () => {
     await otpScreen.props.onVerify();

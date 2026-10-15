@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../../../components/ui';
-import { colors, radius, spacing, typography } from '../../../theme';
+import { colors, spacing, typography } from '../../../theme';
 import { AuthScaffold } from '../components/AuthScaffold';
 import { OtpInput } from '../components/OtpInput';
 import { DIAL_CODE, OTP_LENGTH, RESEND_SECONDS } from '../constants';
@@ -26,12 +26,11 @@ type Props = {
    *  countdown neither runs nor restarts (the 20-1 loading sweep). */
   resending?: boolean;
   error?: string;
-  /**
-   * DEV ONLY — the real OTP, when the backend includes it (no SMS delivery
-   * yet). Rendered only when `__DEV__` is true, so it can never show up in
-   * a production build regardless of what a response contains.
-   */
-  devOtp?: string;
+  /** When set (>0), the resend countdown restarts at exactly this many
+   *  seconds — the backend's `Retry-After` after a rate-limited resend, so
+   *  the wait shown matches the server's real window remainder (with real
+   *  SMS, hitting the 5-sends/10-min cap is a normal user path). */
+  rateLimitSeconds?: number;
 };
 
 const formatPhone
@@ -54,14 +53,14 @@ export function OtpScreen({
   verifying = false,
   resending = false,
   error,
-  devOtp,
+  rateLimitSeconds = 0,
 }: Props) {
   const [seconds, setSeconds] = useState(RESEND_SECONDS);
 
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const startTimer = useCallback(() => {
-    setSeconds(RESEND_SECONDS);
+  const startTimer = useCallback((from: number = RESEND_SECONDS) => {
+    setSeconds(from);
     if (timer.current) clearInterval(timer.current);
     timer.current = setInterval(() => {
       setSeconds(prev => {
@@ -81,10 +80,20 @@ export function OtpScreen({
     };
   }, [startTimer]);
 
+  // A rate-limited resend overrides the normal 45s window with the server's
+  // Retry-After. Effect on the prop (not inside the resend handler) — the
+  // countdown belongs to this screen.
+  useEffect(() => {
+    if (rateLimitSeconds > 0) {
+      startTimer(rateLimitSeconds);
+    }
+  }, [rateLimitSeconds, startTimer]);
+
   const handleResend = () => {
     if (seconds > 0 || resending) return;
-    // The 45s window restarts only when the POST settles — until then the
+    // The window restarts only when the POST settles — until then the
     // link stays on "Resending…", so a slow network can't eat the window.
+    // (A 429 restarts it again at the server's Retry-After via the prop.)
     onResend(() => startTimer());
   };
 
@@ -108,12 +117,6 @@ export function OtpScreen({
           onFilled={onVerify}
         />
       </View>
-
-      {__DEV__ && devOtp ? (
-        <Pressable onPress={() => onChangeCode(devOtp)} hitSlop={8} style={styles.devBanner}>
-          <Text style={styles.devBannerText}>DEV — OTP is {devOtp} (tap to fill)</Text>
-        </Pressable>
-      ) : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -175,21 +178,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.danger,
     marginTop: spacing.s3,
-  },
-  devBanner: {
-    marginTop: spacing.s3,
-    paddingVertical: spacing.s2,
-    paddingHorizontal: spacing.s3,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    alignSelf: 'flex-start',
-  },
-  devBannerText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    fontWeight: '600',
   },
   metaRow: {
     flexDirection: 'row',

@@ -8,7 +8,8 @@
  *  - resending → "Resending…" and the link files NOTHING even at zero —
  *    the countdown neither runs nor restarts while the POST is in flight.
  *  - verifying/complete gate the verify CTA, not the resending posture.
- *  - DEV OTP fills the code only under __DEV__ with devOtp given.
+ *  - a rate-limited resend (rateLimitSeconds) restarts the countdown at the
+ *    server's Retry-After instead of the normal 45s.
  *
  * Fake timers drive the countdown; renderers unmount at teardown.
  */
@@ -51,7 +52,7 @@ function baseProps(): Props {
     verifying: false,
     resending: false,
     error: undefined,
-    devOtp: undefined,
+    rateLimitSeconds: 0,
   };
 }
 
@@ -185,7 +186,7 @@ describe('the verify CTA gate', () => {
 
   it('a complete code enables the CTA; verifying pins it back disabled as Verifying…', () => {
     const onVerify = jest.fn();
-    const root = renderScreen({ code: '123456', onVerify, verifying: true }).root;
+    const root = renderScreen({ code: '1234', onVerify, verifying: true }).root;
     const cta = root.findAllByType(Button).find((b) =>
       flatText(b).includes('Verifying…'),
     );
@@ -194,24 +195,19 @@ describe('the verify CTA gate', () => {
   });
 });
 
-describe('the DEV OTP banner and error line', () => {
-  it('under __DEV__ with devOtp: the banner shows and tapping fills the whole code', () => {
-    const onChangeCode = jest.fn();
-    const root = renderScreen({ onChangeCode, devOtp: '415263' }).root;
-    expect(texts(root).some((t) => t.includes('DEV — OTP is 415263'))).toBe(true);
-    const label = root.findAll((n: ReactTestInstance) =>
-      n.type === Text && flatText(n).includes('DEV — OTP is')
-    )[0];
-    if (!label) throw new Error('DEV banner not found');
-    let banner = label as ReactTestInstance | null;
-    while (banner != null && typeof banner.props.onPress !== 'function') {
-      banner = banner.parent;
-    }
-    if (banner == null) throw new Error('DEV pressable not found');
+describe('the rate-limited resend countdown and error line', () => {
+  it('rateLimitSeconds restarts the countdown at the server\'s Retry-After (mm:ss)', () => {
+    const root = renderScreen({ rateLimitSeconds: 150 }).root;
+    expect(texts(root)).toContain('New code in 2:30');
     act(() => {
-      banner.props.onPress();
+      jest.advanceTimersByTime(1000);
     });
-    expect(onChangeCode).toHaveBeenCalledWith('415263');
+    expect(texts(root)).toContain('New code in 2:29');
+  });
+
+  it('rateLimitSeconds 0 leaves the normal 45s window alone', () => {
+    const root = renderScreen({ rateLimitSeconds: 0 }).root;
+    expect(texts(root)).toContain('New code in 0:45');
   });
 
   it('an error shows verbatim and flags the OtpInput once', () => {
