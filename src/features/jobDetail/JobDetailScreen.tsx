@@ -288,12 +288,21 @@ export default function JobDetailScreen() {
           onPress={goBackSafely}>
           <ChevronLeft size={22} color={colors.textStrong} strokeWidth={2} />
         </IconButton>
-        <Text style={styles.title} numberOfLines={1}>
-          {/* The customer's name leads once the job is loaded; the job
-              number then the placeholder cover loading / error views
-              (deep-link safe). */}
-          {detail?.customer.name || detail?.jobNumber || 'Job details'}
-        </Text>
+        <View style={styles.titleStack}>
+          <Text style={styles.title} numberOfLines={1}>
+            {/* The customer's name leads; the placeholder covers loading /
+                error views (deep-link safe). */}
+            {detail?.customer.name || 'Job details'}
+          </Text>
+          {detail?.jobNumber ? (
+            // The job's human reference as a persistent secondary line —
+            // citable on every job, not a name-absence fallback
+            // (SPEC-human-readable-ids, CAP-1).
+            <Text style={styles.jobNumber} numberOfLines={1}>
+              {detail.jobNumber}
+            </Text>
+          ) : null}
+        </View>
       </View>
 
       {notFound ? (
@@ -584,6 +593,14 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: colors.textStrong,
     flex: 1,
+  },
+  titleStack: {
+    flex: 1,
+    gap: 1,
+  },
+  jobNumber: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   centered: {
     flex: 1,

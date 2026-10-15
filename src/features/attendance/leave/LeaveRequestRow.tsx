@@ -108,13 +108,15 @@ export function LeaveRequestRow(input: {
   }
 
   const name = request.employeeName ?? 'Team member';
+  // Human reference beside the name (fail-hidden: fresh rows hydrate later).
+  const label = request.employeeCode ? `${name} · ${request.employeeCode}` : name;
   const split = splitLabel(request);
   return (
     <Card
       interactive
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Leave request for ${name}, ${formatLeaveRange(
+      accessibilityLabel={`Leave request for ${label}, ${formatLeaveRange(
         request.startDate,
         request.endDate,
       )}, ${workingDaysCopy(request.workingDays)}, ${
@@ -125,7 +127,9 @@ export function LeaveRequestRow(input: {
       <View style={styles.ownerRow}>
         <Avatar name={name} size="md" />
         <View style={styles.ownerTexts}>
-          <Text style={styles.ownerName}>{name}</Text>
+          <Text style={styles.ownerName} numberOfLines={1}>
+            {label}
+          </Text>
           <Text style={styles.ownerSecondary}>
             {formatLeaveRange(request.startDate, request.endDate)} ·{' '}
             {workingDaysCopy(request.workingDays)}

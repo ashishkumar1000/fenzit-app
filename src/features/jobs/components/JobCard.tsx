@@ -156,7 +156,16 @@ export function JobCard({
       </View>
       <View style={styles.metaRow}>
         <Clock size={15} color={colors.textMuted} strokeWidth={2} />
-        <Text style={styles.metaText}>{timeText}</Text>
+        {/* One line: the row now shares width with the job number (and the
+            overdue badge) — wrapping here would jump the row height. */}
+        <Text style={styles.metaText} numberOfLines={1}>
+          {timeText}
+        </Text>
+        {/* The job's human reference (JB-2026-0002) — always visible so the
+            owner can cite the job (SPEC-human-readable-ids, CAP-1). */}
+        <Text style={styles.jobNumber} numberOfLines={1}>
+          {job.jobNumber}
+        </Text>
         {scope === 'overdue' ? (
           // Neutral badge on purpose: overdue is an attention marker, not one
           // of the four job statuses — a new colour would break the fixed
@@ -214,6 +223,10 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.textMuted,
     flex: 1,
+  },
+  jobNumber: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   divider: {
     height: 1,

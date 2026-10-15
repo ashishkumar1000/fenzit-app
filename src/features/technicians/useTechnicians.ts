@@ -124,6 +124,7 @@ registerReset(clearTechnicians);
 function toTechnician(row: ProfileTechnician): Technician {
   return {
     id: row.id,
+    employeeCode: row.employeeCode ?? undefined,
     name: row.name,
     countryCode: row.countryCode,
     phone: row.phoneNumber,

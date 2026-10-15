@@ -76,6 +76,12 @@ export interface JobCounts {
  */
 export interface ProfileTechnician {
   id: string;
+  /**
+   * Per-tenant human reference (`'EMP-004'`), optional and nullable (the
+   * backend types it `string | null`): freshly invited rows hydrate it only
+   * on the next profile fetch — fail-hidden, never assume.
+   */
+  employeeCode?: string | null;
   name: string;
   /** Dial code with `+`, e.g. `+91`. */
   countryCode: string;
@@ -162,6 +168,12 @@ export interface ProfileAttendanceMirror {
 
 export interface MyProfile {
   id: string;
+  /**
+   * Per-tenant human reference (`'EMP-001'`), nullable on the backend
+   * (tenant-less pre-onboarding owners have none). Optional here so an
+   * older-deployed backend fails hidden.
+   */
+  employeeCode?: string | null;
   /**
    * Nullable to match the backend (`UserProfileBase.name: string | null`):
    * `POST /auth/company` never collects a name, so a fresh owner's profile

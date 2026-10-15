@@ -117,11 +117,15 @@ export interface LeaveActionView extends LeaveRequestRow {
 }
 
 /**
- * The list/write row — the request view plus `employeeName`, which the
- * owner list adds and write responses never carry (wire-truth F5: the
- * envelope is the house `Paginated<T>`).
+ * The list/write row — the request view plus `employeeName` (and its
+ * `employeeCode` companion), which the owner list adds and write responses
+ * never carry (wire-truth F5: the envelope is the house `Paginated<T>`).
  */
-export type LeaveRequestRow = LeaveRequestView & { employeeName?: string };
+export type LeaveRequestRow = LeaveRequestView & {
+  employeeName?: string;
+  /** Per-tenant human reference (`'EMP-004'`); owner list reads only. */
+  employeeCode?: string;
+};
 
 /** The request view (list adds `employeeName`; never this shape). */
 export interface LeaveRequestView {

@@ -1,6 +1,8 @@
 /**
  * TechnicianRow — a single technician in the list: avatar, name, phone and a
- * status badge (Active / Offline). Composes Card + Avatar + Badge.
+ * status badge (Active / Offline). Composes Card + Avatar + Badge. The
+ * employee code (EMP-004) prefixes the phone line when known — freshly
+ * invited rows hydrate it later, so it renders fail-hidden.
  */
 import { StyleSheet, Text, View } from 'react-native';
 import { Avatar, Badge, Card } from '../../../components/ui';
@@ -28,6 +30,7 @@ export function TechnicianRow({ technician, onPress }: Props) {
           {technician.name}
         </Text>
         <Text style={styles.phone} numberOfLines={1}>
+          {technician.employeeCode ? `${technician.employeeCode} · ` : ''}
           {technician.phone}
         </Text>
       </View>

@@ -8,6 +8,12 @@ export type TechnicianStatus = 'active' | 'offline';
 
 export interface Technician {
   id: string;
+  /**
+   * Per-tenant human reference (`'EMP-004'`). Optional: a freshly invited
+   * row is fabricated locally without one — the real value arrives on the
+   * next roster hydration from `GET /users/me`. Render fail-hidden.
+   */
+  employeeCode?: string;
   name: string;
   /**
    * Dial code with `+`, e.g. `+91`. Optional because rows persisted before
