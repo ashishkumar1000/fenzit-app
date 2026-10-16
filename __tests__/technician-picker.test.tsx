@@ -158,7 +158,7 @@ describe('TechnicianPicker empty states', () => {
     const renderer = mount();
     await type(renderer, 'zzz');
 
-    expect(allText(renderer)).toContain('No technician matches that name.');
+    expect(allText(renderer)).toContain('No technician matches that search.');
     expect(allText(renderer)).not.toContain('No technicians added yet.');
   });
 });

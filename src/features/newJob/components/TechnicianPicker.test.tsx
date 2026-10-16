@@ -11,8 +11,8 @@
  *   this picker reorders nothing) plus a "+N More technicians" tile — 2
  *   tiles + the more tile fill exactly one complete row (COLUMNS = 3);
  *   a search that, when non-empty, filters the whole offered roster
- *   (name or phone digits, via the real `filterTechnicians`) and shows a
- *   no-match message;
+ *   (name, phone digits or employee-code digits, via the real
+ *   `filterTechnicians`) and shows a no-match message;
  * - a tap fires `onChange` with the technician's id; re-tapping the selected
  *   tile fires `onChange(null)` — toggle-to-clear, carried from the old
  *   sheet-variant picker (a draft may be unassigned, unlike customers);
@@ -288,4 +288,23 @@ it('shows the Invited caption for a technician still awaiting install', () => {
     TECHNICIANS.filter(t => t.status !== 'invited'),
   );
   expect(hasText(installed, 'Invited')).toBe(false);
+});
+
+it('shows the employee code as a tile caption and finds a technician by it', () => {
+  const CODED: ProfileTechnician[] = [
+    make({ id: 't-1', name: 'Ravi Kumar', status: 'active', employeeCode: 'EMP-104' }),
+    make({ id: 't-2', name: 'Anita Sharma' }),
+  ];
+  const root = renderPicker(null, () => {}, () => {}, CODED);
+
+  // The code rides on the tile as its own caption…
+  expect(hasText(root, 'EMP-104')).toBe(true);
+  // …and any spelling of it searches — the shared filter's digits-only
+  // contract ("104", "EMP-104", "emp104" all reduce to 104).
+  for (const q of ['104', 'EMP-104', 'emp104']) {
+    typeIntoSearch(root, q);
+    const labels = tileLabels(root);
+    expect(labels).toContain('Ravi Kumar');
+    expect(labels).not.toContain('Anita Sharma');
+  }
 });

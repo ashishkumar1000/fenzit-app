@@ -45,6 +45,7 @@ const TECHNICIANS = [
     name: 'Ravi Kumar',
     countryCode: '+91',
     phoneNumber: '9000000001',
+    employeeCode: 'EMP-104',
     status: 'active',
     skills: ['Plumbing'],
     skillIds: ['s-1'],
@@ -184,7 +185,8 @@ it('renders every roster row with name, skills and phone, and the total chip', (
   expect(hasText(root, '2 total')).toBe(true);
   expect(hasText(root, 'Ravi Kumar')).toBe(true);
   expect(hasText(root, 'Plumbing')).toBe(true);
-  expect(hasText(root, '+91 9000000001')).toBe(true);
+  // The code and the phone share one meta line, code first.
+  expect(hasText(root, 'EMP-104 · +91 9000000001')).toBe(true);
   expect(hasText(root, 'Anita Sharma')).toBe(true);
   expect(hasText(root, 'Electrical, AC repair')).toBe(true);
   expect(hasText(root, '+91 9000000002')).toBe(true);

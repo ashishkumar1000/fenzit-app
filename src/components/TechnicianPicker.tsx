@@ -17,13 +17,17 @@
  *
  * Technicians come from `/users/me` (server ids, safe to send). The search
  * query is local state — filtering a list this small client-side is the right
- * call, and stays right until the team outgrows one screen.
+ * call, and stays right until the team outgrows one screen. The filter is
+ * THE shared `filterTechnicians` (name, phone digits, employee-code digits —
+ * the same definition the New Job picker and Select-technicians screen run),
+ * so a technician findable by code in one surface is findable everywhere.
  */
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, Search } from 'lucide-react-native';
 import { Avatar, Input } from './ui';
 import { colors, radius, spacing, touch, typography } from '../theme';
+import { filterTechnicians } from '../features/technicians';
 import type { ProfileTechnician } from '../services';
 
 type Variant = 'tiles' | 'rows';
@@ -38,11 +42,10 @@ type Props = {
 export function TechnicianPicker({ technicians, selectedId, onSelect, variant = 'tiles' }: Props) {
   const [query, setQuery] = useState('');
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return technicians;
-    return technicians.filter(t => t.name.toLowerCase().includes(q));
-  }, [technicians, query]);
+  const filtered = useMemo(
+    () => filterTechnicians(technicians, query),
+    [technicians, query],
+  );
 
   return (
     <View style={styles.wrap}>
@@ -61,7 +64,7 @@ export function TechnicianPicker({ technicians, selectedId, onSelect, variant = 
       {technicians.length === 0 ? (
         <Text style={styles.noMatch}>No technicians added yet.</Text>
       ) : filtered.length === 0 ? (
-        <Text style={styles.noMatch}>No technician matches that name.</Text>
+        <Text style={styles.noMatch}>No technician matches that search.</Text>
       ) : variant === 'rows' ? (
         <Rows technicians={filtered} selectedId={selectedId} onSelect={onSelect} />
       ) : (
@@ -106,6 +109,9 @@ function Tiles({
               style={[styles.name, isSelected && styles.nameSelected]}>
               {technician.name}
             </Text>
+            {technician.employeeCode ? (
+              <Text style={styles.code}>{technician.employeeCode}</Text>
+            ) : null}
             {isInvited ? <Text style={styles.invited}>Invited</Text> : null}
           </Pressable>
         );
@@ -148,9 +154,11 @@ function Rows({
                 style={[styles.listName, isSelected && styles.listNameSelected]}>
                 {technician.name}
               </Text>
-              {technician.skills.length ? (
+              {technician.employeeCode || technician.skills.length ? (
                 <Text style={styles.listSkills} numberOfLines={1}>
-                  {technician.skills.join(', ')}
+                  {[technician.employeeCode, technician.skills.join(', ')]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Text>
               ) : null}
             </View>
@@ -205,6 +213,10 @@ const styles = StyleSheet.create({
   nameSelected: {
     ...typography.labelStrong,
     color: colors.primary,
+  },
+  code: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   // Deliberately not a Badge: that component's vocabulary is fixed to job
   // state (Done / In Progress / Scheduled / Cancelled / neutral) and its doc

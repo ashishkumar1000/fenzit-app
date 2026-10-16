@@ -19,8 +19,11 @@ export function technicianPhone(
  * free — but the semantics mirror `filterCustomers` (name OR phone digits)
  * so a later server-side switch is invisible to the user.
  *
- * Phone matching uses only the digits of the query, so a partial number
- * typed with stray punctuation still matches the stored digits-only number.
+ * Phone and employee-code matching use only the digits of the query, so a
+ * partial number typed with stray punctuation still matches the stored
+ * digits-only number, and every spelling of a code ("104", "EMP-104",
+ * "emp104") reduces to the same digits. A query with no digits ("emp")
+ * never matches codes — it would otherwise match every technician at once.
  */
 export function filterTechnicians(
   technicians: ProfileTechnician[],
@@ -32,6 +35,8 @@ export function filterTechnicians(
   return technicians.filter(
     t =>
       t.name.toLowerCase().includes(q) ||
-      (digits.length > 0 && t.phoneNumber.includes(digits)),
+      (digits.length > 0 &&
+        (t.phoneNumber.includes(digits) ||
+          (t.employeeCode ?? '').toLowerCase().includes(digits))),
   );
 }

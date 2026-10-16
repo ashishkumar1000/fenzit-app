@@ -151,6 +151,9 @@ export function TechnicianPicker({ title, options, value, onChange, onBrowseAll 
                 style={[styles.label, isSelected && styles.labelSelected]}>
                 {technician.name}
               </Text>
+              {technician.employeeCode ? (
+                <Text style={styles.code}>{technician.employeeCode}</Text>
+              ) : null}
               {technician.status === 'invited' ? (
                 <Text style={styles.invited}>Invited</Text>
               ) : null}
@@ -272,6 +275,10 @@ const styles = StyleSheet.create({
   labelSelected: {
     ...typography.labelStrong,
     color: colors.primary,
+  },
+  code: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   // Deliberately not a Badge: that component's vocabulary is fixed to job
   // state (Done / In Progress / Scheduled / Cancelled / neutral) and its doc

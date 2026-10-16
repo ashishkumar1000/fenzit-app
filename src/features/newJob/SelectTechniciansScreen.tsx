@@ -1,8 +1,8 @@
 /**
  * SelectTechniciansScreen — full-screen technician browser behind New Job's
  * "Browse all" (mirroring SelectCustomersScreen): searchable rows with
- * avatar, name, skills, phone and invite status, a circle toggle per row,
- * and a sticky Apply button.
+ * avatar, name, skills, employee code · phone and invite status, a circle
+ * toggle per row, and a sticky Apply button.
  *
  * Single-select by design (a job is assigned to exactly one technician):
  * tapping a row replaces the pending selection. Apply (enabled only once a
@@ -139,7 +139,12 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
     const isSelected = item.id === pendingId;
     const matchesSkill =
       skillId !== undefined && item.skillIds.includes(skillId);
-    const phone = technicianPhone(item);
+    // `EMP-002 · +91 6765644658` — the code first, matching the
+    // Technicians-screen rows, so the same two tokens identify a row
+    // everywhere. The code also participates in search (filterTechnicians).
+    const rowMeta = [item.employeeCode, technicianPhone(item)]
+      .filter(Boolean)
+      .join(' · ');
 
     return (
       <Pressable
@@ -152,7 +157,7 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
         accessibilityLabel={[
           item.name,
           item.skills.join(', '),
-          phone,
+          rowMeta,
           matchesSkill ? 'Matches skill' : null,
           item.status === 'invited' ? 'Invited' : null,
         ]
@@ -169,7 +174,7 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
             </Text>
           ) : null}
           <Text numberOfLines={1} style={styles.rowMeta}>
-            {phone}
+            {rowMeta}
           </Text>
           {matchesSkill || item.status === 'invited' ? (
             <View style={styles.pillRow}>
