@@ -8,13 +8,16 @@
  * silently dismissed the open sheet — pushing a stack screen over a
  * presented native modal closes the modal on the native side even though its
  * JS `visible` state doesn't change. Making this a full page removes the
- * conflict: the address picker now opens as `AddressPickerSheet`, a modal
- * nested *within* this screen, never navigated to.
+ * conflict: the address is picked on the `MapPinPicker` screen (mode
+ * `customer` — exact pin on a map, with address search and the manual-entry
+ * fallback inside it; SPEC-customer-map-pin-picker), which returns the pick
+ * via navigate-back-with-params.
  *
- * The address field and its picker are one self-contained control
- * (`components/AddressPickerField`) that reports picks through `onPick`;
- * the POST submit chain lives in `useCreateCustomer`. This screen keeps the
- * form state, the payload assembly, and the post-save navigation contract:
+ * The address field and its populate pulse are one self-contained control
+ * (`components/AddressPickerField`) — presentational only: this screen owns
+ * navigation, form state, and the returned-pick application. The POST submit
+ * chain lives in `useCreateCustomer`. This screen keeps the form state, the
+ * payload assembly, and the post-save navigation contract:
  *
  * `returnRouteName` decides what happens after a successful save:
  * - `'Customers'`/`'Home'`: the shared `useCustomers` store already reflects
@@ -27,7 +30,7 @@
  *   plain `navigate` pushes a duplicate in React Navigation 7; `Customers`
  *   is nested inside `MainTabs` and just takes the store update).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -44,16 +47,24 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Input } from '../../components/ui';
 import { colors, spacing, touch, typography } from '../../theme';
 import { toCreateCustomerRequest } from './requestMapping';
-import type { NewCustomerInput } from './types';
+import type {
+  NewCustomerInput,
+  PickedAddress,
+  PickedAddressSnapshot,
+} from './types';
 import type { RootStackParamList } from '../../navigation/types';
-import { AddressPickerField, type PickedAddressSnapshot } from './components/AddressPickerField';
+import { AddressPickerField } from './components/AddressPickerField';
 import { useCreateCustomer } from './useCreateCustomer';
 import { DIAL_CODE, PHONE_LENGTH } from './constants';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddCustomer'>;
 
 export default function AddCustomerScreen({ navigation, route }: Props) {
-  const { returnRouteName } = route.params;
+  // `returnRouteName` is always supplied by real callers; the default only
+  // type-placates the MapPinPicker merge-return, which carries just
+  // `pickedAddress` (the NewJob convention of all-optional merge params).
+  const { returnRouteName = 'Customers', pickedAddress: pickedAddressParam } =
+    route.params ?? {};
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -61,12 +72,16 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   const [area, setArea] = useState('');
   const [address, setAddress] = useState('');
 
-  // Structured snapshot from a resolved `AddressPickerField` pick — kept
-  // separate from `address`/`city` above so a later hand-edit of the free
-  // text never clears or re-syncs it (additive backend columns; free text
-  // and structured snapshot are independent fields end to end). `null` after
-  // a manual entry (and before any pick).
+  // Structured snapshot from a located pick (search resolve or pin drop) —
+  // kept separate from `address`/`city` above so a later hand-edit of the
+  // free text never clears or re-syncs it (additive backend columns; free
+  // text and structured snapshot are independent fields end to end). `null`
+  // after a manual entry (and before any pick).
   const [snapshot, setSnapshot] = useState<PickedAddressSnapshot | null>(null);
+
+  // Bumped each time a returned pick is applied — drives the address
+  // field's populate pulse (the pick itself arrives via route params).
+  const [pickSignal, setPickSignal] = useState(0);
 
   const { submitting, submitError, clearSubmitError, handleSubmit } =
     useCreateCustomer({
@@ -91,17 +106,24 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     setPhone(text.replace(/[^0-9]/g, '').slice(0, PHONE_LENGTH)),
   );
 
-  const handlePick = (picked: {
-    addressLine: string;
-    city: string;
-    snapshot: PickedAddressSnapshot | null;
-  }) => {
+  const handlePick = (picked: PickedAddress) => {
     setAddress(picked.addressLine);
     // An entry without a city must not wipe one the user already typed in
     // the City field above.
     if (picked.city) setCity(picked.city);
     setSnapshot(picked.snapshot);
+    setPickSignal(n => n + 1);
   };
+
+  // MapPinPicker's return channel (navigate-back-with-params, read once on
+  // arrival then cleared — a stale pick must not re-fire on re-focus).
+  useEffect(() => {
+    if (!pickedAddressParam) return;
+    handlePick(pickedAddressParam);
+    navigation.setParams({ pickedAddress: undefined });
+    // Params are read once on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedAddressParam]);
 
   const buildRequest = (): NewCustomerInput => ({
     name: name.trim(),
@@ -110,15 +132,18 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     area: area.trim(),
     address: address.trim(),
     // The snapshot only ever exists together as a whole — its presence is
-    // the signal that a resolve snapshot exists at all. `pincode` can
-    // legitimately be absent (place had none) even when a snapshot exists,
-    // so it's gated on its own inside `toCreateCustomerRequest`.
+    // the signal that a located pick exists at all. Within it, `pincode`
+    // and (on a pin drop) `formattedAddress`/`placeId` can legitimately be
+    // absent — coordinates are the only guaranteed fields, so they're what
+    // gates the structured block; each text field is gated on its own.
     ...(snapshot
       ? {
-          formattedAddress: snapshot.formattedAddress,
+          ...(snapshot.formattedAddress
+            ? { formattedAddress: snapshot.formattedAddress }
+            : {}),
           latitude: snapshot.latitude,
           longitude: snapshot.longitude,
-          placeId: snapshot.placeId,
+          ...(snapshot.placeId ? { placeId: snapshot.placeId } : {}),
           ...(snapshot.pincode ? { pincode: snapshot.pincode } : {}),
         }
       : {}),
@@ -201,7 +226,10 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           <AddressPickerField
             value={address}
             disabled={submitting}
-            onPick={handlePick}
+            pickSignal={pickSignal}
+            onPress={() =>
+              navigation.navigate('MapPinPicker', { mode: 'customer' })
+            }
           />
         </ScrollView>
 

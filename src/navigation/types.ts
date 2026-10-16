@@ -10,6 +10,14 @@
 
 import type { JobScope, WorkflowTemplateStep } from '../services';
 import type { PickedOfficeLocation } from '../types/office';
+import type { PickedAddress } from '../features/customers/types';
+
+/**
+ * The shared map pin picker's flows (`MapPinPicker` route). The mode
+ * decides the header, whether the geofence radius UI renders, and which
+ * route Confirm pops back to.
+ */
+export type MapPinPickerMode = 'office' | 'customer';
 
 export type MainTabParamList = {
   Home: undefined;
@@ -130,9 +138,18 @@ export type RootStackParamList = {
   /**
    * Full-page "Add customer" form, pushed from either `CustomersScreen` or
    * `NewJobScreen`. `returnRouteName` decides post-save behavior — see
-   * `AddCustomerScreen`'s file doc.
+   * `AddCustomerScreen`'s file doc. `pickedAddress` is set by
+   * `MapPinPicker` (mode `customer`) via navigate-back-with-params (the
+   * SelectSkills pattern) — a located pick or a manual entry; read once on
+   * arrival and cleared so a stale pick can't re-fire. Every field is
+   * optional (the NewJob convention) because those merge-returns carry
+   * ONLY the returned param; the screen treats `returnRouteName` as
+   * defaulting to `'Customers'`.
    */
-  AddCustomer: { returnRouteName: AddCustomerReturnRouteName };
+  AddCustomer: {
+    returnRouteName?: AddCustomerReturnRouteName;
+    pickedAddress?: PickedAddress;
+  } | undefined;
   /**
    * Owner's attendance offices (Story 15-4, FR-5) — opened from the More
    * tab's "Offices" row. No params.
@@ -149,16 +166,20 @@ export type RootStackParamList = {
     pickedLocation?: PickedOfficeLocation;
   } | undefined;
   /**
-   * Full-screen office map picker behind the form's location row. Opens
-   * with the office's current pin (if any) and the radius to start from.
-   * The params object itself is optional (the form always supplies one) —
-   * `radiusM` is required WITHIN it, and the picker falls back to 100 m
-   * if it is ever absent.
+   * Full-screen map pin placement (born as Story 15-4's office picker;
+   * shared with the customer flow since SPEC-customer-map-pin-picker).
+   * `mode` decides the header, the radius UI, and the Confirm return:
+   * office pops back to `OfficeForm` with `pickedLocation` (radius +
+   * GPS provenance), customer pops back to `AddCustomer` with
+   * `pickedAddress` (coordinates + located-address snapshot, no radius).
+   * Opens with the current pin (if any); `radiusM` only matters in office
+   * mode — the picker falls back to 100 m when it is ever absent.
    */
-  OfficeMapPicker: {
+  MapPinPicker: {
+    mode: MapPinPickerMode;
     initialLatitude?: number;
     initialLongitude?: number;
-    radiusM: number;
+    radiusM?: number;
   } | undefined;
   /**
    * Story 15-6 — Attendance Home shim (the owner entry into all

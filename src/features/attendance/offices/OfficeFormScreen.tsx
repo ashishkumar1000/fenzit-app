@@ -7,7 +7,7 @@
  * RPC (partial set is a 400 server-side) and carry the "tomorrow" copy.
  *
  * The pin comes from the map picker: the location row opens
- * `OfficeMapPicker`, which returns the FINAL pin position via
+ * `MapPinPicker` (mode `office`), which returns the FINAL pin position via
  * navigate-back-with-params (`pickedLocation`) — a search result only ever
  * moved the map.
  *
@@ -238,7 +238,8 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
           errors={errors}
           gpsVerified={gpsVerified}
           onOpenPicker={() =>
-            navigation.navigate('OfficeMapPicker', {
+            navigation.navigate('MapPinPicker', {
+              mode: 'office',
               initialLatitude: form.latitude ?? undefined,
               initialLongitude: form.longitude ?? undefined,
               radiusM: form.radiusM,

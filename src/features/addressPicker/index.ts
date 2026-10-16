@@ -1,6 +1,7 @@
 /**
  * Address picker feature — public surface. `AddressPickerSheet` is a nested
- * modal rendered from `AddCustomerScreen` (see `features/customers`), not a
+ * modal hosted by whichever picker screen needs search — today the shared
+ * `MapPinPickerScreen` (`features/attendance/offices`, both modes), not a
  * registered route.
  */
 export { default as AddressPickerSheet } from './AddressPickerSheet';

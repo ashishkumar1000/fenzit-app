@@ -15,7 +15,7 @@ type Props = {
   errors: OfficeFormErrors;
   /** True while the pin is the device's own fix — shows "GPS Verified". */
   gpsVerified: boolean;
-  /** Opens OfficeMapPicker with the current pin + radius. */
+  /** Opens MapPinPicker (mode `office`) with the current pin + radius. */
   onOpenPicker: () => void;
 };
 

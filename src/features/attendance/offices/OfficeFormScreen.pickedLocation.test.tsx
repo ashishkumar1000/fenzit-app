@@ -1,6 +1,7 @@
 /**
- * Targeted contract test for the OfficeFormScreen ↔ OfficeMapPickerScreen
- * handoff (Story 15-4): the picker returns its FINAL pin via
+ * Targeted contract test for the OfficeFormScreen ↔ MapPinPickerScreen
+ * handoff (Story 15-4; picker renamed from OfficeMapPickerScreen when the
+ * customer flow started sharing it): the picker returns its FINAL pin via
  * navigate-back-with-params (`pickedLocation`, the SelectSkills pattern),
  * and the form must apply the coordinates/radius and show the GPS chip.
  * The repo pins this pattern per consumer screen (see NewJobScreen.test.tsx

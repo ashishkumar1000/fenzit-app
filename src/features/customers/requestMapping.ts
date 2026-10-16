@@ -15,10 +15,10 @@ import type { CreateCustomerRequest } from '../../services';
  * fields are omitted rather than sent as empty strings, so the backend
  * stores null instead of "".
  *
- * `placeId` is only ever set when the sheet has a resolved
- * `AddressPickerSheet` snapshot — the other 4 resolved fields (and
- * `pincode`, gated separately since a resolved place can legitimately have
- * none) are omitted entirely otherwise.
+ * The 5 structured fields ride only on a located pick, gated on its
+ * coordinates — a `MapPinPicker` pin drop has coordinates but no `placeId`
+ * (only a resolved search place carries one), and any of the text fields
+ * can legitimately be absent on either path, so each is gated on its own.
  */
 export function toCreateCustomerRequest(
   input: NewCustomerInput,
@@ -31,12 +31,12 @@ export function toCreateCustomerRequest(
     phoneNumber: input.phone,
     ...(address ? { address } : {}),
     ...(input.city ? { city: input.city } : {}),
-    ...(input.placeId
+    ...(input.latitude != null && input.longitude != null
       ? {
-          formattedAddress: input.formattedAddress,
+          ...(input.formattedAddress ? { formattedAddress: input.formattedAddress } : {}),
           latitude: input.latitude,
           longitude: input.longitude,
-          placeId: input.placeId,
+          ...(input.placeId ? { placeId: input.placeId } : {}),
           ...(input.pincode ? { pincode: input.pincode } : {}),
         }
       : {}),

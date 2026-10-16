@@ -53,9 +53,11 @@ type Props = {
   /** Fires on "Use this address" from the manual-entry form (no-results
    *  fallback). Same close-the-sheet-yourself contract as `onResolved`.
    *  Optional since Story 15-4: when absent the manual-entry fallback is
-   *  hidden entirely (the office map picker — a hand-typed address has no
-   *  coordinates, so it cannot move a pin). `AddCustomerScreen` keeps
-   *  passing it, so its behaviour is unchanged. */
+   *  hidden entirely (an office needs exact coordinates, so a hand-typed
+   *  address cannot move its pin). Since SPEC-customer-map-pin-picker the
+   *  only host is `MapPinPickerScreen`, which supplies it in customer mode
+   *  (a hand-typed customer address is acceptable) and omits it in office
+   *  mode. */
   onManualAddress?: (entry: ManualAddressEntry) => void;
 };
 

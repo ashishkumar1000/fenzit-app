@@ -1,17 +1,36 @@
 /**
- * OfficeMapPickerScreen — full-screen office pin placement (Story 15-4).
+ * MapPinPickerScreen — full-screen map pin placement, shared by the office
+ * and customer flows (born as Story 15-4's OfficeMapPickerScreen; the
+ * customer mode and mode parametrization are SPEC-customer-map-pin-picker).
  *
  * Follows the validated 15-1 spike pattern: the pin is a static React
  * overlay at screen centre and the map pans under it; the settled centre
  * is read from `onRegionChangeComplete` — never a draggable native Marker
  * (spike finding: undiscoverable + janky on Fabric). The geofence Circle
- * redraws LIVE as the radius stepper changes. The map layer itself lives
- * in `PickerMapArea`, the bottom panel in `PickerBottomCard`.
+ * redraws LIVE as the radius stepper changes — office mode only; the
+ * customer flow has no geofence, so the radius UI never renders there. The
+ * map layer itself lives in `PickerMapArea`, the bottom panel in
+ * `PickerBottomCard`.
  *
- * Three entry paths per the spec: pan-to-place, "Use my current location"
- * (fresh fix, permission pre-checked via useLocateMe), and address search
- * (the reused AddressPickerSheet — a resolved place only MOVES the map to
- * a starting point; the final pin position is what Confirm returns).
+ * Three entry paths per the 15-4 spec: pan-to-place, "Use my current
+ * location" (fresh fix, permission pre-checked via useLocateMe), and
+ * address search (the reused AddressPickerSheet — a resolved place only
+ * MOVES the map to a starting point; the final pin position is what Confirm
+ * returns). Customer mode additionally enables the sheet's manual-entry
+ * fallback (a hand-typed address has no coordinates — acceptable for a
+ * customer, never for a geofenced office).
+ *
+ * `mode` decides the header, the radius UI, and the Confirm return:
+ * - office → `popTo('OfficeForm', { pickedLocation })` — coordinates +
+ *   radius + GPS provenance (the "GPS Verified" chip), unchanged.
+ * - customer → `popTo('AddCustomer', { pickedAddress })` — coordinates plus
+ *   the located-address snapshot. When the pin sits on the coordinates of
+ *   the last resolved search place, that place's structured fields
+ *   (placeId included) are preferred; otherwise the settle-only reverse
+ *   geocode fills formattedAddress/pincode/city (all nullable — a point
+ *   with no address falls back to the raw coordinates for display). A
+ *   reverse geocode still in flight at Confirm contributes nothing rather
+ *   than blocking; the form keeps the coordinates either way.
  *
  * Reverse geocoding (the "Pinned near:" row) fires ON SETTLE only — one
  * call per settled centre, latest-wins abort — never per frame while
@@ -24,24 +43,39 @@ import MapView, { type LatLng, type Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AddressPickerSheet from '../../addressPicker/AddressPickerSheet';
+import type { ManualAddressEntry } from '../../addressPicker';
 import { colors } from '../../../theme';
 import { getCurrentPosition } from '../../technicianApp/geolocation';
 import { placesService } from '../../../services';
+import type { ResolvedPlace, ReverseGeocodedAddress } from '../../../services';
 import { isAbort } from '../../../utils';
 import PickerBottomCard from './PickerBottomCard';
 import PickerMapArea from './PickerMapArea';
 import ScreenHeader from './ScreenHeader';
 import { useLocateMe } from './useLocateMe';
 import type { RootStackParamList } from '../../../navigation/types';
+import type { PickedAddressSnapshot } from '../../customers/types';
 
 /** Bengaluru centre — the India-bounded default when there is no initial
  *  pin and no silent current-location fix. */
 const DEFAULT_REGION: LatLng = { latitude: 12.9716, longitude: 77.5946 };
 
-type Props = NativeStackScreenProps<RootStackParamList, 'OfficeMapPicker'>;
+/** Programmatic-move matching tolerance (≈ 11 m) — shared by the
+ *  GPS-provenance check and the customer confirm-time snapshot selection. */
+const sameCentre = (a: LatLng, b: LatLng) =>
+  Math.abs(a.latitude - b.latitude) < 1e-4 &&
+  Math.abs(a.longitude - b.longitude) < 1e-4;
 
-export default function OfficeMapPickerScreen({ navigation, route }: Props) {
-  const { initialLatitude, initialLongitude, radiusM: initialRadiusM } = route.params ?? {};
+type Props = NativeStackScreenProps<RootStackParamList, 'MapPinPicker'>;
+
+export default function MapPinPickerScreen({ navigation, route }: Props) {
+  // Typed against the route's own params (no ad-hoc re-declaration of the
+  // mode union); `mode` is required in the params and defaults to office
+  // only to keep the original flow behavior-safe if the params object is
+  // ever absent.
+  const { initialLatitude, initialLongitude, radiusM: initialRadiusM, mode = 'office' } =
+    (route.params ?? {}) as NonNullable<RootStackParamList['MapPinPicker']>;
+  const isCustomer = mode === 'customer';
   const mapRef = useRef<MapView | null>(null);
 
   const [pin, setPin] = useState<LatLng>(
@@ -53,17 +87,29 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
   const [settled, setSettled] = useState<LatLng>(pin);
   const [radiusM, setRadiusM] = useState(initialRadiusM ?? 100);
   const [isPanning, setIsPanning] = useState(false);
-  // Provenance for the form's "GPS Verified" chip: true only while the pin
-  // is the device's own fix. A user pan or a search result clears it.
-  // animateToRegion also fires region events, so programmatic moves are
-  // marked in a ref and matched on settle (epsilon ≈ 11 m) instead of
-  // treating every region change as a manual pan.
+  // Provenance for the form's "GPS Verified" chip (office mode): true only
+  // while the pin is the device's own fix. A user pan or a search result
+  // clears it. animateToRegion also fires region events, so programmatic
+  // moves are marked in a ref and matched on settle (epsilon ≈ 11 m)
+  // instead of treating every region change as a manual pan.
   const [gpsVerified, setGpsVerified] = useState(false);
   const programmaticTargetRef = useRef<LatLng | null>(null);
 
   // "Pinned near:" row text; loading shows the spinner in the bottom card.
   const [addressText, setAddressText] = useState<string | null>(null);
   const [addressLoading, setAddressLoading] = useState(false);
+  // The reverse geocode result paired with the centre it resolved, so
+  // Confirm (customer mode) can tell a fresh answer from a stale one.
+  const [reverseResult, setReverseResult] = useState<{
+    centre: LatLng;
+    place: ReverseGeocodedAddress;
+  } | null>(null);
+  // The last resolved search place and where it moved the pin — a Confirm
+  // still on those coordinates returns the place's structured fields
+  // (placeId included) instead of a reverse geocode of the same point.
+  const resolvedRef = useRef<{ centre: LatLng; place: ResolvedPlace } | null>(
+    null,
+  );
 
   // "Map unavailable" detection: react-native-maps 1.29.8 exposes no error
   // event, so a failed tile load is detected as "onMapLoaded never fired"
@@ -132,13 +178,14 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
     setAddressLoading(true);
     placesService
       .reverse(settled.latitude, settled.longitude, ctrl.signal)
-      .then((place) => {
+      .then(place => {
         const label =
           place.formattedAddress ??
           `${settled.latitude.toFixed(5)}, ${settled.longitude.toFixed(5)}`;
         setAddressText(label);
+        setReverseResult({ centre: settled, place });
       })
-      .catch((err) => {
+      .catch(err => {
         if (!isAbort(err, ctrl.signal)) {
           setAddressText(`${settled.latitude.toFixed(5)}, ${settled.longitude.toFixed(5)}`);
         }
@@ -164,10 +211,7 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
     // is a manual placement.
     const target = programmaticTargetRef.current;
     programmaticTargetRef.current = null;
-    const isProgrammatic =
-      target != null &&
-      Math.abs(target.latitude - centre.latitude) < 1e-4 &&
-      Math.abs(target.longitude - centre.longitude) < 1e-4;
+    const isProgrammatic = target != null && sameCentre(target, centre);
     if (!isProgrammatic) setGpsVerified(false);
   }, []);
 
@@ -185,12 +229,13 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
     mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
   }, [locate, clearError]);
 
-  const handleResolvedPlace = useCallback((place: { latitude: number; longitude: number }) => {
+  const handleResolvedPlace = useCallback((place: ResolvedPlace) => {
     const loc = { latitude: place.latitude, longitude: place.longitude };
     setPin(loc);
     setSettled(loc);
     setGpsVerified(false);
     setSearchVisible(false);
+    resolvedRef.current = { centre: loc, place };
     programmaticTargetRef.current = loc;
     mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
   }, []);
@@ -200,19 +245,87 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
     // the visible pin is at `pin` (updated per region event), so confirm
     // that instead. After the settle the two are identical.
     const centre = isPanning ? pin : settled;
+
+    if (!isCustomer) {
+      navigation.popTo(
+        'OfficeForm',
+        {
+          pickedLocation: {
+            latitude: centre.latitude,
+            longitude: centre.longitude,
+            radiusM,
+            gpsVerified,
+          },
+        },
+        { merge: true },
+      );
+      return;
+    }
+
+    // A resolved search place wins when the pin still sits on it — its
+    // structured fields are exact, and only it carries a placeId. Otherwise
+    // the settled reverse geocode fills the snapshot (all fields nullable;
+    // one still in flight contributes nothing rather than blocking).
+    const resolved =
+      resolvedRef.current && sameCentre(resolvedRef.current.centre, centre)
+        ? resolvedRef.current.place
+        : null;
+    const reverse =
+      reverseResult && sameCentre(reverseResult.centre, centre)
+        ? reverseResult.place
+        : null;
+    const formattedAddress =
+      resolved?.formattedAddress ?? reverse?.formattedAddress ?? null;
+    const snapshot: PickedAddressSnapshot = {
+      formattedAddress,
+      pincode: resolved?.pincode ?? reverse?.pincode ?? null,
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      placeId: resolved?.placeId ?? null,
+    };
     navigation.popTo(
-      'OfficeForm',
+      'AddCustomer',
       {
-        pickedLocation: {
-          latitude: centre.latitude,
-          longitude: centre.longitude,
-          radiusM,
-          gpsVerified,
+        pickedAddress: {
+          addressLine:
+            formattedAddress ??
+            `${centre.latitude.toFixed(5)}, ${centre.longitude.toFixed(5)}`,
+          city: resolved?.city ?? reverse?.city ?? '',
+          snapshot,
         },
       },
       { merge: true },
     );
-  }, [navigation, settled, pin, isPanning, radiusM, gpsVerified]);
+  }, [
+    navigation,
+    settled,
+    pin,
+    isPanning,
+    radiusM,
+    gpsVerified,
+    isCustomer,
+    reverseResult,
+  ]);
+
+  // Customer mode only — a hand-typed address returns with a null snapshot
+  // (no coordinates), exactly like the form's own manual path.
+  const handleManualAddress = useCallback(
+    (entry: ManualAddressEntry) => {
+      setSearchVisible(false);
+      navigation.popTo(
+        'AddCustomer',
+        {
+          pickedAddress: {
+            addressLine: entry.addressLine,
+            city: entry.city ?? '',
+            snapshot: null,
+          },
+        },
+        { merge: true },
+      );
+    },
+    [navigation],
+  );
 
   const addressRow = addressLoading
     ? 'Reading address…'
@@ -222,12 +335,15 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
-      <ScreenHeader title="Place office pin" onBack={() => navigation.goBack()} />
+      <ScreenHeader
+        title={isCustomer ? 'Place customer pin' : 'Place office pin'}
+        onBack={() => navigation.goBack()}
+      />
 
       <PickerMapArea
         mapRef={mapRef}
         pin={pin}
-        radiusM={radiusM}
+        radiusM={isCustomer ? undefined : radiusM}
         isPanning={isPanning}
         mapFailed={mapFailed}
         locating={locating}
@@ -245,8 +361,8 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
         locateError={locateError}
         canOpenSettings={canOpenSettings}
         onOpenSettings={openSettings}
-        radiusM={radiusM}
-        onRadiusChange={setRadiusM}
+        radiusM={isCustomer ? undefined : radiusM}
+        onRadiusChange={isCustomer ? undefined : setRadiusM}
         onConfirm={handleConfirm}
       />
 
@@ -254,6 +370,7 @@ export default function OfficeMapPickerScreen({ navigation, route }: Props) {
         visible={searchVisible}
         onClose={() => setSearchVisible(false)}
         onResolved={handleResolvedPlace}
+        onManualAddress={isCustomer ? handleManualAddress : undefined}
       />
     </SafeAreaView>
   );

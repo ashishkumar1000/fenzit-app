@@ -1,8 +1,9 @@
 /**
  * PickerBottomCard — the map picker's bottom panel (Story 15-4): the
  * "Pinned near:" reverse-geocode row (with coordinate fallback), the
- * locate-me error + settings deep-link, the accessible radius stepper, and
- * the Confirm action that returns the FINAL pin to the form.
+ * locate-me error + settings deep-link, the accessible radius stepper
+ * (office mode only — non-geofenced pickers omit it), and the Confirm
+ * action that returns the FINAL pin to the calling form.
  */
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../../../components/ui';
@@ -15,8 +16,10 @@ type Props = {
   locateError: string | null;
   canOpenSettings: boolean;
   onOpenSettings: () => void;
-  radiusM: number;
-  onRadiusChange: (next: number) => void;
+  /** Geofence radius in metres. Omit for non-geofenced pickers (customer
+   *  mode) — the stepper does not render. */
+  radiusM?: number;
+  onRadiusChange?: (next: number) => void;
   onConfirm: () => void;
 };
 
@@ -50,7 +53,9 @@ export default function PickerBottomCard({
           ) : null}
         </View>
       ) : null}
-      <RadiusStepper radiusM={radiusM} onChange={onRadiusChange} />
+      {radiusM != null && onRadiusChange ? (
+        <RadiusStepper radiusM={radiusM} onChange={onRadiusChange} />
+      ) : null}
       <Button fullWidth onPress={onConfirm}>
         Confirm location
       </Button>

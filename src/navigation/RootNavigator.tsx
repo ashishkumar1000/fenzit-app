@@ -15,7 +15,7 @@ import { AddCustomerScreen } from '../features/customers';
 import {
   OfficesScreen,
   OfficeFormScreen,
-  OfficeMapPickerScreen,
+  MapPinPickerScreen,
 } from '../features/attendance/offices';
 import { AttendanceHomeScreen } from '../features/attendance/home';
 import { AttendanceDashboardScreen } from '../features/attendance/dashboard';
@@ -160,8 +160,8 @@ export default function RootNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="OfficeMapPicker"
-        component={OfficeMapPickerScreen}
+        name="MapPinPicker"
+        component={MapPinPickerScreen}
         options={{ headerShown: false }}
       />
       {/* Story 15-8 — the first-run attendance setup wizard (owner-only;

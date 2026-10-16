@@ -1,23 +1,14 @@
 /**
  * Tests for AddCustomerScreen: form bindings (enablement, phone
  * normalisation, the close-and-reset-on-success / stays-open-on-409
- * contract), the address field opening `AddressPickerSheet` on a tap
- * anywhere on it (not just an icon — see the file doc on why), populating
- * from a resolved pick, and the returnRouteName-based post-save navigation
- * (`goBack()` for Customers, `createdCustomerId` param for NewJob).
- *
- * `AddressPickerSheet` is stubbed to a prop-capturing placeholder (its own
- * behaviour is `AddressPickerSheet.test.tsx`'s job).
+ * contract), the address field navigating to the `MapPinPicker` screen
+ * (mode `customer` — the pick returns via navigate-back-with-params, read
+ * once then cleared; SPEC-customer-map-pin-picker), populating from a
+ * returned pick (resolved place, dropped pin, or manual entry), the
+ * payload gating per pick origin, and the returnRouteName-based post-save
+ * navigation (`goBack()` for Customers, `createdCustomerId` param for
+ * NewJob).
  */
-jest.mock('../addressPicker', () => {
-  const ReactLib = require('react');
-  const { View } = require('react-native');
-  return {
-    AddressPickerSheet: (props: Record<string, unknown>) =>
-      ReactLib.createElement(View, { testID: 'address-picker-sheet', ...props }),
-  };
-});
-
 jest.mock('./useCustomers', () => ({
   upsertCustomer: jest.fn(),
   loadCustomers: jest.fn().mockResolvedValue(undefined),
@@ -32,6 +23,7 @@ import { customerService } from '../../services';
 import type { CreatedCustomer, ResolvedPlace } from '../../services';
 import { upsertCustomer, loadCustomers } from './useCustomers';
 import { runAllResets } from '../../services/resetRegistry';
+import type { PickedAddress } from './types';
 import AddCustomerScreen from './AddCustomerScreen';
 
 const createSpy = jest.spyOn(customerService, 'create');
@@ -54,14 +46,17 @@ const noopNavigation = {
 // Jest worker.
 const mountedRenderers: ReactTestRenderer.ReactTestRenderer[] = [];
 
-function renderScreen(returnRouteName: 'Customers' | 'NewJob' = 'Customers') {
+function renderScreen(
+  returnRouteName: 'Customers' | 'NewJob' = 'Customers',
+  extraParams: Record<string, unknown> = {},
+) {
   const navigation = {
     ...noopNavigation,
     navigate: jest.fn(),
     goBack: jest.fn(),
     popTo: jest.fn(),
   };
-  const route = { params: { returnRouteName } };
+  const route = { params: { returnRouteName, ...extraParams } };
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = create(
@@ -69,7 +64,24 @@ function renderScreen(returnRouteName: 'Customers' | 'NewJob' = 'Customers') {
     );
   });
   mountedRenderers.push(renderer);
-  return { root: renderer.root, navigation };
+  return { root: renderer.root, navigation, renderer };
+}
+
+/** Re-renders with a fresh params object — how a MapPinPicker pick that
+ *  REPLACES an earlier one arrives in real navigation (merge on popTo). */
+function repick(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  returnRouteName: 'Customers' | 'NewJob',
+  extraParams: Record<string, unknown>,
+) {
+  act(() => {
+    renderer.update(
+      <AddCustomerScreen
+        navigation={noopNavigation as never}
+        route={{ params: { returnRouteName, ...extraParams } } as never}
+      />,
+    );
+  });
 }
 
 afterEach(() => {
@@ -112,13 +124,9 @@ function submit(root: ReactTestRenderer.ReactTestInstance) {
   });
 }
 
-function addressPickerProps(root: ReactTestRenderer.ReactTestInstance) {
-  return root.findByProps({ testID: 'address-picker-sheet' }).props;
-}
-
 function addressFieldTrigger(root: ReactTestRenderer.ReactTestInstance) {
   return root
-    .findAllByProps({ accessibilityLabel: 'Search for an address' })
+    .findAllByProps({ accessibilityLabel: 'Set the customer\'s location' })
     .find(instance => typeof instance.props.onPress === 'function');
 }
 
@@ -129,6 +137,54 @@ const RESOLVED: ResolvedPlace = {
   pincode: '560001',
   latitude: 12.9716,
   longitude: 77.5946,
+};
+
+/** A `MapPinPicker` pick of a RESOLVED search place (placeId present). */
+const RESOLVED_PICK: PickedAddress = {
+  addressLine: RESOLVED.formattedAddress,
+  city: RESOLVED.city ?? '',
+  snapshot: {
+    formattedAddress: RESOLVED.formattedAddress,
+    pincode: RESOLVED.pincode,
+    latitude: RESOLVED.latitude,
+    longitude: RESOLVED.longitude,
+    placeId: RESOLVED.placeId,
+  },
+};
+
+/** A `MapPinPicker` PIN DROP: coordinates always, `placeId` never, and the
+ *  reverse-geocoded text nullable per field. */
+const PINNED_PICK: PickedAddress = {
+  addressLine: 'Shop 4, Baner Road, Pune 411045',
+  city: 'Pune',
+  snapshot: {
+    formattedAddress: 'Shop 4, Baner Road, Pune 411045',
+    pincode: '411045',
+    latitude: 18.559,
+    longitude: 73.7868,
+    placeId: null,
+  },
+};
+
+/** A pin dropped on a point Google has no address for (open water etc.) —
+ *  every text field null; the address line falls back to the coordinates. */
+const PINNED_NO_ADDRESS_PICK: PickedAddress = {
+  addressLine: '18.55900, 73.78680',
+  city: '',
+  snapshot: {
+    formattedAddress: null,
+    pincode: null,
+    latitude: 18.559,
+    longitude: 73.7868,
+    placeId: null,
+  },
+};
+
+/** A manual entry — no coordinates, no snapshot. */
+const MANUAL_PICK: PickedAddress = {
+  addressLine: 'Flat 302, Sunrise Apartments, Andheri West',
+  city: 'Mumbai',
+  snapshot: null,
 };
 
 beforeEach(() => {
@@ -171,115 +227,54 @@ it('shows the duplicate-phone copy and stays open on a 409', async () => {
   expect(texts).toContain('A customer with this phone number already exists.');
 });
 
-it('opens the address picker sheet when the address field is tapped', () => {
-  const { root } = renderScreen();
-  expect(addressPickerProps(root).visible).toBe(false);
+it('navigates to the map pin picker when the address field is tapped', () => {
+  const { root, navigation } = renderScreen();
 
   act(() => {
     addressFieldTrigger(root)?.props.onPress();
   });
 
-  expect(addressPickerProps(root).visible).toBe(true);
+  expect(navigation.navigate).toHaveBeenCalledWith('MapPinPicker', {
+    mode: 'customer',
+  });
 });
 
-it('populates the address field and closes the sheet on a resolved pick', () => {
-  const { root } = renderScreen();
-
-  act(() => {
-    addressFieldTrigger(root)?.props.onPress();
-  });
-  act(() => {
-    addressPickerProps(root).onResolved(RESOLVED);
+it('populates the address field and city from a returned pin pick, then clears the param', () => {
+  const { root, navigation } = renderScreen('Customers', {
+    pickedAddress: PINNED_PICK,
   });
 
-  expect(inputByPlaceholder(root, 'Tap to search for an address').props.value).toBe(
-    RESOLVED.formattedAddress,
+  expect(inputByPlaceholder(root, 'Tap to pin the location on a map').props.value).toBe(
+    PINNED_PICK.addressLine,
   );
-  expect(inputByPlaceholder(root, 'Mumbai').props.value).toBe(RESOLVED.city);
-  expect(addressPickerProps(root).visible).toBe(false);
+  expect(inputByPlaceholder(root, 'Mumbai').props.value).toBe('Pune');
+  // Read once then cleared — a stale pick must not re-fire on re-focus.
+  expect(navigation.setParams).toHaveBeenCalledWith({ pickedAddress: undefined });
 });
 
 it('the address field is not directly editable — only the picker sets it', () => {
   const { root } = renderScreen();
-  expect(inputByPlaceholder(root, 'Tap to search for an address').props.editable).toBe(
+  expect(inputByPlaceholder(root, 'Tap to pin the location on a map').props.editable).toBe(
     false,
   );
 });
 
-describe('manual address entry (no-results fallback)', () => {
-  const MANUAL = {
-    addressLine: 'Flat 302, Sunrise Apartments, Andheri West',
-    city: 'Mumbai',
-  };
-
-  function pickManually(root: ReactTestRenderer.ReactTestInstance) {
-    act(() => {
-      addressFieldTrigger(root)?.props.onPress();
+describe('pick application (search resolve / pin drop / manual)', () => {
+  it('keeps the City field untouched when the pick carries no city', () => {
+    const { root, renderer } = renderScreen('Customers', {
+      pickedAddress: PINNED_PICK,
     });
-    act(() => {
-      addressPickerProps(root).onManualAddress(MANUAL);
-    });
-  }
-
-  it('populates the address and city fields and closes the sheet', () => {
-    const { root } = renderScreen();
-
-    pickManually(root);
-
-    expect(
-      inputByPlaceholder(root, 'Tap to search for an address').props.value,
-    ).toBe(MANUAL.addressLine);
-    expect(inputByPlaceholder(root, 'Mumbai').props.value).toBe(MANUAL.city);
-    expect(addressPickerProps(root).visible).toBe(false);
-  });
-
-  it('leaves the City field untouched when the entry carries no city', () => {
-    const { root } = renderScreen();
     act(() => {
       inputByPlaceholder(root, 'Mumbai').props.onChangeText('Pune');
     });
 
-    act(() => {
-      addressPickerProps(root).onManualAddress({ ...MANUAL, city: null });
-    });
+    repick(renderer, 'Customers', { pickedAddress: PINNED_NO_ADDRESS_PICK });
 
     expect(inputByPlaceholder(root, 'Mumbai').props.value).toBe('Pune');
-    // The address line itself still lands.
+    // The address line itself still lands (raw-coordinate fallback).
     expect(
-      inputByPlaceholder(root, 'Tap to search for an address').props.value,
-    ).toBe(MANUAL.addressLine);
-  });
-
-  it('omits all 5 resolved snapshot fields from the create payload', async () => {
-    createSpy.mockResolvedValueOnce({
-      id: 'cust-6',
-      name: 'Ramesh Kumar',
-      countryCode: '+91',
-      phoneNumber: '9876543210',
-      address: MANUAL.addressLine,
-      city: MANUAL.city,
-    });
-    const { root } = renderScreen();
-    typeName(root, 'Ramesh Kumar');
-    typePhone(root, '9876543210');
-
-    pickManually(root);
-
-    await act(async () => {
-      submit(root);
-    });
-
-    // A hand-typed address has no placeId/coordinates — the manual pincode
-    // must NOT sneak into the structured snapshot either (that field belongs
-    // to a resolved place only).
-    const [payload] = createSpy.mock.calls[0] as unknown as [Record<string, unknown>];
-    expect(payload.address).toBe(MANUAL.addressLine);
-    expect(payload.city).toBe(MANUAL.city);
-    expect(payload).not.toHaveProperty('formattedAddress');
-    expect(payload).not.toHaveProperty('pincode');
-    expect(payload).not.toHaveProperty('latitude');
-    expect(payload).not.toHaveProperty('longitude');
-    expect(payload).not.toHaveProperty('placeId');
+      inputByPlaceholder(root, 'Tap to pin the location on a map').props.value,
+    ).toBe(PINNED_NO_ADDRESS_PICK.addressLine);
   });
 
   it('drops a previously resolved snapshot when a manual entry replaces it', async () => {
@@ -288,22 +283,16 @@ describe('manual address entry (no-results fallback)', () => {
       name: 'Ramesh Kumar',
       countryCode: '+91',
       phoneNumber: '9876543210',
-      address: MANUAL.addressLine,
-      city: MANUAL.city,
+      address: MANUAL_PICK.addressLine,
+      city: MANUAL_PICK.city,
     });
-    const { root } = renderScreen();
+    const { root, renderer } = renderScreen('Customers', {
+      pickedAddress: RESOLVED_PICK,
+    });
     typeName(root, 'Ramesh Kumar');
     typePhone(root, '9876543210');
 
-    // First a resolved pick (snapshot fields set), then the user reopens
-    // and enters a manual address instead.
-    act(() => {
-      addressFieldTrigger(root)?.props.onPress();
-    });
-    act(() => {
-      addressPickerProps(root).onResolved(RESOLVED);
-    });
-    pickManually(root);
+    repick(renderer, 'Customers', { pickedAddress: MANUAL_PICK });
 
     await act(async () => {
       submit(root);
@@ -312,7 +301,7 @@ describe('manual address entry (no-results fallback)', () => {
     // The OLD pick's placeId/coordinates must not ride along with the NEW
     // text — the map pin would silently point at the abandoned place.
     const [payload] = createSpy.mock.calls[0] as unknown as [Record<string, unknown>];
-    expect(payload.address).toBe(MANUAL.addressLine);
+    expect(payload.address).toBe(MANUAL_PICK.addressLine);
     expect(payload).not.toHaveProperty('formattedAddress');
     expect(payload).not.toHaveProperty('pincode');
     expect(payload).not.toHaveProperty('latitude');
@@ -459,7 +448,7 @@ it('skips the store write and navigation when the session resets mid-POST', asyn
   expect(navigation.goBack).not.toHaveBeenCalled();
 });
 
-it('sends the 5 resolved fields alongside existing fields on submit', async () => {
+it('sends the 5 resolved fields alongside existing fields for a resolved search pick', async () => {
   createSpy.mockResolvedValueOnce({
     id: 'cust-3',
     name: 'Ramesh Kumar',
@@ -468,16 +457,9 @@ it('sends the 5 resolved fields alongside existing fields on submit', async () =
     address: RESOLVED.formattedAddress,
     city: RESOLVED.city,
   });
-  const { root } = renderScreen();
+  const { root } = renderScreen('Customers', { pickedAddress: RESOLVED_PICK });
   typeName(root, 'Ramesh Kumar');
   typePhone(root, '9876543210');
-
-  act(() => {
-    addressFieldTrigger(root)?.props.onPress();
-  });
-  act(() => {
-    addressPickerProps(root).onResolved(RESOLVED);
-  });
 
   await act(async () => {
     submit(root);
@@ -492,6 +474,71 @@ it('sends the 5 resolved fields alongside existing fields on submit', async () =
       placeId: RESOLVED.placeId,
     }),
   );
+});
+
+it('sends coordinates for a pin drop but never a placeId', async () => {
+  createSpy.mockResolvedValueOnce({
+    id: 'cust-9',
+    name: 'Ramesh Kumar',
+    countryCode: '+91',
+    phoneNumber: '9876543210',
+    address: PINNED_PICK.addressLine,
+    city: PINNED_PICK.city,
+  });
+  const { root } = renderScreen('Customers', { pickedAddress: PINNED_PICK });
+  typeName(root, 'Ramesh Kumar');
+  typePhone(root, '9876543210');
+
+  await act(async () => {
+    submit(root);
+  });
+
+  // A reverse-geocoded pin has coordinates and text but no place id — the
+  // structured block rides on the coordinates, each text field its own gate.
+  expect(createSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      formattedAddress: PINNED_PICK.snapshot?.formattedAddress,
+      pincode: PINNED_PICK.snapshot?.pincode,
+      latitude: PINNED_PICK.snapshot?.latitude,
+      longitude: PINNED_PICK.snapshot?.longitude,
+    }),
+  );
+  const [payload] = createSpy.mock.calls[0] as unknown as [Record<string, unknown>];
+  expect(payload).not.toHaveProperty('placeId');
+});
+
+it('omits every structured field when the pin has no address text at all', async () => {
+  createSpy.mockResolvedValueOnce({
+    id: 'cust-10',
+    name: 'Ramesh Kumar',
+    countryCode: '+91',
+    phoneNumber: '9876543210',
+    address: PINNED_NO_ADDRESS_PICK.addressLine,
+    city: null,
+  });
+  const { root } = renderScreen('Customers', {
+    pickedAddress: PINNED_NO_ADDRESS_PICK,
+  });
+  typeName(root, 'Ramesh Kumar');
+  typePhone(root, '9876543210');
+
+  await act(async () => {
+    submit(root);
+  });
+
+  // Coordinates always survive; the null text fields must be OMITTED, not
+  // sent as empty strings (the backend stores null).
+  expect(createSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      latitude: PINNED_NO_ADDRESS_PICK.snapshot?.latitude,
+      longitude: PINNED_NO_ADDRESS_PICK.snapshot?.longitude,
+      address: PINNED_NO_ADDRESS_PICK.addressLine,
+    }),
+  );
+  const [payload] = createSpy.mock.calls[0] as unknown as [Record<string, unknown>];
+  expect(payload).not.toHaveProperty('formattedAddress');
+  expect(payload).not.toHaveProperty('pincode');
+  expect(payload).not.toHaveProperty('placeId');
 });
 
 it('omits the 5 resolved fields entirely when the picker was never used', async () => {

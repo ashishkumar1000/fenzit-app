@@ -15,7 +15,9 @@ import { colors, spacing, typography, LIGHT_MAP_STYLE } from '../../../theme';
 type Props = {
   mapRef: React.RefObject<MapView | null>;
   pin: LatLng;
-  radiusM: number;
+  /** Geofence radius in metres. Omit for non-geofenced pickers (customer
+   *  mode) — no Circle renders. */
+  radiusM?: number;
   isPanning: boolean;
   mapFailed: boolean;
   locating: boolean;
@@ -69,14 +71,16 @@ export default function PickerMapArea({
           onRegionChange={onRegionChange}
           onRegionChangeComplete={onRegionChangeComplete}
           onMapLoaded={onMapLoaded}>
-          <Circle
-            center={pin}
-            radius={radiusM}
-            strokeWidth={2}
-            strokeColor={colors.primary}
-            // ~16% opacity fill derived from the primary token.
-            fillColor={`${colors.primary}29`}
-          />
+          {radiusM != null ? (
+            <Circle
+              center={pin}
+              radius={radiusM}
+              strokeWidth={2}
+              strokeColor={colors.primary}
+              // ~16% opacity fill derived from the primary token.
+              fillColor={`${colors.primary}29`}
+            />
+          ) : null}
         </MapView>
       )}
 
