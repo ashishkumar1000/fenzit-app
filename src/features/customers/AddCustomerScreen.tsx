@@ -382,9 +382,9 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
 
       <ConfirmDialog
         visible={discardVisible}
-        title="Discard customer details?"
+        title="Leave without saving?"
         message="The details you entered haven't been saved yet."
-        confirmLabel="Discard"
+        confirmLabel="Don't save"
         confirmVariant="danger"
         cancelLabel="Keep editing"
         icon={<AlertTriangle size={18} color={colors.primary} strokeWidth={2} />}

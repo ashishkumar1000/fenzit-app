@@ -673,7 +673,7 @@ describe('discard guard (CAP-6)', () => {
     expect(event.preventDefault).toHaveBeenCalled();
     const dialog = visibleDialog(root);
     expect(dialog).toBeDefined();
-    expect(dialog?.props.title).toBe('Discard customer details?');
+    expect(dialog?.props.title).toBe('Leave without saving?');
     expect(navigation.dispatch).not.toHaveBeenCalled();
   });
 
@@ -705,7 +705,7 @@ describe('discard guard (CAP-6)', () => {
 
     const discard = root
       .findAllByType(Button)
-      .find(b => b.props.children === 'Discard');
+      .find(b => b.props.children === "Don't save");
     act(() => {
       void discard?.props.onPress?.();
     });
