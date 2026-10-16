@@ -254,9 +254,11 @@ it('populates the address field and city from a returned pin pick, then clears t
 
 it('the address field is not directly editable — only the picker sets it', () => {
   const { root } = renderScreen();
-  expect(inputByPlaceholder(root, 'Tap to pin the location on a map').props.editable).toBe(
-    false,
-  );
+  const addressInput = inputByPlaceholder(root, 'Tap to pin the location on a map');
+  expect(addressInput.props.editable).toBe(false);
+  // Long pinned addresses must render in full (multiline textarea variant),
+  // not scroll to the tail inside a single-line field.
+  expect(addressInput.props.multiline).toBe(true);
 });
 
 describe('pick application (search resolve / pin drop / manual)', () => {

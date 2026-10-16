@@ -96,6 +96,10 @@ export function AddressPickerField({
           label="Address"
           value={value}
           editable={false}
+          // Multiline (the design system's textarea variant): a pinned
+          // address is often longer than one line — it must show IN FULL,
+          // not scroll to the tail inside a 48px field.
+          multiline
           placeholder="Tap to pin the location on a map"
           helper="Shown to the technician on the job"
           leadingIcon={<MapPin size={18} color={colors.textMuted} strokeWidth={2} />}
