@@ -28,7 +28,7 @@
  * The POST submit chain lives in `useCreateCustomer`; `returnRouteName`
  * decides post-save navigation — see the contract in `useCreateCustomer.ts`.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Pressable,
@@ -40,6 +40,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  AlertTriangle,
   ArrowLeft,
   Building2,
   CheckCircle2,
@@ -51,7 +52,7 @@ import {
   User,
 } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button, Input } from '../../components/ui';
+import { Button, ConfirmDialog, Input } from '../../components/ui';
 import { colors, spacing, touch, typography } from '../../theme';
 import { toCreateCustomerRequest } from './requestMapping';
 import type {
@@ -88,6 +89,11 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   // What the preview box shows: the last pick's display line (resolved
   // formattedAddress / coordinate fallback, or a manual entry's line).
   const [previewLine, setPreviewLine] = useState('');
+  // Discard guard (CAP-6): leaving with unsaved input asks first.
+  const [discardVisible, setDiscardVisible] = useState(false);
+  const removeActionRef = useRef<{ data: { action: { type: string } } } | null>(
+    null,
+  );
 
   const { submitting, submitError, clearSubmitError, handleSubmit } =
     useCreateCustomer({
@@ -132,6 +138,33 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickedAddressParam]);
 
+  // Discard guard — beforeRemove fires for the hardware/gesture back AND
+  // the header arrow (goBack dispatches it too); it does NOT fire when the
+  // picker pushes on top of this screen, so a location pick can't trigger
+  // it. While a save is in flight the submit hook's own guard blocks
+  // leaving and this one stays out of the way.
+  useEffect(() => {
+    return navigation.addListener('beforeRemove', e => {
+      if (submittingRef.current) return;
+      if (!isDirtyRef.current) return;
+      e.preventDefault();
+      removeActionRef.current = e;
+      setDiscardVisible(true);
+    });
+  }, [navigation]);
+
+  const handleDiscard = () => {
+    const e = removeActionRef.current;
+    setDiscardVisible(false);
+    removeActionRef.current = null;
+    if (e) navigation.dispatch(e.data.action);
+  };
+
+  const handleKeepEditing = () => {
+    setDiscardVisible(false);
+    removeActionRef.current = null;
+  };
+
   // "Required *" on the location card: a location signal is any of a picked
   // location, Street, City or Area.
   const hasLocation =
@@ -139,6 +172,19 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     street.trim().length > 0 ||
     city.trim().length > 0 ||
     area.trim().length > 0;
+
+  // "The user has filled something": any entered field or a picked
+  // location. Read through refs by the beforeRemove listener so the
+  // listener never needs to re-arm (event-time truthiness is what matters).
+  const isDirty =
+    name.trim().length > 0 ||
+    phone.length > 0 ||
+    addressDetails.trim().length > 0 ||
+    hasLocation;
+  const isDirtyRef = useRef(isDirty);
+  isDirtyRef.current = isDirty;
+  const submittingRef = useRef(submitting);
+  submittingRef.current = submitting;
 
   const canSubmit =
     name.trim().length > 0 &&
@@ -333,6 +379,18 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           </Button>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      <ConfirmDialog
+        visible={discardVisible}
+        title="Discard customer details?"
+        message="The details you entered haven't been saved yet."
+        confirmLabel="Discard"
+        confirmVariant="danger"
+        cancelLabel="Keep editing"
+        icon={<AlertTriangle size={18} color={colors.primary} strokeWidth={2} />}
+        onConfirm={handleDiscard}
+        onCancel={handleKeepEditing}
+      />
     </SafeAreaView>
   );
 }

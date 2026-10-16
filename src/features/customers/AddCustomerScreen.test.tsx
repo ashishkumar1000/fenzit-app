@@ -19,7 +19,7 @@ import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { Text, TextInput } from 'react-native';
-import { Button } from '../../components/ui';
+import { Button, ConfirmDialog } from '../../components/ui';
 import { customerService } from '../../services';
 import type { CreatedCustomer, ResolvedPlace } from '../../services';
 import { upsertCustomer, loadCustomers } from './useCustomers';
@@ -37,6 +37,7 @@ const noopNavigation = {
   goBack: jest.fn(),
   setParams: jest.fn(),
   popTo: jest.fn(),
+  dispatch: jest.fn(),
   addListener: jest.fn(() => jest.fn()),
 };
 
@@ -427,11 +428,12 @@ it('blocks hardware/gesture back while the save is in flight, then frees it', as
   typeName(root, 'Ramesh Kumar');
   typePhone(root, '9876543210');
 
-  // No guard while the form is idle — leaving the screen is allowed.
-  expect(navigation.addListener).not.toHaveBeenCalledWith(
-    'beforeRemove',
-    expect.any(Function),
+  // While the form is idle only the discard guard is armed — the submit
+  // hook's in-flight blocker registers on submit (next assertion).
+  const idleCalls = (navigation.addListener as jest.Mock).mock.calls.filter(
+    ([event]: [string, unknown]) => event === 'beforeRemove',
   );
+  expect(idleCalls).toHaveLength(1);
 
   act(() => {
     void submit(root);
@@ -442,11 +444,15 @@ it('blocks hardware/gesture back while the save is in flight, then frees it', as
   ).mock.calls.filter(
     ([event]: [string, unknown]) => event === 'beforeRemove',
   );
-  expect(listenerCalls).toHaveLength(1);
-  const beforeRemove = listenerCalls[0][1];
+  // Two guards arm: the discard guard (mount) and the submit hook's
+  // in-flight blocker (re-registered on submit). Both see the event; the
+  // blocker vetoed the removal, and the discard guard deferred to it —
+  // no dialog mid-save.
+  expect(listenerCalls).toHaveLength(2);
   const event = { preventDefault: jest.fn() };
-  beforeRemove(event);
+  listenerCalls.forEach(([, fn]) => fn(event));
   expect(event.preventDefault).toHaveBeenCalled();
+  expect(visibleDialog(root)).toBeUndefined();
 
   // Once the save settles, the guard is removed — navigation is free again.
   await act(async () => {
@@ -631,6 +637,99 @@ it('omits the structured fields entirely when only City carries the location sig
   expect(payload).not.toHaveProperty('longitude');
   expect(payload).not.toHaveProperty('placeId');
   expect(payload).not.toHaveProperty('addressDetails');
+});
+
+function visibleDialog(root: ReactTestRenderer.ReactTestInstance) {
+  return root
+    .findAllByType(ConfirmDialog)
+    .find(d => d.props.visible === true);
+}
+
+function fireBeforeRemove(
+  navigation: { addListener: jest.Mock },
+  event: { data: { action: { type: string } }; preventDefault: jest.Mock },
+) {
+  const listeners = (navigation.addListener as jest.Mock)
+    .mock.calls.filter(([e]: [string]) => e === 'beforeRemove')
+    .map(([, fn]) => fn);
+  // setDiscardVisible inside the guard needs act() to flush.
+  act(() => {
+    listeners.forEach(fn => fn(event));
+  });
+}
+
+describe('discard guard (CAP-6)', () => {
+  const removeEvent = () => ({
+    data: { action: { type: 'GO_BACK' } },
+    preventDefault: jest.fn(),
+  });
+
+  it('asks before discarding when the form has unsaved input', () => {
+    const { root, navigation } = renderScreen();
+    typeName(root, 'Ramesh Kumar');
+    const event = removeEvent();
+    fireBeforeRemove(navigation, event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    const dialog = visibleDialog(root);
+    expect(dialog).toBeDefined();
+    expect(dialog?.props.title).toBe('Discard customer details?');
+    expect(navigation.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('a clean form leaves without asking', () => {
+    const { root, navigation } = renderScreen();
+    const event = removeEvent();
+    fireBeforeRemove(navigation, event);
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(visibleDialog(root)).toBeUndefined();
+  });
+
+  it('a picked location alone counts as unsaved work', () => {
+    const { root, navigation } = renderScreen('Customers', {
+      pickedAddress: PINNED_PICK,
+    });
+    const event = removeEvent();
+    fireBeforeRemove(navigation, event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(visibleDialog(root)).toBeDefined();
+  });
+
+  it('Discard leaves the screen', () => {
+    const { root, navigation } = renderScreen();
+    typeName(root, 'Ramesh Kumar');
+    const event = removeEvent();
+    fireBeforeRemove(navigation, event);
+
+    const discard = root
+      .findAllByType(Button)
+      .find(b => b.props.children === 'Discard');
+    act(() => {
+      void discard?.props.onPress?.();
+    });
+
+    expect(navigation.dispatch).toHaveBeenCalledWith({ type: 'GO_BACK' });
+  });
+
+  it('Keep editing stays on the form with the input intact', () => {
+    const { root, navigation } = renderScreen();
+    typeName(root, 'Ramesh Kumar');
+    const event = removeEvent();
+    fireBeforeRemove(navigation, event);
+
+    const keep = root
+      .findAllByType(Button)
+      .find(b => b.props.children === 'Keep editing');
+    act(() => {
+      void keep?.props.onPress?.();
+    });
+
+    expect(navigation.dispatch).not.toHaveBeenCalled();
+    expect(visibleDialog(root)).toBeUndefined();
+    expect(inputByPlaceholder(root, 'e.g. Ramesh Kumar').props.value).toBe('Ramesh Kumar');
+  });
 });
 
 it('trims leading/trailing whitespace from name and city on submit', async () => {
