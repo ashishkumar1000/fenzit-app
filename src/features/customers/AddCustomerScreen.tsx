@@ -1,7 +1,9 @@
 /**
- * AddCustomerScreen — full-page route for adding a customer, in the design-v2
- * layout: two section cards ("Contact details" and "Service location &
- * address") over a single "Save customer" action.
+ * AddCustomerScreen — full-page route for adding a customer. Design v2 as
+ * tuned by hand: the contact fields (name + phone) sit bare at the top of
+ * the form, and the "Customer address" section keeps its
+ * FormSectionCard (icon chip + Required* badge) over a single "Save
+ * customer" action.
  *
  * The service-location card is the CAP-5 surface: the resolved address lives
  * in a read-only preview box (with a Change button that opens the shared
@@ -29,7 +31,6 @@
 import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -195,46 +196,45 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        // Pad on BOTH platforms: Android 15+ enforces edge-to-edge, so the
+        // manifest's adjustResize never resizes the window and the keyboard
+        // would cover the lower fields (Flat/Street/City) entirely.
+        behavior="padding">
         <ScrollView
           contentContainerStyle={styles.form}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <FormSectionCard
-            icon={<User size={18} color={colors.primary} strokeWidth={2} />}
-            title="Contact details"
-            subtitle="Customer identification & phone">
-            <Input
-              label="Customer name"
-              required
-              value={name}
-              onChangeText={editField(setName)}
-              placeholder="e.g. Ramesh Kumar"
-              autoCapitalize="words"
-              leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
-            />
 
-            <Input
-              label="Phone number"
-              required
-              value={phone}
-              onChangeText={handlePhoneChange}
-              placeholder="98765 43210"
-              keyboardType="phone-pad"
-              maxLength={PHONE_LENGTH}
-              leadingIcon={
-                <View style={styles.dialRow}>
-                  <Phone size={18} color={colors.textMuted} strokeWidth={2} />
-                  <Text style={styles.dial}>{DIAL_CODE}</Text>
-                </View>
-              }
-            />
-          </FormSectionCard>
+          <Input
+            label="Customer name"
+            required
+            value={name}
+            onChangeText={editField(setName)}
+            placeholder="e.g. Ramesh Kumar"
+            autoCapitalize="words"
+            leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
+          />
+
+          <Input
+            label="Phone number"
+            required
+            value={phone}
+            onChangeText={handlePhoneChange}
+            placeholder="98765 43210"
+            keyboardType="phone-pad"
+            maxLength={PHONE_LENGTH}
+            leadingIcon={
+              <View style={styles.dialRow}>
+                <Phone size={18} color={colors.textMuted} strokeWidth={2} />
+                <Text style={styles.dial}>{DIAL_CODE}</Text>
+              </View>
+            }
+          />
 
           <FormSectionCard
             icon={<MapPin size={18} color={colors.primary} strokeWidth={2} />}
-            title="Service location & address"
-            subtitle="Where technicians will arrive"
+            title="Customer address"
+            subtitle="Where your technician will visit"
             required>
             {/* Resolved-address preview: read-only box + Change — the whole
                 box opens the map picker. Empty until a pick lands. */}
@@ -244,13 +244,13 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
               }
               disabled={submitting}
               accessibilityRole="button"
-              accessibilityLabel="Open the map to set the service location"
+              accessibilityLabel="Open the map to set the customer's location"
               style={styles.previewBox}>
               {previewLine ? (
                 <Text style={styles.previewText}>{previewLine}</Text>
               ) : (
                 <Text style={styles.previewPlaceholder}>
-                  Tap to set the service location on a map
+                  Tap to add the location on a map
                 </Text>
               )}
               <View style={styles.changeButton}>
@@ -265,22 +265,24 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
               label="Flat / House no., Building & Wing"
               value={addressDetails}
               onChangeText={editField(setAddressDetails)}
-              placeholder="e.g. Flat 402, Sunshine Towers, Wing B"
+              placeholder="e.g. Flat 402, Sunshine Towers"
               autoCapitalize="sentences"
               leadingIcon={
                 <Building2 size={18} color={colors.textMuted} strokeWidth={2} />
               }
+              style={styles.fieldAfterPreview}
             />
 
             <Input
               label="Street, Landmark or Locality"
               value={street}
               onChangeText={editField(setStreet)}
-              placeholder="e.g. Opposite Metro Station, Link Road"
+              placeholder="e.g. Opposite Metro Station"
               autoCapitalize="sentences"
               leadingIcon={
                 <Compass size={18} color={colors.textMuted} strokeWidth={2} />
               }
+              style={styles.fieldAfterField}
             />
 
             <View style={styles.row}>
@@ -305,8 +307,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             <View style={styles.infoRow}>
               <Info size={13} color={colors.textMuted} strokeWidth={2} />
               <Text style={styles.infoText}>
-                Technicians will navigate directly to this address and
-                coordinates.
+                Your technician will use this address and the map pin to reach
+                the customer.
               </Text>
             </View>
           </FormSectionCard>
@@ -408,15 +410,23 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: spacing.s3,
+    marginTop: spacing.s5,
   },
   rowItem: {
     flex: 1,
+  },
+  fieldAfterPreview: {
+    // Token stand-ins for the hand-tuned 10px: design-system values only.
+    marginTop: spacing.s3,
+  },
+  fieldAfterField: {
+    marginTop: spacing.s5,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.s2,
-    marginTop: spacing.s1,
+    marginTop: spacing.s4,
   },
   infoText: {
     ...typography.caption,

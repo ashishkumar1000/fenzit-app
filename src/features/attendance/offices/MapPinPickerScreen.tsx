@@ -336,7 +336,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <ScreenHeader
-        title={isCustomer ? 'Place customer pin' : 'Place office pin'}
+        title={isCustomer ? 'Set customer location' : 'Place office pin'}
         onBack={() => navigation.goBack()}
       />
 

@@ -118,7 +118,7 @@ function typeStreet(root: ReactTestRenderer.ReactTestInstance, text: string) {
   act(() => {
     inputByPlaceholder(
       root,
-      'e.g. Opposite Metro Station, Link Road',
+      'e.g. Opposite Metro Station',
     ).props.onChangeText(text);
   });
 }
@@ -140,7 +140,7 @@ function submit(root: ReactTestRenderer.ReactTestInstance) {
 function locationBoxTrigger(root: ReactTestRenderer.ReactTestInstance) {
   return root
     .findAllByProps({
-      accessibilityLabel: 'Open the map to set the service location',
+      accessibilityLabel: "Open the map to set the customer's location",
     })
     .find(instance => typeof instance.props.onPress === 'function');
 }
@@ -279,7 +279,7 @@ it('a resolved pick does NOT copy the resolved line into the Street field', () =
   const { root } = renderScreen('Customers', { pickedAddress: RESOLVED_PICK });
 
   expect(
-    inputByPlaceholder(root, 'e.g. Opposite Metro Station, Link Road').props.value,
+    inputByPlaceholder(root, 'e.g. Opposite Metro Station').props.value,
   ).toBe('');
 });
 
@@ -287,7 +287,7 @@ it('a manual entry prefills Street with its line (no snapshot to carry it)', () 
   const { root } = renderScreen('Customers', { pickedAddress: MANUAL_PICK });
 
   expect(
-    inputByPlaceholder(root, 'e.g. Opposite Metro Station, Link Road').props.value,
+    inputByPlaceholder(root, 'e.g. Opposite Metro Station').props.value,
   ).toBe(MANUAL_PICK.addressLine);
   expect(
     root.findAllByProps({ children: MANUAL_PICK.addressLine }).length,
@@ -319,7 +319,7 @@ describe('pick application (search resolve / pin drop / manual)', () => {
     repick(renderer, 'Customers', { pickedAddress: MANUAL_PICK });
 
     expect(
-      inputByPlaceholder(root, 'e.g. Opposite Metro Station, Link Road').props.value,
+      inputByPlaceholder(root, 'e.g. Opposite Metro Station').props.value,
     ).toBe('Beside the water tank');
   });
 
@@ -584,7 +584,7 @@ it('merges Street and Area/Pincode into the address line; details travel separat
   act(() => {
     inputByPlaceholder(
       root,
-      'e.g. Flat 402, Sunshine Towers, Wing B',
+      'e.g. Flat 402, Sunshine Towers',
     ).props.onChangeText('Flat 402, Sunshine Towers, Wing B');
   });
 
