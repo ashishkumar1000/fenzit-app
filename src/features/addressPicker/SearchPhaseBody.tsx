@@ -183,17 +183,27 @@ function SuggestionRows({
 }
 
 /** Compact, top-aligned prompt for idle/below-threshold — see the file doc
- *  on why this isn't `EmptyState`. */
+ *  on why this isn't `EmptyState`.
+ *
+ *  Title and description render as ONE Text (nested styles + '\n') so the
+ *  pair is a single native TextView — inside this sheet's content a column
+ *  of separate Texts mis-measures on device (title fine, description
+ *  0-height), while one TextView measures exactly like the proven
+ *  suggestion-row text. */
 function Prompt({ title, description }: { title: string; description: string }) {
   return (
     <View style={styles.prompt}>
       <View style={styles.promptIcon}>
         <MapPin size={22} color={colors.primary} strokeWidth={1.5} />
       </View>
-      <View style={styles.promptText}>
-        <Text style={styles.promptTitle}>{title}</Text>
-        <Text style={styles.promptDescription}>{description}</Text>
-      </View>
+      <Text style={styles.promptText}>
+        <Text style={styles.promptTitle}>
+          {title}
+          {'\n'}
+        </Text>
+        {/* No style needed — text props inherit from the parent Text. */}
+        <Text>{description}</Text>
+      </Text>
     </View>
   );
 }
@@ -202,6 +212,10 @@ const styles = StyleSheet.create({
   prompt: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    // Same floor as the banners: inside this sheet's content, a text row
+    // without a definite height mis-measures on device and drops its text
+    // entirely (the icon-only prompt). minHeight makes the height definite.
+    minHeight: touch.min,
     gap: spacing.s3,
     paddingVertical: spacing.s2,
   },
@@ -214,17 +228,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   promptText: {
+    ...typography.bodySm,
+    color: colors.textMuted,
     flex: 1,
-    gap: spacing.s1,
-    paddingTop: spacing.s1,
   },
   promptTitle: {
     ...typography.bodyStrong,
     color: colors.textStrong,
-  },
-  promptDescription: {
-    ...typography.bodySm,
-    color: colors.textMuted,
   },
   // No margin needed — the sheet body's `gap` already spaces every direct
   // child (this indicator, an `InlineError`, each row) evenly.

@@ -11,7 +11,7 @@
  */
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, type AlertButton } from 'react-native';
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View, type AlertButton, type StyleProp, type ViewStyle } from 'react-native';
 import { ConfirmDialog } from '../src/components/ui';
 
 const mockGoBack = jest.fn();
@@ -259,6 +259,33 @@ it('fetches on mount with the route param and renders the full detail', async ()
   expect(text).toContain('Job created'); // oldest event first
   expect(text).toContain('On my way');
   expect(text).toContain('brand_new_event'); // unknown type passes through raw
+});
+
+it('renders skill chips in an uncapped wrap container (a capped chips box painted over the action buttons on device)', async () => {
+  getById.mockResolvedValue(makeDetail());
+  const renderer = await mountScreen();
+
+  // Locate the chips box via the Skills caption's sibling row, then pin the
+  // style contract: chips wrap and NOTHING caps their height — RN children
+  // overflow visibly past a capped container, so the old `maxHeight` cap
+  // painted the third chip row straight over Call/Directions.
+  const skillsCaption = renderer.root
+    .findAllByType(Text)
+    .find(t => t.props.children === 'Skills');
+  expect(skillsCaption).toBeDefined();
+  const chipsBox = skillsCaption!
+    .parent!.findAllByType(View)
+    .find(
+      v =>
+        StyleSheet.flatten(v.props.style as StyleProp<ViewStyle>)?.flexWrap ===
+        'wrap',
+    );
+  expect(chipsBox).toBeDefined();
+  const style = StyleSheet.flatten(
+    chipsBox!.props.style as StyleProp<ViewStyle>,
+  );
+  expect(style?.flexWrap).toBe('wrap');
+  expect(style?.maxHeight).toBeUndefined();
 });
 
 it('shows a centered spinner while loading, never a flash of empty content', async () => {

@@ -168,7 +168,12 @@ function flattenErrorMessage(message?: string | string[]): string | undefined {
     // An empty array must fall back to the status default, not render ''.
     return message.length ? message.join('. ') : undefined;
   }
-  return message;
+  // An empty or whitespace-only string is "no message arrived", same as
+  // undefined — callers render `message` verbatim in banners, and a blank
+  // strip is exactly the failure this falls back to prevent (`'' ?? default`
+  // would NOT have caught it; only undefined/null fall through the nullish
+  // coalescing at the call site).
+  return message.trim() ? message : undefined;
 }
 
 

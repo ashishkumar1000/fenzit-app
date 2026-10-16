@@ -13,8 +13,18 @@ jest.mock('./useAddressAutosuggest', () => ({
 import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
-import { AccessibilityInfo, ActivityIndicator, Text, TextInput } from 'react-native';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Button, EmptyState, InlineError, Input, Sheet } from '../../components/ui';
+import { touch } from '../../theme';
 import { useAddressAutosuggest } from './useAddressAutosuggest';
 import AddressPickerSheet from './AddressPickerSheet';
 import { ManualAddressForm } from './ManualAddressForm';
@@ -99,19 +109,65 @@ it('does not call reset while staying closed', () => {
 });
 
 function texts(root: ReactTestRenderer.ReactTestInstance) {
-  return root.findAllByType(Text).map(t => t.props.children);
+  // Text children can be a string, or an array of strings/elements (nested
+  // Texts — e.g. the idle prompt renders title + '\n' + description in one
+  // Text). Flatten so assertions match on the copy itself; numbers count as
+  // copy too, whitespace-only fragments don't.
+  const collected: string[] = [];
+  for (const t of root.findAllByType(Text)) {
+    const walk = (child: unknown): void => {
+      if (typeof child === 'string' || typeof child === 'number') {
+        const value = String(child);
+        if (value.trim()) collected.push(value);
+      } else if (Array.isArray(child)) {
+        child.forEach(walk);
+      }
+    };
+    walk(t.props.children);
+  }
+  return collected;
+}
+
+/** True when some View in the tree flattens to a style with minHeight=value.
+ *  The sheet's content wrapper reports an indefinite height to Yoga on
+ *  device, so these definite-height floors are what keeps text rows from
+ *  mis-measuring (icon-only banner/prompt regressions) — pinned here. */
+function someViewHasMinHeight(
+  root: ReactTestRenderer.ReactTestInstance,
+  value: number,
+): boolean {
+  return root
+    .findAllByType(View)
+    .some(
+      node =>
+        StyleSheet.flatten(node.props.style as StyleProp<ViewStyle>)?.minHeight ===
+        value,
+    );
 }
 
 it('shows an inviting prompt when idle (blank query)', () => {
   mockHook({ phase: 'idle' });
   const { root } = renderSheet();
   expect(texts(root)).toContain('Find a verified address');
+  // The description copy is the part the device bug dropped (icon-only
+  // prompt) — asserted alongside the title, not instead of it.
+  expect(texts(root)).toContain(
+    'Start typing a building, street, or landmark to search.',
+  );
+  expect(someViewHasMinHeight(root, touch.min)).toBe(true);
 });
 
 it('shows the below-threshold hint for a 1-2 char query', () => {
   mockHook({ phase: 'below-threshold', query: 'a' });
   const { root } = renderSheet();
   expect(texts(root)).toContain('Keep typing');
+  expect(texts(root)).toContain('A couple more characters to search.');
+});
+
+it('the sheet body keeps a definite-height floor (sheet content otherwise reports an indefinite height to Yoga)', () => {
+  mockHook({ phase: 'idle' });
+  const { root } = renderSheet();
+  expect(someViewHasMinHeight(root, 440)).toBe(true);
 });
 
 it('dims the previous results while loading a refetch', () => {

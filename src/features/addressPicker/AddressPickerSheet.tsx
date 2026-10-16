@@ -187,6 +187,12 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+    // Definite-height floor — REQUIRED on device: TrueSheet's content
+    // wrapper reports an indefinite (effectively 0) height to Yoga, so
+    // `flex: 1` children of this body (EmptyState's root) collapsed to
+    // nothing and text measured unreliably. ~440dp is the space a 0.9
+    // detent leaves below the sheet header on every supported screen.
+    minHeight: 440,
     marginTop: spacing.s2,
     gap: spacing.s2,
     paddingBottom: spacing.s6,

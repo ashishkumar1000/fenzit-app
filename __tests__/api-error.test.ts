@@ -55,6 +55,22 @@ it('falls back to the status default when the envelope has no message', () => {
   );
   expect(oneItem.message).toBe('only');
 });
+
+it('falls back to the status default when the message is blank — an empty or whitespace-only string renders a blank banner otherwise', () => {
+  // '' once reached ApiError.message verbatim: `'' ?? default` keeps ''
+  // (only undefined/null fall through), and screens render `message` in
+  // banners — the address picker's resolve-failure strip rendered blank.
+  const empty = toApiError(
+    axiosError({ status: 502, data: { error_code: 'UPSTREAM_FAILED', message: '' } }),
+  );
+  expect(empty.message).toBe('Something went wrong on our end. Please try again.');
+
+  // Whitespace-only is the same "no message arrived" case.
+  const whitespace = toApiError(
+    axiosError({ status: 502, data: { error_code: 'UPSTREAM_FAILED', message: '   ' } }),
+  );
+  expect(whitespace.message).toBe('Something went wrong on our end. Please try again.');
+});
 describe('deadline aborts vs deliberate cancels', () => {
   // The deadline rejects cancel-shaped (ERR_CANCELED). Whether it classifies
   // as TIMEOUT or CANCELLED hinges entirely on the config stamp apiClient's

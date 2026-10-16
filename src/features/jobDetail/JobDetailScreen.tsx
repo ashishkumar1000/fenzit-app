@@ -632,12 +632,15 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
   },
+  // No maxHeight cap here: RN children overflow *visibly* past a capped
+  // container (no automatic clipping), so a capped chips box painted its
+  // third row straight over the Call/Directions buttons and the hint below.
+  // The stray `flex: 1` went too — meaningless in an auto-height column.
+  // The wrap already bounds growth — skills are a handful, not a list.
   skillsChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.s2,
-    flex: 1,
-    maxHeight: spacing.s4 * 3,
   },
   buttonRow: {
     flexDirection: 'row',

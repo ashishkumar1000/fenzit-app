@@ -13,7 +13,7 @@ import { StyleSheet } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
 import { InlineNotice } from './InlineNotice';
-import { colors } from '../../theme';
+import { colors, touch } from '../../theme';
 
 function renderNotice(
   props: React.ComponentProps<typeof InlineNotice>,
@@ -89,6 +89,16 @@ describe('InlineNotice', () => {
     const style = flatStyle(alertContainer(renderer)) as Record<string, string>;
     expect(style.backgroundColor).toBe(colors.surfaceSunken);
     expect(style.borderColor).toBe(colors.borderSubtle);
+  });
+
+  // The banner root carries a definite-height floor: inside native-sheet
+  // content (TrueSheet) an unfloored text row mis-measured on device and
+  // dropped its text entirely. If this floor regresses, the sheet-hosted
+  // notices render as icon-only slivers again — see InlineError's root note.
+  it('floors the banner at the touch minimum', () => {
+    const renderer = renderNotice({ message: 'floor' });
+    const style = flatStyle(alertContainer(renderer));
+    expect(style?.minHeight).toBe(touch.min);
   });
 
   it('the three tones use distinct backgrounds (no palette drift)', () => {

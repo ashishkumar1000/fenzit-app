@@ -12,7 +12,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { AlertTriangle, X } from 'lucide-react-native';
 import { IconButton } from './IconButton';
-import { colors, palette, radius, spacing, typography } from '../../theme';
+import { colors, palette, radius, spacing, touch, typography } from '../../theme';
 
 export type InlineErrorProps = {
   /** Message to show — `ApiError.message` is safe to pass straight in. */
@@ -45,6 +45,13 @@ const styles = StyleSheet.create({
   root: {
     flexDirection: 'row',
     alignItems: 'center',
+    // Floor at the touch minimum — REQUIRED inside native-sheet content:
+    // on device, a text row in a TrueSheet without a definite height
+    // mis-measures and drops its text entirely (the address picker's
+    // resolve-failure banner once rendered as an icon-only ~19dp sliver).
+    // With the floor, `flex: 1` on the message measures and wraps exactly
+    // like the suggestion rows it sits above.
+    minHeight: touch.min,
     gap: spacing.s2,
     paddingVertical: spacing.s2,
     paddingLeft: spacing.s3,

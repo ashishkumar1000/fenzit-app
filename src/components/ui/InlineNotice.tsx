@@ -23,7 +23,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { CheckCircle2, Info, X } from 'lucide-react-native';
 import { IconButton } from './IconButton';
-import { colors, radius, spacing, typography } from '../../theme';
+import { colors, radius, spacing, touch, typography } from '../../theme';
 
 export type InlineNoticeTone = 'info' | 'success' | 'neutral';
 
@@ -94,6 +94,9 @@ const styles = StyleSheet.create({
   root: {
     flexDirection: 'row',
     alignItems: 'center',
+    // Same floor as InlineError — see the note there: required for text to
+    // measure at all inside native-sheet content on device.
+    minHeight: touch.min,
     gap: spacing.s2,
     paddingVertical: spacing.s2,
     paddingLeft: spacing.s3,
