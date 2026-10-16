@@ -16,7 +16,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import * as LucideIcons from 'lucide-react-native';
 
-// fenzo-app/src/features/skills → the sibling backend repo in the workspace.
+// fenzit-app/src/features/skills → the sibling backend repo in the workspace.
 const MIGRATION = path.resolve(
   __dirname,
   '../../../../../backend/fenzit-be/supabase/migrations/20260920000002_add_skill_icons.sql',
