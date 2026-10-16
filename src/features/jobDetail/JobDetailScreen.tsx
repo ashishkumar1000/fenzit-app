@@ -393,8 +393,15 @@ export default function JobDetailScreen() {
                 </>
               }
             />
+            {detail.customer.addressDetails ? (
+              <Text style={styles.customerDetails} numberOfLines={2}>
+                {detail.customer.addressDetails}
+              </Text>
+            ) : null}
             {/* Address + city now live only in the header card's bordered
-                box — no duplicate here. */}
+                box — no duplicate here. The details line above is different:
+                it's the user-entered flat/building/floor detail (CAP-5),
+                which the geocoded service location never carries. */}
             <View style={styles.buttonRow}>
               <Button
                 variant="secondary"
@@ -640,6 +647,13 @@ const styles = StyleSheet.create({
   copiedNote: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+  // CAP-5 — the user-entered flat/building/floor detail, one quiet line
+  // between the identity row and the actions.
+  customerDetails: {
+    ...typography.bodySm,
+    color: colors.textStrong,
+    marginTop: spacing.s2,
   },
   // Why a disabled Direction button is off — muted, same tier as metaText,
   // with a small Info glyph leading the line.

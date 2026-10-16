@@ -543,6 +543,51 @@ it('omits every structured field when the pin has no address text at all', async
   expect(payload).not.toHaveProperty('placeId');
 });
 
+it('reveals the optional details input and sends addressDetails alongside a pin pick', async () => {
+  createSpy.mockResolvedValueOnce({
+    id: 'cust-11',
+    name: 'Ramesh Kumar',
+    countryCode: '+91',
+    phoneNumber: '9876543210',
+    address: PINNED_PICK.addressLine,
+    city: PINNED_PICK.city,
+  });
+  const { root } = renderScreen('Customers', { pickedAddress: PINNED_PICK });
+  typeName(root, 'Ramesh Kumar');
+  typePhone(root, '9876543210');
+
+  // Baymard reveal: the details input only exists after the link is tapped.
+  expect(() =>
+    inputByPlaceholder(root, 'e.g. Flat 302, Tower B, near the main lift'),
+  ).toThrow();
+  act(() => {
+    root
+      .findAllByProps({ accessibilityLabel: 'Add flat or building details' })
+      .find(instance => typeof instance.props.onPress === 'function')
+      ?.props.onPress();
+  });
+  act(() => {
+    inputByPlaceholder(
+      root,
+      'e.g. Flat 302, Tower B, near the main lift',
+    ).props.onChangeText('Flat 302, Tower B');
+  });
+
+  await act(async () => {
+    submit(root);
+  });
+
+  // Own field, untouched snapshot — the user text and the geocoded text
+  // travel separately (CAP-5).
+  expect(createSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      addressDetails: 'Flat 302, Tower B',
+      formattedAddress: PINNED_PICK.snapshot?.formattedAddress,
+      latitude: PINNED_PICK.snapshot?.latitude,
+    }),
+  );
+});
+
 it('omits the 5 resolved fields entirely when the picker was never used', async () => {
   createSpy.mockResolvedValueOnce({
     id: 'cust-4',
@@ -566,6 +611,7 @@ it('omits the 5 resolved fields entirely when the picker was never used', async 
   expect(payload).not.toHaveProperty('latitude');
   expect(payload).not.toHaveProperty('longitude');
   expect(payload).not.toHaveProperty('placeId');
+  expect(payload).not.toHaveProperty('addressDetails');
 });
 
 it('trims leading/trailing whitespace from name and city on submit', async () => {

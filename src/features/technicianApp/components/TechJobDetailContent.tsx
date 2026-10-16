@@ -136,21 +136,30 @@ export function TechJobDetailContent({
           phoneNumber={detail.customer.phoneNumber}
           subLine={formatPhone(detail.customer)}
         />
-        {customerAddress ? (
+        {/* The details line (flat/building/floor — CAP-5) leads: it is what
+            gets the tech from the street to the exact door. */}
+        {customerAddress || detail.customer.addressDetails ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open in maps"
             onPress={() =>
-              void openMaps(customerAddress, customerCity, {
+              void openMaps(customerAddress ?? '', customerCity, {
                 latitude: detail.customer.latitude,
                 longitude: detail.customer.longitude,
               })
             }
             style={styles.mapsRow}>
             <MapPin size={15} color={colors.primary} strokeWidth={2} />
-            <Text style={styles.mapsText} numberOfLines={2}>
-              {[customerAddress, customerCity].filter(Boolean).join(', ')}
-            </Text>
+            <View style={styles.mapsTextWrap}>
+              {detail.customer.addressDetails ? (
+                <Text style={styles.mapsDetails} numberOfLines={2}>
+                  {detail.customer.addressDetails}
+                </Text>
+              ) : null}
+              <Text style={styles.mapsText} numberOfLines={2}>
+                {[customerAddress, customerCity].filter(Boolean).join(', ')}
+              </Text>
+            </View>
             <Navigation size={15} color={colors.primary} strokeWidth={2} />
           </Pressable>
         ) : null}
@@ -308,6 +317,15 @@ const styles = StyleSheet.create({
     gap: spacing.s2,
     minHeight: touch.min,
     marginTop: spacing.s1,
+  },
+  mapsTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  mapsDetails: {
+    ...typography.bodySm,
+    color: colors.textStrong,
+    flex: 1,
   },
   mapsText: {
     ...typography.bodySm,

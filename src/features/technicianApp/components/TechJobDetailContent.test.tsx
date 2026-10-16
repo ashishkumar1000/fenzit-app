@@ -69,7 +69,7 @@ function detail(overrides: Partial<JobDetail> = {}): JobDetail {
     completedAt: null,
     updatedAt: '2026-09-01T06:00:00.000Z',
     technician: { id: 'tech-1', name: 'Suresh', countryCode: '+91', phoneNumber: '9876543210', skills: [] },
-    customer: { id: 'customer-1', name: 'Anita', countryCode: '+91', phoneNumber: '9123456780', address: null, city: null, latitude: null, longitude: null },
+    customer: { id: 'customer-1', name: 'Anita', countryCode: '+91', phoneNumber: '9123456780', address: null, city: null, latitude: null, longitude: null, addressDetails: null },
     activityLog: [],
     attachments: [],
     ...overrides,
@@ -349,10 +349,40 @@ describe('TechJobDetailContent — maps row deep link', () => {
     expect(openURL).toHaveBeenCalledWith('maps:0,0?q=12%20MG%20Road%2C%20Bengaluru');
   });
 
+  it('the details line (CAP-5) renders above the street line in the maps row', () => {
+    const root = renderContent({
+      detail: withAddress({ addressDetails: 'Flat 302, Tower B' }),
+    });
+    expect(textCount(root, 'Flat 302, Tower B')).toBeGreaterThan(0);
+    expect(textCount(root, '12 MG Road, Bengaluru')).toBeGreaterThan(0);
+  });
+
+  it('no details → the row is unchanged (street line only)', () => {
+    const root = renderContent({ detail: withAddress({ addressDetails: null }) });
+    expect(textCount(root, '12 MG Road, Bengaluru')).toBeGreaterThan(0);
+    expect(textCount(root, 'Flat 302, Tower B')).toBe(0);
+  });
+
+  it('details with no address at all → the row still renders (details lead)', () => {
+    const root = renderContent({
+      detail: {
+        ...detail(),
+        customer: {
+          ...detail().customer,
+          address: null,
+          city: null,
+          addressDetails: 'Flat 302, Tower B',
+        },
+      },
+    });
+    expect(mapsRow(root)).toBeDefined();
+    expect(textCount(root, 'Flat 302, Tower B')).toBeGreaterThan(0);
+  });
+
   it('the row renders identically in both modes — no precision badge anywhere', () => {
     for (const coords of [
       { latitude: 12.9716, longitude: 77.5946 },
-      { latitude: null, longitude: null },
+      { latitude: null, longitude: null, addressDetails: null },
     ]) {
       const root = renderContent({ detail: withAddress(coords) });
       expect(mapsRow(root)).toBeDefined();

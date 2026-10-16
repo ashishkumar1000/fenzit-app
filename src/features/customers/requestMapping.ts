@@ -40,5 +40,9 @@ export function toCreateCustomerRequest(
           ...(input.pincode ? { pincode: input.pincode } : {}),
         }
       : {}),
+    // CAP-5 — the user's own detail travels as its own field regardless of
+    // pick origin (pin, search, or manual); omitted when empty so the
+    // backend stores null, like every other optional here.
+    ...(input.addressDetails ? { addressDetails: input.addressDetails } : {}),
   };
 }

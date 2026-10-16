@@ -248,6 +248,17 @@ export default function CustomerDetailScreen() {
               </Text>
             </View>
           ) : null}
+          {detail.addressDetails ? (
+            <View style={styles.metaRow}>
+              {/* Own row, not folded into `customerLocation` — that helper is
+                  shared with the single-line list rows, and the details line
+                  (CAP-5) needs room to wrap. */}
+              <MapPin size={15} color={colors.textMuted} strokeWidth={2} />
+              <Text style={[styles.metaText, styles.detailsText]} numberOfLines={2}>
+                {detail.addressDetails}
+              </Text>
+            </View>
+          ) : null}
           <Text style={styles.sinceCaption}>Customer since {dateLine(detail.createdAt)}</Text>
         </Card>
 
@@ -396,6 +407,10 @@ const styles = StyleSheet.create({
   metaText: {
     ...typography.bodySm,
     color: colors.textMuted,
+    flex: 1,
+  },
+  detailsText: {
+    color: colors.textStrong,
     flex: 1,
   },
   sinceCaption: {

@@ -71,6 +71,10 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   const [city, setCity] = useState('');
   const [area, setArea] = useState('');
   const [address, setAddress] = useState('');
+  // The user's own extra location detail (flat/building/floor — CAP-5).
+  // Deliberately independent of the picked snapshot: it survives re-picks
+  // and applies to manual entries just the same.
+  const [addressDetails, setAddressDetails] = useState('');
 
   // Structured snapshot from a located pick (search resolve or pin drop) —
   // kept separate from `address`/`city` above so a later hand-edit of the
@@ -131,6 +135,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     city: city.trim(),
     area: area.trim(),
     address: address.trim(),
+    ...(addressDetails.trim() ? { addressDetails: addressDetails.trim() } : {}),
     // The snapshot only ever exists together as a whole — its presence is
     // the signal that a located pick exists at all. Within it, `pincode`
     // and (on a pin drop) `formattedAddress`/`placeId` can legitimately be
@@ -230,6 +235,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             onPress={() =>
               navigation.navigate('MapPinPicker', { mode: 'customer' })
             }
+            detailsValue={addressDetails}
+            onDetailsChange={editField(setAddressDetails)}
           />
         </ScrollView>
 

@@ -256,6 +256,12 @@ export interface JobDetailCustomer {
    */
   latitude: number | null;
   longitude: number | null;
+  /**
+   * User-entered extra location detail (flat / building / floor / landmark;
+   * CAP-5), null when the customer has none. Rendered above the address on
+   * the navigation row — it is what gets the tech to the exact door.
+   */
+  addressDetails: string | null;
 }
 
 /**

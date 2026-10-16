@@ -77,4 +77,10 @@ export type NewCustomerInput = {
   latitude?: number;
   longitude?: number;
   placeId?: string;
+  /**
+   * User-entered extra location detail (flat / building / floor / landmark)
+   * no provider resolves — its own column end to end (CAP-5), never merged
+   * into `address`.
+   */
+  addressDetails?: string;
 };

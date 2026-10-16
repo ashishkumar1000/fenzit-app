@@ -14,11 +14,11 @@
  * keyboard, no direct typing) so a tap anywhere on it, not just the leading
  * icon, opens the map instead of focusing.
  */
-import { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet } from 'react-native';
-import { MapPin } from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text } from 'react-native';
+import { MapPin, Plus } from 'lucide-react-native';
 import { Input } from '../../../components/ui';
-import { colors, radius } from '../../../theme';
+import { colors, radius, spacing, typography } from '../../../theme';
 
 /** Each leg of the populate border-pulse (0→1→0, ~200ms total). */
 const PULSE_LEG_MS = 100;
@@ -33,6 +33,14 @@ type Props = {
   /** Bumped by the caller each time a picked address is applied — the
    *  0→non-zero transition triggers the populate pulse. */
   pickSignal: number;
+  /**
+   * The user's own extra location detail (flat / building / floor /
+   * landmark — CAP-5), owned by the caller's form state like `value`.
+   * Independent of the pick: applies to pin, search AND manual entries,
+   * and a re-pick never clears it.
+   */
+  detailsValue: string;
+  onDetailsChange: (text: string) => void;
 };
 
 export function AddressPickerField({
@@ -40,7 +48,16 @@ export function AddressPickerField({
   disabled = false,
   onPress,
   pickSignal,
+  detailsValue,
+  onDetailsChange,
 }: Props) {
+  // Baymard's address-line-2 finding: an always-visible optional field makes
+  // people hesitate and put data in the wrong place — hide it behind a
+  // reveal; those who need it find the link. Stays revealed once it has
+  // content, so a passthrough edit never collapses the field out from
+  // under the user.
+  const [detailsRevealed, setDetailsRevealed] = useState(false);
+  const showDetails = detailsRevealed || detailsValue.length > 0;
   // Soft primary-tint border pulse on the address field when a picked
   // address lands — 0 = no highlight (transparent ring), 1 = full tint.
   const addressPulse = useRef(new Animated.Value(0)).current;
@@ -105,6 +122,25 @@ export function AddressPickerField({
           leadingIcon={<MapPin size={18} color={colors.textMuted} strokeWidth={2} />}
         />
       </Animated.View>
+      {showDetails ? (
+        <Input
+          label="Flat / building / floor"
+          value={detailsValue}
+          onChangeText={onDetailsChange}
+          placeholder="e.g. Flat 302, Tower B, near the main lift"
+          autoCapitalize="sentences"
+        />
+      ) : (
+        <Pressable
+          onPress={() => setDetailsRevealed(true)}
+          disabled={disabled}
+          accessibilityRole="button"
+          accessibilityLabel="Add flat or building details"
+          style={styles.detailsReveal}>
+          <Plus size={14} color={colors.textMuted} strokeWidth={2} />
+          <Text style={styles.detailsRevealText}>Add flat / building details</Text>
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -117,5 +153,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: radius.md + 4,
     padding: 2,
+  },
+  // Baymard-style reveal link under the address field.
+  detailsReveal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s1,
+    minHeight: 32,
+    marginTop: -spacing.s2,
+  },
+  detailsRevealText: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
 });

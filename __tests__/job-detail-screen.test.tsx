@@ -99,6 +99,7 @@ function makeDetail(overrides: Partial<JobDetail> = {}): JobDetail {
       city: 'Chennai',
       latitude: null,
       longitude: null,
+      addressDetails: null,
     },
     activityLog: [
       {

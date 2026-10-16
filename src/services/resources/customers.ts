@@ -35,6 +35,12 @@ export interface CreateCustomerRequest {
   longitude?: number;
   /** Places provider place id. */
   placeId?: string;
+  /**
+   * User-entered extra location detail (flat / building / floor / landmark)
+   * the resolved address lacks — its own column end to end, never merged
+   * into the geocoded text (SPEC-customer-map-pin-picker CAP-5).
+   */
+  addressDetails?: string;
 }
 
 /**
@@ -74,6 +80,12 @@ export interface ApiCustomer {
   /** Free-text address line, as sent on create. */
   address: string | null;
   city: string | null;
+  /**
+   * User-entered extra location detail (CAP-5), null when they have none.
+   * Optional on the type: rows hydrated from the persisted store may predate
+   * the field entirely.
+   */
+  addressDetails?: string | null;
   jobCount: number;
   /** ISO timestamp of the most recent job, or `null` if they've had none. */
   lastJobDate: string | null;
@@ -127,6 +139,11 @@ export interface CustomerDetail {
   phoneNumber: string;
   address: string | null;
   city: string | null;
+  /**
+   * User-entered extra location detail (CAP-5), null when they have none.
+   * Optional on the type: older cached profiles may predate the field.
+   */
+  addressDetails?: string | null;
   createdVia: 'manual' | 'job_creation';
   createdAt: string;
   tenantId: string;
