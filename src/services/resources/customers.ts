@@ -140,6 +140,12 @@ export interface CustomerDetail {
   address: string | null;
   city: string | null;
   /**
+   * The resolved Places line (design v2: shown separately from `address`,
+   * which carries only the user's street/landmark text). Optional on the
+   * type: older cached profiles may predate the field.
+   */
+  formattedAddress?: string | null;
+  /**
    * User-entered extra location detail (CAP-5), null when they have none.
    * Optional on the type: older cached profiles may predate the field.
    */

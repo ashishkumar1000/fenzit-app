@@ -155,6 +155,7 @@ function makeDetail(overrides: Partial<JobDetail> = {}): JobDetail {
       latitude: null,
       longitude: null,
       addressDetails: null,
+  formattedAddress: null,
     },
     activityLog: [],
     attachments: [],

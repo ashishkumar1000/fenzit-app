@@ -50,7 +50,7 @@ function job(overrides: Partial<JobDetail> = {}): JobDetail {
     completedAt: null,
     updatedAt: '2026-09-01T06:00:00.000Z',
     technician: { id: 'tech-1', name: 'Suresh', countryCode: '+91', phoneNumber: '9876543210', skills: [] },
-    customer: { id: 'customer-1', name: 'Anita', countryCode: '+91', phoneNumber: '9123456780', address: null, city: null, latitude: null, longitude: null, addressDetails: null },
+    customer: { id: 'customer-1', name: 'Anita', countryCode: '+91', phoneNumber: '9123456780', address: null, city: null, latitude: null, longitude: null, addressDetails: null, formattedAddress: null },
     activityLog: [],
     attachments: [],
     ...overrides,

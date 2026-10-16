@@ -1,34 +1,30 @@
 /**
- * AddCustomerScreen — full-page route for adding a customer (name + phone,
- * plus optional city, area and address).
+ * AddCustomerScreen — full-page route for adding a customer, in the design-v2
+ * layout: two section cards ("Contact details" and "Service location &
+ * address") over a single "Save customer" action.
  *
- * Previously (Story 1.5) this form lived in `AddCustomerSheet`, a native
- * bottom-sheet modal, with the address picker (`AddressPickerScreen`) pushed
- * as a full-screen route on top of it. On a physical device that combination
- * silently dismissed the open sheet — pushing a stack screen over a
- * presented native modal closes the modal on the native side even though its
- * JS `visible` state doesn't change. Making this a full page removes the
- * conflict: the address is picked on the `MapPinPicker` screen (mode
- * `customer` — exact pin on a map, with address search and the manual-entry
- * fallback inside it; SPEC-customer-map-pin-picker), which returns the pick
- * via navigate-back-with-params.
+ * The service-location card is the CAP-5 surface: the resolved address lives
+ * in a read-only preview box (with a Change button that opens the shared
+ * `MapPinPicker`, mode `customer` — the pick returns via
+ * navigate-back-with-params, read once then cleared), while the user's OWN
+ * text is captured in always-visible fields that map 1:1 onto the customers
+ * columns:
+ * - "Flat / House no., Building & Wing" → `addressDetails`
+ * - "Street, Landmark or Locality"      → free-text `address`
+ * - "Area / Pincode"                    → `area` (requestMapping merges it
+ *   into the address line, as it always has)
+ * A pin/search pick NO LONGER copies the resolved line into the free-text
+ * address — the preview box and `formattedAddress` carry it (the jobs embed
+ * and the technician row read `formattedAddress`, falling back to the free
+ * text for manual-entry customers). A manual entry prefills Street with its
+ * line instead, because a manual customer has no snapshot to carry it.
  *
- * The address field and its populate pulse are one self-contained control
- * (`components/AddressPickerField`) — presentational only: this screen owns
- * navigation, form state, and the returned-pick application. The POST submit
- * chain lives in `useCreateCustomer`. This screen keeps the form state, the
- * payload assembly, and the post-save navigation contract:
+ * "Required *" on the location card is enforced: Save needs a location
+ * signal (a picked location, or any of street/city/area filled) on top of
+ * name + phone.
  *
- * `returnRouteName` decides what happens after a successful save:
- * - `'Customers'`/`'Home'`: the shared `useCustomers` store already reflects
- *   the new row (via `upsertCustomer`), so a plain `goBack()` is enough — no
- *   data needs to travel back through navigation params. (`Home` is the
- *   quick-action entry; the list the user sees next reads the same store.)
- * - `'NewJob'`: the caller needs to *select* the new customer, so it travels
- *   back as `createdCustomerId` (this screen is a sibling of `NewJob` on the
- *   root stack, so `popTo('NewJob', …, { merge: true })` pops back to it —
- *   plain `navigate` pushes a duplicate in React Navigation 7; `Customers`
- *   is nested inside `MainTabs` and just takes the store update).
+ * The POST submit chain lives in `useCreateCustomer`; `returnRouteName`
+ * decides post-save navigation — see the contract in `useCreateCustomer.ts`.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -42,7 +38,17 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Phone, User, UserPlus } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Building2,
+  CheckCircle2,
+  Compass,
+  ChevronRight,
+  Info,
+  MapPin,
+  Phone,
+  User,
+} from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, Input } from '../../components/ui';
 import { colors, spacing, touch, typography } from '../../theme';
@@ -53,7 +59,7 @@ import type {
   PickedAddressSnapshot,
 } from './types';
 import type { RootStackParamList } from '../../navigation/types';
-import { AddressPickerField } from './components/AddressPickerField';
+import { FormSectionCard } from './components/FormSectionCard';
 import { useCreateCustomer } from './useCreateCustomer';
 import { DIAL_CODE, PHONE_LENGTH } from './constants';
 
@@ -70,31 +76,23 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
   const [area, setArea] = useState('');
-  const [address, setAddress] = useState('');
-  // The user's own extra location detail (flat/building/floor — CAP-5).
-  // Deliberately independent of the picked snapshot: it survives re-picks
-  // and applies to manual entries just the same.
+  // Street, Landmark or Locality — the user's own navigational text; the
+  // free-text `address` column. The resolved line is never copied here.
+  const [street, setStreet] = useState('');
+  // The user's extra location detail (flat/building/wing — CAP-5).
   const [addressDetails, setAddressDetails] = useState('');
-
-  // Structured snapshot from a located pick (search resolve or pin drop) —
-  // kept separate from `address`/`city` above so a later hand-edit of the
-  // free text never clears or re-syncs it (additive backend columns; free
-  // text and structured snapshot are independent fields end to end). `null`
-  // after a manual entry (and before any pick).
+  // Structured snapshot from a located pick — independent of the free text
+  // above (a hand-edit never clears it; additive backend columns).
   const [snapshot, setSnapshot] = useState<PickedAddressSnapshot | null>(null);
-
-  // Bumped each time a returned pick is applied — drives the address
-  // field's populate pulse (the pick itself arrives via route params).
-  const [pickSignal, setPickSignal] = useState(0);
+  // What the preview box shows: the last pick's display line (resolved
+  // formattedAddress / coordinate fallback, or a manual entry's line).
+  const [previewLine, setPreviewLine] = useState('');
 
   const { submitting, submitError, clearSubmitError, handleSubmit } =
     useCreateCustomer({
     navigation,
     returnRouteName,
   });
-
-  const canSubmit =
-    name.trim().length > 0 && phone.length === PHONE_LENGTH && !submitting;
 
   /**
    * Any edit clears a previous submit error — the user is most likely fixing
@@ -111,12 +109,16 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   );
 
   const handlePick = (picked: PickedAddress) => {
-    setAddress(picked.addressLine);
+    setPreviewLine(picked.addressLine);
     // An entry without a city must not wipe one the user already typed in
     // the City field above.
     if (picked.city) setCity(picked.city);
     setSnapshot(picked.snapshot);
-    setPickSignal(n => n + 1);
+    // A manual entry has NO snapshot to carry its line — prefill Street with
+    // it (keeping anything the user already typed) so it reaches the payload.
+    if (!picked.snapshot) {
+      setStreet(prev => (prev ? prev : picked.addressLine));
+    }
   };
 
   // MapPinPicker's return channel (navigate-back-with-params, read once on
@@ -129,12 +131,27 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickedAddressParam]);
 
+  // "Required *" on the location card: a location signal is any of a picked
+  // location, Street, City or Area.
+  const hasLocation =
+    snapshot !== null ||
+    street.trim().length > 0 ||
+    city.trim().length > 0 ||
+    area.trim().length > 0;
+
+  const canSubmit =
+    name.trim().length > 0 &&
+    phone.length === PHONE_LENGTH &&
+    hasLocation &&
+    !submitting;
+
   const buildRequest = (): NewCustomerInput => ({
     name: name.trim(),
     phone,
     city: city.trim(),
     area: area.trim(),
-    address: address.trim(),
+    // Street only — the resolved line travels as `formattedAddress` below.
+    address: street.trim(),
     ...(addressDetails.trim() ? { addressDetails: addressDetails.trim() } : {}),
     // The snapshot only ever exists together as a whole — its presence is
     // the signal that a located pick exists at all. Within it, `pincode`
@@ -183,65 +200,120 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           contentContainerStyle={styles.form}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <Input
-            label="Customer name"
-            required
-            value={name}
-            onChangeText={editField(setName)}
-            placeholder="e.g. Ramesh Kumar"
-            autoCapitalize="words"
-            leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
-          />
+          <FormSectionCard
+            icon={<User size={18} color={colors.primary} strokeWidth={2} />}
+            title="Contact details"
+            subtitle="Customer identification & phone">
+            <Input
+              label="Customer name"
+              required
+              value={name}
+              onChangeText={editField(setName)}
+              placeholder="e.g. Ramesh Kumar"
+              autoCapitalize="words"
+              leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
+            />
 
-          <Input
-            label="Phone number"
-            required
-            value={phone}
-            onChangeText={handlePhoneChange}
-            placeholder="98765 43210"
-            keyboardType="phone-pad"
-            maxLength={PHONE_LENGTH}
-            leadingIcon={
-              <View style={styles.dialRow}>
-                <Phone size={18} color={colors.textMuted} strokeWidth={2} />
-                <Text style={styles.dial}>{DIAL_CODE}</Text>
+            <Input
+              label="Phone number"
+              required
+              value={phone}
+              onChangeText={handlePhoneChange}
+              placeholder="98765 43210"
+              keyboardType="phone-pad"
+              maxLength={PHONE_LENGTH}
+              leadingIcon={
+                <View style={styles.dialRow}>
+                  <Phone size={18} color={colors.textMuted} strokeWidth={2} />
+                  <Text style={styles.dial}>{DIAL_CODE}</Text>
+                </View>
+              }
+            />
+          </FormSectionCard>
+
+          <FormSectionCard
+            icon={<MapPin size={18} color={colors.primary} strokeWidth={2} />}
+            title="Service location & address"
+            subtitle="Where technicians will arrive"
+            required>
+            {/* Resolved-address preview: read-only box + Change — the whole
+                box opens the map picker. Empty until a pick lands. */}
+            <Pressable
+              onPress={() =>
+                navigation.navigate('MapPinPicker', { mode: 'customer' })
+              }
+              disabled={submitting}
+              accessibilityRole="button"
+              accessibilityLabel="Open the map to set the service location"
+              style={styles.previewBox}>
+              {previewLine ? (
+                <Text style={styles.previewText}>{previewLine}</Text>
+              ) : (
+                <Text style={styles.previewPlaceholder}>
+                  Tap to set the service location on a map
+                </Text>
+              )}
+              <View style={styles.changeButton}>
+                <Text style={styles.changeButtonText}>
+                  {previewLine ? 'Change' : 'Set location'}
+                </Text>
+                <ChevronRight size={14} color={colors.primary} strokeWidth={2.5} />
               </View>
-            }
-          />
+            </Pressable>
 
-          <View style={styles.row}>
             <Input
-              label="City"
-              value={city}
-              onChangeText={editField(setCity)}
-              placeholder="Mumbai"
-              autoCapitalize="words"
-              style={styles.rowItem}
+              label="Flat / House no., Building & Wing"
+              value={addressDetails}
+              onChangeText={editField(setAddressDetails)}
+              placeholder="e.g. Flat 402, Sunshine Towers, Wing B"
+              autoCapitalize="sentences"
+              leadingIcon={
+                <Building2 size={18} color={colors.textMuted} strokeWidth={2} />
+              }
             />
-            <Input
-              label="Area"
-              value={area}
-              onChangeText={editField(setArea)}
-              placeholder="Andheri West"
-              autoCapitalize="words"
-              style={styles.rowItem}
-            />
-          </View>
 
-          <AddressPickerField
-            value={address}
-            disabled={submitting}
-            pickSignal={pickSignal}
-            onPress={() =>
-              navigation.navigate('MapPinPicker', { mode: 'customer' })
-            }
-            detailsValue={addressDetails}
-            onDetailsChange={editField(setAddressDetails)}
-          />
+            <Input
+              label="Street, Landmark or Locality"
+              value={street}
+              onChangeText={editField(setStreet)}
+              placeholder="e.g. Opposite Metro Station, Link Road"
+              autoCapitalize="sentences"
+              leadingIcon={
+                <Compass size={18} color={colors.textMuted} strokeWidth={2} />
+              }
+            />
+
+            <View style={styles.row}>
+              <Input
+                label="City"
+                value={city}
+                onChangeText={editField(setCity)}
+                placeholder="Mumbai"
+                autoCapitalize="words"
+                style={styles.rowItem}
+              />
+              <Input
+                label="Area / Pincode"
+                value={area}
+                onChangeText={editField(setArea)}
+                placeholder="Andheri West"
+                autoCapitalize="words"
+                style={styles.rowItem}
+              />
+            </View>
+
+            <View style={styles.infoRow}>
+              <Info size={13} color={colors.textMuted} strokeWidth={2} />
+              <Text style={styles.infoText}>
+                Technicians will navigate directly to this address and
+                coordinates.
+              </Text>
+            </View>
+          </FormSectionCard>
         </ScrollView>
 
-        {/* Footer sits outside the ScrollView so "Add customer" is always
-            reachable without scrolling to the bottom. */}
+        {/* Footer sits outside the ScrollView so Save is always reachable
+            without scrolling to the bottom. */}
         <SafeAreaView edges={['bottom']} style={styles.footer}>
           {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
           <Button
@@ -251,9 +323,11 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             disabled={!canSubmit}
             onPress={onSubmit}
             leadingIcon={
-              <UserPlus size={20} color={colors.onPrimary} strokeWidth={2.5} />
+              submitting ? undefined : (
+                <CheckCircle2 size={20} color={colors.onPrimary} strokeWidth={2.5} />
+              )
             }>
-            {submitting ? 'Saving…' : 'Add customer'}
+            {submitting ? 'Saving…' : 'Save customer'}
           </Button>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -298,11 +372,55 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.s6,
     gap: spacing.s4,
   },
+  previewBox: {
+    borderWidth: 1,
+    borderColor: `${colors.primary}55`,
+    borderRadius: 12,
+    backgroundColor: `${colors.primary}0D`,
+    padding: spacing.s3,
+    gap: spacing.s3,
+    marginBottom: spacing.s4,
+  },
+  previewText: {
+    ...typography.body,
+    color: colors.textStrong,
+  },
+  previewPlaceholder: {
+    ...typography.body,
+    color: colors.textMuted,
+  },
+  changeButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s1,
+    paddingHorizontal: spacing.s3,
+    paddingVertical: spacing.s1 + 2,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.surfaceCard,
+  },
+  changeButtonText: {
+    ...typography.bodySm,
+    color: colors.primary,
+  },
   row: {
     flexDirection: 'row',
     gap: spacing.s3,
   },
   rowItem: {
+    flex: 1,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.s2,
+    marginTop: spacing.s1,
+  },
+  infoText: {
+    ...typography.caption,
+    color: colors.textMuted,
     flex: 1,
   },
   dialRow: {

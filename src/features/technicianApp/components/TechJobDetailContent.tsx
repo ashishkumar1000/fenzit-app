@@ -107,6 +107,15 @@ export function TechJobDetailContent({
   const description = detail.description;
   const customerAddress = detail.customer.address;
   const customerCity = detail.customer.city;
+  // Design v2: `address` carries only the user's street/landmark text; the
+  // resolved Places line (when there is one) is the street line to show.
+  const streetLine =
+    detail.customer.formattedAddress ??
+    [customerAddress, customerCity].filter(Boolean).join(', ');
+  // `formattedAddress` already ends with the city — only the free-text
+  // fallback needs it appended as a separate query part.
+  const mapsQueryCity =
+    detail.customer.formattedAddress != null ? null : customerCity;
   const skillLabel = detail.skill?.name || 'Service';
 
   return (
@@ -138,15 +147,19 @@ export function TechJobDetailContent({
         />
         {/* The details line (flat/building/floor — CAP-5) leads: it is what
             gets the tech from the street to the exact door. */}
-        {customerAddress || detail.customer.addressDetails ? (
+        {streetLine || detail.customer.addressDetails ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Open in maps"
             onPress={() =>
-              void openMaps(customerAddress ?? '', customerCity, {
-                latitude: detail.customer.latitude,
-                longitude: detail.customer.longitude,
-              })
+              void openMaps(
+                detail.customer.formattedAddress ?? customerAddress ?? '',
+                mapsQueryCity ?? undefined,
+                {
+                  latitude: detail.customer.latitude,
+                  longitude: detail.customer.longitude,
+                },
+              )
             }
             style={styles.mapsRow}>
             <MapPin size={15} color={colors.primary} strokeWidth={2} />
@@ -156,9 +169,11 @@ export function TechJobDetailContent({
                   {detail.customer.addressDetails}
                 </Text>
               ) : null}
-              <Text style={styles.mapsText} numberOfLines={2}>
-                {[customerAddress, customerCity].filter(Boolean).join(', ')}
-              </Text>
+              {streetLine ? (
+                <Text style={styles.mapsText} numberOfLines={2}>
+                  {streetLine}
+                </Text>
+              ) : null}
             </View>
             <Navigation size={15} color={colors.primary} strokeWidth={2} />
           </Pressable>

@@ -69,7 +69,7 @@ function detail(overrides: Partial<JobDetail> = {}): JobDetail {
     completedAt: null,
     updatedAt: '2026-09-01T06:00:00.000Z',
     technician: { id: 'tech-1', name: 'Suresh', countryCode: '+91', phoneNumber: '9876543210', skills: [] },
-    customer: { id: 'customer-1', name: 'Anita', countryCode: '+91', phoneNumber: '9123456780', address: null, city: null, latitude: null, longitude: null, addressDetails: null },
+    customer: { id: 'customer-1', name: 'Anita', countryCode: '+91', phoneNumber: '9123456780', address: null, city: null, latitude: null, longitude: null, addressDetails: null, formattedAddress: null },
     activityLog: [],
     attachments: [],
     ...overrides,
@@ -358,7 +358,7 @@ describe('TechJobDetailContent — maps row deep link', () => {
   });
 
   it('no details → the row is unchanged (street line only)', () => {
-    const root = renderContent({ detail: withAddress({ addressDetails: null }) });
+    const root = renderContent({ detail: withAddress({ addressDetails: null, formattedAddress: null }) });
     expect(textCount(root, '12 MG Road, Bengaluru')).toBeGreaterThan(0);
     expect(textCount(root, 'Flat 302, Tower B')).toBe(0);
   });
@@ -382,7 +382,7 @@ describe('TechJobDetailContent — maps row deep link', () => {
   it('the row renders identically in both modes — no precision badge anywhere', () => {
     for (const coords of [
       { latitude: 12.9716, longitude: 77.5946 },
-      { latitude: null, longitude: null, addressDetails: null },
+      { latitude: null, longitude: null, addressDetails: null, formattedAddress: null },
     ]) {
       const root = renderContent({ detail: withAddress(coords) });
       expect(mapsRow(root)).toBeDefined();

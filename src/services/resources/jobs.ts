@@ -262,6 +262,12 @@ export interface JobDetailCustomer {
    * the navigation row — it is what gets the tech to the exact door.
    */
   addressDetails: string | null;
+  /**
+   * The resolved Places line (null on free-text/manual customers) — shown
+   * separately from `address`, which in design v2 carries only the user's
+   * own street/landmark text.
+   */
+  formattedAddress: string | null;
 }
 
 /**

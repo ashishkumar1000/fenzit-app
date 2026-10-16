@@ -218,7 +218,9 @@ export default function CustomerDetailScreen() {
 
   const renderHeader = useCallback(() => {
     if (!detail) return null;
-    const location = customerLocation(detail);
+    // Design v2: prefer the resolved Places line; fall back to the user's
+    // city · address text (manual/free-text customers).
+    const location = detail.formattedAddress ?? customerLocation(detail);
     return (
       <View>
         <Card padding="md" style={styles.profileCard}>

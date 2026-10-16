@@ -65,6 +65,7 @@ const BASE_JOB: JobDetail = {
     latitude: null,
     longitude: null,
     addressDetails: null,
+  formattedAddress: null,
   },
   activityLog: [],
   attachments: [],
