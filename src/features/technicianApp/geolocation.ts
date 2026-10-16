@@ -1,6 +1,8 @@
 import { PermissionsAndroid, Platform } from 'react-native';
-import Geolocation from 'react-native-nitro-geolocation/compat';
-import { requestPermission } from 'react-native-nitro-geolocation';
+import {
+  getCurrentPosition as nativeGetCurrentPosition,
+  requestPermission,
+} from 'react-native-nitro-geolocation';
 
 export interface LocationPermissionOutcome {
   status: 'granted' | 'denied' | 'undetermined';
@@ -73,97 +75,117 @@ export async function requestLocationPermission(): Promise<LocationPermissionOut
   }
 }
 
-/** One native compat capture with its own timeout belt. Errors are
- *  classified into plain Errors (messages are the consumer contract). */
-function attemptPosition(options: {
-  enableHighAccuracy: boolean;
-  maximumAge: number;
-  timeout: number;
-}): Promise<GeolocationCoordinates> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      const err = new Error(`Location request timed out after ${options.timeout}ms`);
-      console.error('[geolocation] timeout:', err.message);
-      reject(err);
-    }, options.timeout);
+/** Main-API capture (user-directed migration, 2026-10-16 — every job-step
+ *  verify timed out on the Pixel 6 while the attendance flow, already on
+ *  the main API, worked in the same offices). The /compat API this module
+ *  used before maps accuracy straight onto raw LocationManager providers:
+ *  high accuracy = the GPS provider ALONE (first enabled in [gps, network]),
+ *  which can never produce a fix indoors — and Play Services' fused engine,
+ *  the thing Google Maps uses to locate "instantly" at a desk, is never
+ *  consulted on the compat path at all. The main API routes to the fused
+ *  engine (auto = fused when GMS is available) and honors maximumAge on a
+ *  cached fused fix, so attempt 1 below is the indoor-capable capture:
+ *  balanced priority over WiFi/network with a 15 s cache window. Only a
+ *  TIMEOUT earns attempt 2 — the strict never-cached high-accuracy fix for
+ *  the outdoors case where WiFi fails but satellites exist. Permission and
+ *  services-off failures fail fast: deterministic, a retry cannot succeed.
+ *  Same strategy as attendanceLocation.ts (story 16-3); messages are the
+ *  consumer contract (useLocateMe matches /timed out/). */
+const FALLBACK_TIMEOUT_MS = 25_000;
 
-    Geolocation.getCurrentPosition(
-      (position) => {
-        clearTimeout(timeoutId);
-        const { latitude, longitude, accuracy } = position.coords;
+/** Nitro LocationError codes: -1 internal, 1 permission, 2 unavailable,
+ *  3 timeout, 4 Play Services missing, 5 settings not satisfied. */
+type NativeErrorCode = 1 | 2 | 3 | 4 | 5;
 
-        if (latitude === undefined || longitude === undefined || accuracy === undefined) {
-          const err = new Error('Invalid location data: missing coordinates');
-          console.error('[geolocation]', err.message);
-          reject(err);
-          return;
-        }
-
-        resolve({ latitude, longitude, accuracy });
-      },
-      (error) => {
-        clearTimeout(timeoutId);
-        // The compat layer passes a plain CompatGeolocationError — { code:
-        // 1|2|3, message } — NOT an Error instance: String(error) printed
-        // "[object Object]" and a message-only classification never
-        // matched. Log the fields, and classify on the numeric
-        // geolocation-spec code (1 PERMISSION_DENIED, 2
-        // POSITION_UNAVAILABLE, 3 TIMEOUT) with the string matches kept
-        // for any Error-shaped input.
-        const raw =
-          error instanceof Error
-            ? error.message
-            : `${error.message} (code ${error.code})`;
-        console.error('[geolocation] error:', raw);
-
-        let finalError: Error;
-        if (error.code === 1 || raw.includes('PERMISSION_DENIED')) {
-          finalError = new Error('Location permission denied');
-        } else if (error.code === 2 || raw.includes('POSITION_UNAVAILABLE')) {
-          finalError = new Error('Location services unavailable');
-        } else if (error.code === 3 || raw.includes('TIMEOUT')) {
-          finalError = new Error('Location request timed out');
-        } else {
-          finalError = new Error('Failed to get location: ' + raw);
-        }
-        reject(finalError);
-      },
-      options,
-    );
-  });
+function errorCode(err: unknown): NativeErrorCode | null {
+  const code = (err as { code?: number } | null)?.code;
+  return typeof code === 'number' ? (code as NativeErrorCode) : null;
 }
 
-function isTimeout(err: unknown): boolean {
-  return err instanceof Error && /timed out|TIMEOUT/.test(err.message);
+function classification(err: unknown): 'permission' | 'unavailable' | 'timeout' | 'unknown' {
+  switch (errorCode(err)) {
+    case 1:
+      return 'permission';
+    case 2:
+    case 4:
+    case 5:
+      return 'unavailable';
+    case 3:
+      return 'timeout';
+    default:
+      return 'unknown';
+  }
+}
+
+/** Errors are rethrown as plain Errors with stable messages — consumers
+ *  branch on the message text, never the raw native shape. */
+function toConsumerError(err: unknown): Error {
+  switch (classification(err)) {
+    case 'permission':
+      return new Error('Location permission denied');
+    case 'unavailable':
+      return new Error('Location services unavailable');
+    case 'timeout':
+      return new Error('Location request timed out');
+    default: {
+      const message =
+        (err as { message?: string } | null)?.message ?? String(err);
+      return new Error('Failed to get location: ' + message);
+    }
+  }
+}
+
+async function capture(options: {
+  android: 'balanced' | 'high';
+  ios: 'best';
+  maximumAge: number;
+  timeout: number;
+  label: string;
+}): Promise<GeolocationCoordinates> {
+  const position = await nativeGetCurrentPosition({
+    accuracy: { android: options.android, ios: options.ios },
+    maximumAge: options.maximumAge,
+    timeout: options.timeout,
+  });
+
+  const { latitude, longitude, accuracy } = position.coords;
+  if (latitude === undefined || longitude === undefined || accuracy === undefined) {
+    throw new Error('Invalid location data: missing coordinates');
+  }
+
+  console.log(
+    `[geolocation] fix via ${options.label}: provider=${position.provider ?? 'unknown'}`,
+    `accuracy=${Math.round(accuracy)}m`,
+  );
+  return { latitude, longitude, accuracy };
 }
 
 export async function getCurrentPosition(timeout: number = 15000): Promise<GeolocationCoordinates> {
   try {
-    // Attempt 1 — the strict capture, unchanged shape: fresh, high
-    // accuracy. Step verification and the office pin both depend on where
-    // the device actually is.
-    return await attemptPosition({
-      enableHighAccuracy: true,
-      maximumAge: 0,
+    // Attempt 1 — fused balanced priority over the cached-or-network fix
+    // (see the module comment for why this leads instead of GPS).
+    return await capture({
+      android: 'balanced',
+      ios: 'best',
+      maximumAge: 15_000,
       timeout,
+      label: 'balanced',
     });
   } catch (err) {
-    // Only a TIMEOUT earns the indoor fallback (user-directed, 2026-10-02
-    // — offices saw every strict capture time out while Maps located
-    // instantly): one retry at balanced priority accepting a fix up to
-    // 15 s old. Permission and services-off failures keep their own copy.
-    if (!isTimeout(err)) throw err;
+    if (classification(err) !== 'timeout') throw toConsumerError(err);
 
-    console.error('[geolocation] high-accuracy attempt timed out; retrying balanced');
+    console.error('[geolocation] balanced capture timed out; retrying high accuracy');
     try {
-      return await attemptPosition({
-        enableHighAccuracy: false,
-        maximumAge: 15_000,
-        timeout: 25_000,
+      return await capture({
+        android: 'high',
+        ios: 'best',
+        maximumAge: 0,
+        timeout: FALLBACK_TIMEOUT_MS,
+        label: 'high-accuracy',
       });
     } catch (retryErr) {
-      console.error('[geolocation] fallback error:', retryErr);
-      throw retryErr;
+      console.error('[geolocation] high-accuracy fallback error:', retryErr);
+      throw toConsumerError(retryErr);
     }
   }
 }
