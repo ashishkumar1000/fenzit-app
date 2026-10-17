@@ -18,16 +18,28 @@ jest.mock('./useCustomers', () => ({
 import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
-import { Text, TextInput } from 'react-native';
-import { Button, ConfirmDialog } from '../../components/ui';
+import { ActivityIndicator, Text, TextInput } from 'react-native';
+import { Button, ConfirmDialog, Input } from '../../components/ui';
 import { customerService } from '../../services';
-import type { CreatedCustomer, ResolvedPlace } from '../../services';
+import type { CreatedCustomer, CustomerDetail, ResolvedPlace } from '../../services';
 import { upsertCustomer, loadCustomers } from './useCustomers';
 import { runAllResets } from '../../services/resetRegistry';
 import type { PickedAddress } from './types';
 import AddCustomerScreen from './AddCustomerScreen';
 
 const createSpy = jest.spyOn(customerService, 'create');
+const getByIdSpy = jest.spyOn(customerService, 'getById');
+const updateSpy = jest.spyOn(customerService, 'update');
+// Standing default so an edit-mode save never reaches the real apiClient —
+// individual tests override with mockRejectedValueOnce as needed.
+updateSpy.mockResolvedValue({
+  id: 'cust-77',
+  name: 'saved',
+  countryCode: '+91',
+  phoneNumber: '9876543210',
+  address: null,
+  city: null,
+});
 const upsertCustomerMock = upsertCustomer as jest.Mock;
 const loadCustomersMock = loadCustomers as jest.Mock;
 
@@ -755,4 +767,373 @@ it('trims leading/trailing whitespace from name and city on submit', async () =>
   expect(createSpy).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'Ramesh Kumar', city: 'Mumbai' }),
   );
+});
+
+describe('edit mode (customerId param — SPEC-edit-customer)', () => {
+  /** A pinned customer with every field populated — the richest seed. */
+  const EDIT_DETAIL: CustomerDetail = {
+    id: 'cust-77',
+    name: 'Priya Sharma',
+    countryCode: '+91',
+    phoneNumber: '9876543210',
+    address: '12 MG Road',
+    city: 'Bengaluru',
+    formattedAddress: '12 MG Road, Bengaluru, Karnataka 560001, India',
+    pincode: '560001',
+    latitude: 12.9716,
+    longitude: 77.5946,
+    placeId: 'place-9',
+    addressDetails: 'Flat 302, Tower B',
+    createdVia: 'manual',
+    createdAt: '2026-06-21T00:00:00Z',
+    tenantId: 't-1',
+    jobHistory: { data: [], nextCursor: null, hasMore: false },
+  };
+
+  const NO_LOCATION_DETAIL: CustomerDetail = {
+    ...EDIT_DETAIL,
+    address: null,
+    city: null,
+    formattedAddress: null,
+    pincode: null,
+    latitude: null,
+    longitude: null,
+    placeId: null,
+    addressDetails: null,
+  };
+
+  function editSubmitButton(root: ReactTestRenderer.ReactTestInstance) {
+    const button = root
+      .findAllByType(Button)
+      .find(b => b.props.children === 'Save changes');
+    if (!button) throw new Error('Save-changes button not found');
+    return button;
+  }
+
+  function editSubmit(root: ReactTestRenderer.ReactTestInstance) {
+    act(() => {
+      void editSubmitButton(root).props.onPress?.();
+    });
+  }
+
+  async function renderEditScreen(
+    detail: CustomerDetail = EDIT_DETAIL,
+    extraParams: Record<string, unknown> = {},
+  ) {
+    getByIdSpy.mockResolvedValueOnce(detail);
+    const rendered = renderScreen('Customers', {
+      customerId: 'cust-77',
+      ...extraParams,
+    });
+    // Flush the load-and-seed promise.
+    await act(async () => {});
+    return rendered;
+  }
+
+  function textChildren(root: ReactTestRenderer.ReactTestInstance): unknown[] {
+    return root.findAllByType(Text).map(t => t.props.children);
+  }
+
+  it('load-and-seeds from getById — copy switches, read-only phone, CAP-2 helper', async () => {
+    const { root, navigation } = await renderEditScreen();
+
+    expect(getByIdSpy).toHaveBeenCalledWith('cust-77');
+    expect(inputByPlaceholder(root, 'e.g. Ramesh Kumar').props.value).toBe(
+      'Priya Sharma',
+    );
+    // The stored merged line round-trips into Street (un-merging is lossy).
+    expect(inputByPlaceholder(root, 'e.g. Opposite Metro Station').props.value).toBe(
+      '12 MG Road',
+    );
+    expect(inputByPlaceholder(root, 'Mumbai').props.value).toBe('Bengaluru');
+    expect(inputByPlaceholder(root, 'e.g. Flat 402, Sunshine Towers').props.value).toBe(
+      'Flat 302, Tower B',
+    );
+    expect(textChildren(root)).toContain('Edit customer');
+    expect(editSubmitButton(root)).toBeDefined();
+
+    const phone = inputByPlaceholder(root, '98765 43210');
+    expect(phone.props.editable).toBe(false);
+    // `disabled` is consumed by the Input wrapper (greyed styling), not
+    // forwarded to the raw TextInput — assert it there.
+    const phoneField = root
+      .findAllByType(Input)
+      .find(i => i.props.label === 'Phone number');
+    expect(phoneField?.props.disabled).toBe(true);
+    expect(textChildren(root)).toContain("Phone numbers can't be changed");
+
+    // No pick landed — the screen must not have cleared params.
+    expect(navigation.setParams).not.toHaveBeenCalled();
+  });
+
+  it('a removed/cross-tenant customer (404) shows the dedicated notice, not a form', async () => {
+    getByIdSpy.mockRejectedValueOnce({ status: 404 });
+    const { root } = renderScreen('Customers', { customerId: 'cust-77' });
+    await act(async () => {});
+
+    expect(textChildren(root)).toContain(
+      'This customer is no longer available. It may have been removed.',
+    );
+    expect(root.findAllByType(TextInput)).toHaveLength(0);
+  });
+
+  it('a non-404 load failure keeps the form with the go-back-and-retry banner', async () => {
+    getByIdSpy.mockRejectedValueOnce({ status: 500 });
+    const { root } = renderScreen('Customers', { customerId: 'cust-77' });
+    await act(async () => {});
+
+    expect(textChildren(root)).toContain(
+      'Could not load this customer. Go back and try again.',
+    );
+    // The form is there but unseeded — Save stays disabled (nothing to diff).
+    expect(editSubmitButton(root).props.disabled).toBe(true);
+  });
+
+  it('an untouched seeded form saves as a no-op — no request, plain back', async () => {
+    const { root, navigation } = await renderEditScreen();
+
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(navigation.goBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('a name change PATCHes exactly the diff and never rides the create path', async () => {
+    const { root, navigation } = await renderEditScreen();
+    typeName(root, 'Priya Sharma-Fernandes');
+
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    expect(updateSpy).toHaveBeenCalledWith('cust-77', { name: 'Priya Sharma-Fernandes' });
+    expect(createSpy).not.toHaveBeenCalled();
+    // Edit skips upsertCustomer: the PATCH response carries no jobCount/
+    // lastJobDate, and upserting would zero the row's stats in the list.
+    expect(upsertCustomerMock).not.toHaveBeenCalled();
+    expect(loadCustomersMock).toHaveBeenCalledWith({ force: true });
+    expect(navigation.goBack).toHaveBeenCalledTimes(1);
+    expect(navigation.popTo).not.toHaveBeenCalled();
+  });
+
+  it('a customer that vanished mid-edit shows the 404 copy and stays for retry/back', async () => {
+    const { root, navigation } = await renderEditScreen();
+    updateSpy.mockRejectedValueOnce({ status: 404 });
+    typeName(root, 'Renamed');
+
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    expect(textChildren(root)).toContain(
+      'This customer is no longer available. It may have been removed.',
+    );
+    expect(navigation.goBack).not.toHaveBeenCalled();
+  });
+
+  it('a re-pin replaces the location block as a unit and never touches the Flat field', async () => {
+    const { root, renderer } = await renderEditScreen();
+
+    repick(renderer, 'Customers', {
+      customerId: 'cust-77',
+      pickedAddress: PINNED_NO_ADDRESS_PICK,
+    });
+    // handlePick clears the read-once param (on the CURRENT navigation —
+    // repick re-renders with the shared noop mock).
+    expect(noopNavigation.setParams).toHaveBeenCalledWith({
+      pickedAddress: undefined,
+    });
+
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    expect(updateSpy).toHaveBeenCalledWith('cust-77', {
+      formattedAddress: null,
+      pincode: null,
+      latitude: 18.559,
+      longitude: 73.7868,
+      placeId: null,
+    });
+  });
+
+  it('a manual-entry pick over a pinned customer nulls all five block keys', async () => {
+    const { root, renderer } = await renderEditScreen();
+
+    repick(renderer, 'Customers', {
+      customerId: 'cust-77',
+      pickedAddress: MANUAL_PICK,
+    });
+
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    // The pick's city lands in the City field (same convention as add) —
+    // the diff honestly carries it alongside the five nulled block keys.
+    expect(updateSpy).toHaveBeenCalledWith('cust-77', {
+      city: 'Mumbai',
+      formattedAddress: null,
+      pincode: null,
+      latitude: null,
+      longitude: null,
+      placeId: null,
+    });
+  });
+
+  it('emptying the Flat field is the explicit CAP-5 clear', async () => {
+    const { root } = await renderEditScreen();
+    act(() => {
+      inputByPlaceholder(root, 'e.g. Flat 402, Sunshine Towers').props.onChangeText('');
+    });
+
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    expect(updateSpy).toHaveBeenCalledWith('cust-77', { addressDetails: null });
+  });
+
+  it('a customer with no saved location can still save an unrelated edit (no location demand)', async () => {
+    const { root } = await renderEditScreen(NO_LOCATION_DETAIL);
+
+    // The create flow's Required* location gate does not dead-end edits of a
+    // customer that legitimately has no location on file.
+    expect(editSubmitButton(root).props.disabled).toBe(false);
+
+    typeName(root, 'Renamed No-Loc');
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    expect(updateSpy).toHaveBeenCalledWith('cust-77', { name: 'Renamed No-Loc' });
+  });
+
+  it('the picker opens centred on the current snapshot (CAP-2)', async () => {
+    const { root, navigation } = await renderEditScreen();
+
+    act(() => {
+      locationBoxTrigger(root)?.props.onPress();
+    });
+
+    expect(navigation.navigate).toHaveBeenCalledWith('MapPinPicker', {
+      mode: 'customer',
+      initialLatitude: 12.9716,
+      initialLongitude: 77.5946,
+    });
+  });
+
+  it('a legacy short phone never dead-ends Save — the immutable field is not re-validated in edit', async () => {
+    const { root } = await renderEditScreen({
+      ...EDIT_DETAIL,
+      phoneNumber: '12345',
+    });
+
+    // Save is enabled on the seeded form itself: the phone is server truth.
+    expect(editSubmitButton(root).props.disabled).toBe(false);
+
+    typeName(root, 'Short Phone');
+    await act(async () => {
+      editSubmit(root);
+    });
+    expect(updateSpy).toHaveBeenCalledWith('cust-77', { name: 'Short Phone' });
+  });
+
+  it('a 403 on seed load lands on the same not-found notice as a 404', async () => {
+    getByIdSpy.mockRejectedValueOnce({ status: 403 });
+    const { root } = renderScreen('Customers', { customerId: 'cust-77' });
+    await act(async () => {});
+
+    expect(textChildren(root)).toContain(
+      'This customer is no longer available. It may have been removed.',
+    );
+    expect(root.findAllByType(TextInput)).toHaveLength(0);
+  });
+
+  it('shows the spinner while the seed is in flight, before any view settles', () => {
+    getByIdSpy.mockReturnValueOnce(new Promise(() => {}));
+    const { root } = renderScreen('Customers', { customerId: 'cust-77' });
+
+    // Unsettled load: the spinner view replaces the form entirely.
+    expect(root.findAllByType(ActivityIndicator).length).toBeGreaterThan(0);
+    expect(root.findAllByType(TextInput)).toHaveLength(0);
+  });
+
+  describe('edit error copy (updateErrorMessage)', () => {
+    async function saveFailingWith(err: Record<string, unknown>) {
+      const { root, navigation } = await renderEditScreen();
+      updateSpy.mockRejectedValueOnce(err);
+      typeName(root, 'Renamed');
+      await act(async () => {
+        editSubmit(root);
+      });
+      return { root, navigation };
+    }
+
+    it('403 — owner-only copy', async () => {
+      const { root, navigation } = await saveFailingWith({ status: 403 });
+      expect(textChildren(root)).toContain(
+        'Only the business owner can edit customers.',
+      );
+      expect(navigation.goBack).not.toHaveBeenCalled();
+    });
+
+    it('422 — check-the-fields copy', async () => {
+      const { root } = await saveFailingWith({
+        status: 422,
+        code: 'VALIDATION_ERROR',
+      });
+      expect(textChildren(root)).toContain(
+        'Check the fields — one of the values looks invalid.',
+      );
+    });
+
+    it('400 — company-setup copy', async () => {
+      const { root } = await saveFailingWith({ status: 400 });
+      expect(textChildren(root)).toContain(
+        'Finish setting up your company before editing customers.',
+      );
+    });
+
+    it('an unmapped error falls through to the server message', async () => {
+      const { root } = await saveFailingWith({
+        status: 500,
+        message: 'Something odd happened',
+      });
+      expect(textChildren(root)).toContain('Something odd happened');
+    });
+  });
+
+  describe('discard guard in edit mode', () => {
+    const removeEvent = () => ({
+      data: { action: { type: 'GO_BACK' } },
+      preventDefault: jest.fn(),
+    });
+
+    it('an untouched seeded form leaves without the dialog', async () => {
+      const { root, navigation } = await renderEditScreen();
+      const event = removeEvent();
+      fireBeforeRemove(navigation, event);
+
+      expect(event.preventDefault).not.toHaveBeenCalled();
+      expect(visibleDialog(root)).toBeUndefined();
+    });
+
+    it('a changed form asks first, with the edit-flavoured copy', async () => {
+      const { root, navigation } = await renderEditScreen();
+      typeName(root, 'Renamed');
+      const event = removeEvent();
+      fireBeforeRemove(navigation, event);
+
+      expect(event.preventDefault).toHaveBeenCalled();
+      const dialog = visibleDialog(root);
+      expect(dialog).toBeDefined();
+      expect(dialog?.props.message).toBe("Your changes haven't been saved yet.");
+      expect(navigation.dispatch).not.toHaveBeenCalled();
+    });
+  });
 });
