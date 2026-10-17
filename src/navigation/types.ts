@@ -136,9 +136,9 @@ export type RootStackParamList = {
   /** Owner-only customer profile + job history — opened with the customer's uuid. */
   CustomerDetail: { customerId: string };
   /**
-   * Full-page "Add customer" form, pushed from either `CustomersScreen` or
-   * `NewJobScreen`. `returnRouteName` decides post-save behavior — see
-   * `AddCustomerScreen`'s file doc. `pickedAddress` is set by
+   * Full-page add/edit customer form — one route for both, the
+   * `OfficeFormScreen` precedent. `returnRouteName` decides post-save
+   * behavior — see `AddCustomerScreen`'s file doc. `pickedAddress` is set by
    * `MapPinPicker` (mode `customer`) via navigate-back-with-params (the
    * SelectSkills pattern) — a located pick or a manual entry; read once on
    * arrival and cleared so a stale pick can't re-fire. Every field is
@@ -149,6 +149,14 @@ export type RootStackParamList = {
   AddCustomer: {
     returnRouteName?: AddCustomerReturnRouteName;
     pickedAddress?: PickedAddress;
+    /**
+     * Present = edit mode: the screen load-and-seeds via `getById` and
+     * PATCHes the diff instead of POSTing. Only ever set by the
+     * CustomerDetail entry — the NewJob merge-returns never carry it (edit
+     * is not part of the job-creation flow), which is why it stays optional
+     * like every param on this route.
+     */
+    customerId?: string;
   } | undefined;
   /**
    * Owner's attendance offices (Story 15-4, FR-5) — opened from the More

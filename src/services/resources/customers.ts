@@ -3,10 +3,10 @@
  * ────────────────────────────────
  * Customers for the signed-in owner's tenant.
  *
- * `GET /customers/:id` exists now, but the collection still has no
- * update/delete contract, so this stays a plain function object on the shared
- * `apiClient` (same shape as `authApi`) rather than an `ApiService<T>`.
- * Promote it to `ApiService` once those endpoints exist.
+ * `GET /customers/:id` and `PATCH /customers/:id` exist now, but the
+ * collection still has no delete contract, so this stays a plain function
+ * object on the shared `apiClient` (same shape as `authApi`) rather than an
+ * `ApiService<T>`. Promote it to `ApiService` once delete exists.
  *
  * Owner-only: a technician JWT gets 403. Rejects with `ApiError` on failure.
  */
@@ -61,6 +61,50 @@ export type CreatedCustomer = Omit<ApiCustomer, 'jobCount' | 'lastJobDate'>;
  */
 async function create(input: CreateCustomerRequest): Promise<CreatedCustomer> {
   const res = await apiClient.post<CreatedCustomer>('/customers', input);
+  return res.data;
+}
+
+/**
+ * Body of `PATCH /customers/:id` (SPEC-edit-customer). Only the mutable
+ * fields exist — `countryCode`/`phoneNumber` are structurally absent, so no
+ * caller can put the immutable phone in an update payload (the BE would
+ * strip them silently anyway; here they can't even be typed).
+ *
+ * Every key is optional and diff-gated by `buildCustomerUpdatePatch`
+ * (`requestMapping.ts`): an absent key leaves the column untouched, a key
+ * present with `null` clears it (a manual-entry pick over a pinned customer,
+ * or the CAP-5 explicit-null clear of `addressDetails`). An empty patch is
+ * never sent — the caller skips the request entirely (a bare body is a 400
+ * "Nothing to update" server-side).
+ */
+export interface UpdateCustomerRequest {
+  name?: string;
+  address?: string | null;
+  city?: string | null;
+  formattedAddress?: string | null;
+  /** 6-digit Indian PIN code. */
+  pincode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Places provider place id. */
+  placeId?: string | null;
+  /** User-entered extra location detail (CAP-5). */
+  addressDetails?: string | null;
+}
+
+/**
+ * `PATCH /customers/:id` — updates exactly the keys the patch carries, and
+ * responds with the full updated customer in the same shape as create.
+ *
+ * Documented failures, all surfaced as `ApiError`:
+ *   400 company not set up / nothing to update · 403 technician JWT ·
+ *   404 missing/cross-tenant customer · 422 validation error
+ */
+async function update(
+  id: string,
+  patch: UpdateCustomerRequest,
+): Promise<CreatedCustomer> {
+  const res = await apiClient.patch<CreatedCustomer>(`/customers/${id}`, patch);
   return res.data;
 }
 
@@ -146,6 +190,16 @@ export interface CustomerDetail {
    */
   formattedAddress?: string | null;
   /**
+   * The rest of the picked-location block — edit mode reconstructs the pin
+   * from these (CAP-2 prefill; the coordinates are the block's gate).
+   * Optional on the type: older cached profiles may predate the fields.
+   */
+  pincode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  /** Places provider place id. */
+  placeId?: string | null;
+  /**
    * User-entered extra location detail (CAP-5), null when they have none.
    * Optional on the type: older cached profiles may predate the field.
    */
@@ -214,6 +268,7 @@ async function listAll(): Promise<ApiCustomer[]> {
 
 export const customerService = {
   create,
+  update,
   list,
   listAll,
   getById,

@@ -106,6 +106,7 @@ export type {
   CreatedCustomer,
   CustomerDetail,
   JobHistoryItem,
+  UpdateCustomerRequest,
 } from './customers';
 export { jobService } from './jobs';
 export type {

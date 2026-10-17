@@ -29,6 +29,7 @@ import {
   ChevronLeft,
   FileQuestion,
   MapPin,
+  Pencil,
   Phone,
 } from 'lucide-react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -289,6 +290,19 @@ export default function CustomerDetailScreen() {
           {/* Placeholder while loading / on an error view (deep-link safe). */}
           {detail?.name ?? 'Customer'}
         </Text>
+        {/* Header-right Edit entry (SPEC-edit-customer): the edit form
+            load-and-seeds by id itself, so it is safe to offer before the
+            detail has loaded — but not on the not-found view, where a tap
+            is a guaranteed second 404. */}
+        {!notFound ? (
+          <IconButton
+            variant="ghost"
+            size="md"
+            label="Edit customer"
+            onPress={() => navigation.navigate('AddCustomer', { customerId })}>
+            <Pencil size={18} color={colors.primary} strokeWidth={2} />
+          </IconButton>
+        ) : null}
       </View>
 
       {notFound ? (

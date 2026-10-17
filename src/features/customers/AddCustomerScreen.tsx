@@ -1,9 +1,8 @@
 /**
- * AddCustomerScreen — full-page route for adding a customer. Design v2 as
- * tuned by hand: the contact fields (name + phone) sit bare at the top of
- * the form, and the "Customer address" section keeps its
- * FormSectionCard (icon chip + Required* badge) over a single "Save
- * customer" action.
+ * AddCustomerScreen — full-page route for adding and editing a customer.
+ * Design v2 as tuned by hand: the contact fields (name + phone) sit bare at
+ * the top of the form, and the "Customer address" section keeps its
+ * FormSectionCard (icon chip + Required* badge) over a single Save action.
  *
  * The service-location card is the CAP-5 surface: the resolved address lives
  * in a read-only preview box (with a Change button that opens the shared
@@ -25,11 +24,20 @@
  * signal (a picked location, or any of street/city/area filled) on top of
  * name + phone.
  *
- * The POST submit chain lives in `useCreateCustomer`; `returnRouteName`
- * decides post-save navigation — see the contract in `useCreateCustomer.ts`.
+ * Edit mode (SPEC-edit-customer) is the same route with a `customerId`
+ * param — the OfficeFormScreen single-route precedent: load-and-seed via
+ * `getById` (list rows lack the coordinates), the phone renders read-only
+ * (immutable in v1), and Save PATCHes only what changed against the seeded
+ * baseline (`buildCustomerUpdatePatch`) — an untouched form pops without a
+ * request. The picker opens centred on the current snapshot (CAP-2), and a
+ * new pick replaces the location block as a unit.
+ *
+ * The submit chain lives in `useCreateCustomer`; `returnRouteName` decides
+ * post-save navigation — see the contract in `useCreateCustomer.ts`.
  */
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
@@ -52,9 +60,16 @@ import {
   User,
 } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button, ConfirmDialog, Input } from '../../components/ui';
+import { Button, ConfirmDialog, InlineError, Input } from '../../components/ui';
 import { colors, spacing, touch, typography } from '../../theme';
-import { toCreateCustomerRequest } from './requestMapping';
+import { customerService } from '../../services';
+import type { ApiError } from '../../services';
+import {
+  buildCustomerUpdatePatch,
+  toCreateCustomerRequest,
+  toCustomerFormSeed,
+  type CustomerUpdateBaseline,
+} from './requestMapping';
 import type {
   NewCustomerInput,
   PickedAddress,
@@ -71,8 +86,13 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   // `returnRouteName` is always supplied by real callers; the default only
   // type-placates the MapPinPicker merge-return, which carries just
   // `pickedAddress` (the NewJob convention of all-optional merge params).
-  const { returnRouteName = 'Customers', pickedAddress: pickedAddressParam } =
-    route.params ?? {};
+  const {
+    returnRouteName = 'Customers',
+    pickedAddress: pickedAddressParam,
+    customerId,
+  } = route.params ?? {};
+  // Presence of `customerId` = edit mode (see navigation/types.ts).
+  const isEdit = Boolean(customerId);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -91,6 +111,15 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   const [previewLine, setPreviewLine] = useState('');
   // Discard guard (CAP-6): leaving with unsaved input asks first.
   const [discardVisible, setDiscardVisible] = useState(false);
+  // Edit mode only (OfficeFormScreen precedent): load-and-seed from the
+  // detail endpoint, with the same three load states — spinner, 404 notice,
+  // inline load error over the (unseeded, unsavable) form.
+  const [isLoading, setIsLoading] = useState(isEdit);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // The seeded baseline — the diff anchor for both Save and the discard
+  // guard. Null until the seed lands (and always in add mode).
+  const [baseline, setBaseline] = useState<CustomerUpdateBaseline | null>(null);
   const removeActionRef = useRef<{ data: { action: { type: string } } } | null>(
     null,
   );
@@ -99,6 +128,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     useCreateCustomer({
     navigation,
     returnRouteName,
+    customerId,
   });
 
   /**
@@ -127,6 +157,46 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
       setStreet(prev => (prev ? prev : picked.addressLine));
     }
   };
+
+  // Edit mode: load-and-seed from `getById` — a list row lacks the
+  // coordinates the map prefill needs. A 404 (removed / cross-tenant) or a
+  // 403 shows the dedicated notice instead of a broken form.
+  useEffect(() => {
+    if (!customerId) return;
+    let active = true;
+    customerService
+      .getById(customerId)
+      .then(detail => {
+        if (!active) return;
+        const seed = toCustomerFormSeed(detail);
+        setName(seed.name);
+        setPhone(seed.phone);
+        setCity(seed.city);
+        setArea(seed.area);
+        setStreet(seed.street);
+        setAddressDetails(seed.addressDetails);
+        setSnapshot(seed.snapshot);
+        setPreviewLine(seed.previewLine);
+        setBaseline(seed.baseline);
+        setIsLoading(false);
+      })
+      .catch((err: ApiError) => {
+        if (!active) return;
+        // 403 groups with 404 (technician JWT / cross-tenant) — the same
+        // notFound grouping CustomerDetailScreen renders for this endpoint.
+        if (err.status === 404 || err.status === 403) {
+          setNotFound(true);
+        } else {
+          setLoadError(
+            'Could not load this customer. Go back and try again.',
+          );
+        }
+        setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [customerId]);
 
   // MapPinPicker's return channel (navigate-back-with-params, read once on
   // arrival then cleared — a stale pick must not re-fire on re-focus).
@@ -166,30 +236,58 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   };
 
   // "Required *" on the location card: a location signal is any of a picked
-  // location, Street, City or Area.
+  // location, Street, City or Area. Edit keeps the same rule over the same
+  // fields — the seed lives in them, so a customer with any saved location
+  // passes without extra state.
   const hasLocation =
     snapshot !== null ||
     street.trim().length > 0 ||
     city.trim().length > 0 ||
     area.trim().length > 0;
 
-  // "The user has filled something": any entered field or a picked
-  // location. Read through refs by the beforeRemove listener so the
-  // listener never needs to re-arm (event-time truthiness is what matters).
-  const isDirty =
-    name.trim().length > 0 ||
-    phone.length > 0 ||
-    addressDetails.trim().length > 0 ||
-    hasLocation;
+  // Whether the SEEDED customer had a location at all — its snapshot or any
+  // saved line/city text (the merged line lives in the baseline's
+  // `address`; there is no separate area). Edit drops the Required* term
+  // for a customer with none (a job-created name+phone row): an unrelated
+  // fix can't be dead-ended by a rule about a field the customer never had.
+  const baselineHadLocation =
+    baseline !== null &&
+    (baseline.snapshot !== null ||
+      (baseline.address ?? '').length > 0 ||
+      baseline.city.length > 0);
+
+  // The live form values in the patch builder's shape — the dirty check and
+  // the Save patch must read the exact same snapshot of the state.
+  const formValues = () => ({ name, street, city, area, addressDetails, snapshot });
+
+  // "The user has filled something" (add) / "changed something" (edit):
+  // add reads entered fields or a picked location; edit diffs against the
+  // seeded baseline through the SAME builder Save uses, so the discard
+  // guard and the PATCH can never disagree (an untouched seeded form is
+  // leaveable without the dialog and saves as a no-op). Read through refs
+  // by the beforeRemove listener so the listener never needs to re-arm
+  // (event-time truthiness is what matters).
+  const isDirty = isEdit
+    ? baseline !== null &&
+      Object.keys(buildCustomerUpdatePatch(formValues(), baseline)).length > 0
+    : name.trim().length > 0 ||
+      phone.length > 0 ||
+      addressDetails.trim().length > 0 ||
+      hasLocation;
   const isDirtyRef = useRef(isDirty);
   isDirtyRef.current = isDirty;
   const submittingRef = useRef(submitting);
   submittingRef.current = submitting;
 
+  // The phone gate is add-only: edit seeds the server's digits into a
+  // read-only field, so a legacy short row must not dead-end Save with no
+  // hint.
+  const phoneOk = isEdit || phone.length === PHONE_LENGTH;
+
   const canSubmit =
     name.trim().length > 0 &&
-    phone.length === PHONE_LENGTH &&
-    hasLocation &&
+    phoneOk &&
+    (isEdit ? !baselineHadLocation || hasLocation : hasLocation) &&
     !submitting;
 
   const buildRequest = (): NewCustomerInput => ({
@@ -220,8 +318,64 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
 
   const onSubmit = () => {
     if (!canSubmit) return;
+    // The baseline can't be null on a save press (the form only renders
+    // after the seed, and the load-error form has nothing seeded to save) —
+    // the guard is a belt for a state the form can't reach, not a
+    // user-facing failure path.
+    if (isEdit) {
+      if (!baseline || !customerId) return;
+      const patch = buildCustomerUpdatePatch(formValues(), baseline);
+      // Empty diff → no request at all (a bare body is a 400 "Nothing to
+      // update" server-side): an untouched save just pops back, exactly
+      // like the office form's.
+      if (Object.keys(patch).length === 0) {
+        navigation.goBack();
+        return;
+      }
+      void handleSubmit(patch);
+      return;
+    }
     void handleSubmit(toCreateCustomerRequest(buildRequest()));
   };
+
+  // Edit-mode load states (OfficeFormScreen precedent): a spinner while the
+  // seed is in flight, a dedicated notice for a removed/cross-tenant
+  // customer. Add mode never enters either (isLoading starts false).
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.header}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.textStrong} strokeWidth={2} />
+          </Pressable>
+          <Text style={styles.title}>Edit customer</Text>
+        </View>
+        <View style={styles.center}>
+          <InlineError message="This customer is no longer available. It may have been removed." />
+          <Button variant="secondary" size="md" onPress={() => navigation.goBack()}>
+            Go back
+          </Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -237,7 +391,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           style={styles.backButton}>
           <ArrowLeft size={24} color={colors.textStrong} strokeWidth={2} />
         </Pressable>
-        <Text style={styles.title}>Add customer</Text>
+        <Text style={styles.title}>{isEdit ? 'Edit customer' : 'Add customer'}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -251,6 +405,10 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
 
+          {/* A non-404 load failure leaves the form unseeded — say so instead
+              of a silent blank edit form (the office-form placement). */}
+          {loadError ? <InlineError message={loadError} /> : null}
+
           <Input
             label="Customer name"
             required
@@ -261,6 +419,10 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
           />
 
+          {/* The phone is the identity key — immutable in v1
+              (SPEC-edit-customer), so edit mode renders it read-only:
+              `editable={false}` blocks the keyboard, `disabled` carries the
+              grayed "not yours to change" styling. */}
           <Input
             label="Phone number"
             required
@@ -269,6 +431,9 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             placeholder="98765 43210"
             keyboardType="phone-pad"
             maxLength={PHONE_LENGTH}
+            editable={!isEdit}
+            disabled={isEdit}
+            helper={isEdit ? "Phone numbers can't be changed" : undefined}
             leadingIcon={
               <View style={styles.dialRow}>
                 <Phone size={18} color={colors.textMuted} strokeWidth={2} />
@@ -286,7 +451,18 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
                 box opens the map picker. Empty until a pick lands. */}
             <Pressable
               onPress={() =>
-                navigation.navigate('MapPinPicker', { mode: 'customer' })
+                navigation.navigate('MapPinPicker', {
+                  mode: 'customer',
+                  // CAP-2 prefill: the CURRENT snapshot (seeded or freshly
+                  // picked) centres the picker; a manual-entry customer
+                  // opens cold, exactly as add mode always has.
+                  ...(snapshot
+                    ? {
+                        initialLatitude: snapshot.latitude,
+                        initialLongitude: snapshot.longitude,
+                      }
+                    : {}),
+                })
               }
               disabled={submitting}
               accessibilityRole="button"
@@ -375,7 +551,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
                 <CheckCircle2 size={20} color={colors.onPrimary} strokeWidth={2.5} />
               )
             }>
-            {submitting ? 'Saving…' : 'Save customer'}
+            {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Save customer'}
           </Button>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -383,7 +559,11 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
       <ConfirmDialog
         visible={discardVisible}
         title="Leave without saving?"
-        message="The details you entered haven't been saved yet."
+        message={
+          isEdit
+            ? "Your changes haven't been saved yet."
+            : "The details you entered haven't been saved yet."
+        }
         confirmLabel="Don't save"
         confirmVariant="danger"
         cancelLabel="Keep editing"
@@ -402,6 +582,15 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  // Edit-mode load views (spinner / 404 notice) — same centered treatment
+  // as CustomerDetailScreen's, with the error views' breathing room.
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.s4,
+    gap: spacing.s2,
   },
   header: {
     flexDirection: 'row',
