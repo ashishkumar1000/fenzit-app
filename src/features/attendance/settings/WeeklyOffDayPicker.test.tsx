@@ -77,12 +77,14 @@ describe('WeeklyOffDayPicker', () => {
   it('renders 7 pills in Mon..Sun order with the documented glyph map', () => {
     const root = renderPicker({ value: [], onChange: jest.fn() }).root;
     const found = findPills(root).map((pill) => {
-      const glyph = pill.findAll(
-        (n) => n.type === Text && typeof n.props.children === 'string',
-      );
-      // The pill renders exactly one Text node — its letter.
-      expect(glyph).toHaveLength(1);
-      return glyph[0].props.children as string;
+      const texts = pill
+        .findAll((n) => n.type === Text && typeof n.props.children === 'string')
+        .map((n) => n.props.children as string);
+      // Two lines per pill: the day letter, then "Work" or "Off" (the
+      // redesign's plain-words state; an empty value means every day works).
+      expect(texts).toHaveLength(2);
+      expect(texts[1]).toBe('Work');
+      return texts[0];
     });
     const letters = WEEKLY_OFF_DAY_ORDER.map((d) => WEEKLY_OFF_DAY_LETTERS[d]);
     expect(found).toEqual(letters);
@@ -251,5 +253,18 @@ describe('WeeklyOffDayPicker', () => {
         expected[i],
       );
     });
+  });
+
+  it('selected days read "Off", the rest "Work" (mixed selection)', () => {
+    const root = renderPicker({ value: [6, 7], onChange: jest.fn() }).root;
+    const subLabels = findPills(root).map(
+      (pill) =>
+        pill
+          .findAll((n) => n.type === Text && typeof n.props.children === 'string')
+          .map((n) => n.props.children as string)[1],
+    );
+    expect(subLabels).toEqual([
+      'Work', 'Work', 'Work', 'Work', 'Work', 'Off', 'Off',
+    ]);
   });
 });

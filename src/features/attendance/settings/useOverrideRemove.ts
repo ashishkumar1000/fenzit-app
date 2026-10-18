@@ -43,8 +43,8 @@ export function useOverrideRemove({
   const effective = effectiveFrom || undefined;
   const removeMessage = override
     ? effective
-      ? `${override.employeeName} will follow the default weekly off from ${formatLongDate(effective)}.`
-      : `${override.employeeName} will follow the default weekly off from today.`
+      ? `${override.employeeName} will follow the "For everyone" weekly off from ${formatLongDate(effective)}.`
+      : `${override.employeeName} will follow the "For everyone" weekly off from today.`
     : '';
 
   const onRemove = useCallback(() => {

@@ -50,7 +50,7 @@ export function isValidIsoDate(yyyyMmDd: string): boolean {
  * and in range.
  */
 export function describeDays(days: IsoWeekday[]): string {
-  const sorted = [...new Set(days)]
+  const sorted = [...new Set(days ?? [])]
     .filter((d) => d >= 1 && d <= 7)
     .sort((a, b) => a - b);
   if (sorted.length === 0) return 'All days working';
@@ -62,6 +62,22 @@ export function describeDays(days: IsoWeekday[]): string {
     .map((d) => DAY_LABELS[d - 1])
     .join(', ')
     .replace(/, ([^,]*)$/, ' + $1');
+}
+
+/**
+ * Plain-words version of a day set, for owners who are not technical —
+ * "Sat off", "Sat & Sun off", "Mon, Tue & Wed off", "No day off".
+ * `describeDays` ("Sat only") stays for the setup wizard; on this screen
+ * "Sat only" could be misread as "works only on Saturday".
+ */
+export function describeDaysOff(days: IsoWeekday[]): string {
+  const sorted = [...new Set(days)]
+    .filter((d) => d >= 1 && d <= 7)
+    .sort((a, b) => a - b);
+  if (sorted.length === 0) return 'No day off';
+  const names = sorted.map((d) => DAY_LABELS[d - 1]);
+  const last = names.pop() as string;
+  return `${names.length > 0 ? `${names.join(', ')} & ` : ''}${last} off`;
 }
 
 /**
@@ -139,8 +155,8 @@ export function weeklyOffSaveHint({
   if (workingDays.length === 7) return null;
   if (!dateValid) return 'Pick a valid start date to save.';
   return isAdd
-    ? 'Change the days off to enable Save.'
-    : 'Change a day or the start date to enable Save.';
+    ? 'Change the days off to save.'
+    : 'Change a day or the date to save.';
 }
 
 /**

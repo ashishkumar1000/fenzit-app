@@ -1,7 +1,7 @@
 /**
  * WeeklyOffOverridesSection — the per-employee override list of
- * `WeeklyOffScreen` (Story 15-6, FR-19): header row with the "+ Add
- * override" CTA, plus the loading / error / empty / list states.
+ * `WeeklyOffScreen` (Story 15-6, FR-19): header row with the "+ Set Off"
+ * CTA, plus the loading / error / empty / list states.
  *
  * Owns its OWN fetch states (15-6 review P10): the default block's fetch is
  * independent, so a failed default first-load must not hide this section,
@@ -9,16 +9,15 @@
  * empty-state copy, which would claim "everyone follows the tenant default"
  * about data the screen never received.
  *
- * Each row surfaces the override's scheduled future edit (`next`) in the
- * same shape as the default block's Upcoming-changes panel (15-6 review
- * P12): "From {date}: {days}" — otherwise a rescheduled override is
- * invisible and looks like the row is lying about the employee's days.
+ * The whole section is ONE outer card; each person is a flat card inside
+ * it (see `WeeklyOffOverrideRow` — name, days off in plain words, working
+ * days, scheduled future edit, and an Edit button).
  *
  * Presentational only — the screen owns the hooks and the sheet wiring.
  * Split out to keep `WeeklyOffScreen.tsx` under the ~300-line file limit.
  */
-import { StyleSheet, Text, View } from 'react-native';
-import { UserPlus } from 'lucide-react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Plus } from 'lucide-react-native';
 import {
   Button,
   Card,
@@ -27,9 +26,12 @@ import {
   InlineNotice,
   Skeleton,
 } from '../../../components/ui';
-import { colors, radius, spacing, typography } from '../../../theme';
+import { colors, palette, radius, spacing, typography } from '../../../theme';
 import type { WeeklyOffOverrideResponse } from '../../../services';
-import { describeDays, formatLongDate, viewDays } from './weeklyOffModel';
+import WeeklyOffCardBackdrop, {
+  WEEKLY_OFF_BACKDROP_WIDTH,
+} from './WeeklyOffCardBackdrop';
+import { WeeklyOffOverrideRow } from './WeeklyOffOverrideRow';
 
 export type WeeklyOffOverridesSectionProps = {
   overrides: WeeklyOffOverrideResponse[];
@@ -62,19 +64,34 @@ export function WeeklyOffOverridesSection({
   onEdit,
 }: WeeklyOffOverridesSectionProps) {
   return (
-    <>
-      <View style={styles.header}>
-        <Eyebrow>Employee-wise weekly off</Eyebrow>
-        <Button
-          variant="ghost"
-          size="sm"
-          onPress={onAdd}
-          leadingIcon={
-            <UserPlus size={16} color={colors.primary} strokeWidth={2} />
-          }
-          disabled={addDisabled}>
-          Set weekly off
-        </Button>
+    // The whole section is ONE card, like "For everyone" above: a light-blue
+    // heading group first, then one flat card per person inside it. The space
+    // ABOVE the card tells the owner a new section has started.
+    <Card padding="md" style={styles.outer}>
+      {/* Faint corner drawing, first child so everything else paints over it. */}
+      <WeeklyOffCardBackdrop />
+      <View style={styles.sectionCard}>
+        <View style={styles.header}>
+          <Eyebrow>Employee-wise weekly off</Eyebrow>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set weekly off for an employee"
+            accessibilityState={{ disabled: addDisabled }}
+            disabled={addDisabled}
+            onPress={onAdd}
+            hitSlop={4}
+            style={({ pressed }) => [
+              styles.addPill,
+              addDisabled && styles.addPillDisabled,
+              pressed && !addDisabled && styles.addPillPressed,
+            ]}>
+            <Plus size={16} color={colors.primary} strokeWidth={2.5} />
+            <Text style={styles.addPillText}>Set Off</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.sectionHelper}>
+          Give a different weekly off to one person.
+        </Text>
       </View>
 
       {/* The gate's reason as an amber notice (device-check 2026-09-27):
@@ -86,7 +103,7 @@ export function WeeklyOffOverridesSection({
 
       {error && hasLoaded ? (
         <View style={styles.staleError}>
-          <InlineError message="Couldn't refresh overrides. Showing the last loaded list." />
+          <InlineError message="Could not refresh. This is the list you saw last time." />
           {/* The rows on screen are stale — offer the re-fetch right here
               instead of forcing a leave-and-return to recover (the same
               affordance the holidays list carries; 15-6 review iteration 1). */}
@@ -115,60 +132,47 @@ export function WeeklyOffOverridesSection({
         null
       ) : overrides.length === 0 ? (
         <Text style={styles.emptyText}>
-          No employee-wise weekly offs yet. Everyone follows the default weekly off
-          above.
+          No employee-wise weekly offs yet. Everyone follows the "For everyone"
+          weekly off above.
         </Text>
       ) : (
-        overrides.map((o) => (
-          <OverrideRow key={o.employeeId} override={o} onPress={() => onEdit(o)} />
-        ))
-      )}
-    </>
-  );
-}
-
-/** One employee with an override — avatar initial, name, day subtitle, Edit. */
-function OverrideRow({
-  override,
-  onPress,
-}: {
-  override: WeeklyOffOverrideResponse;
-  onPress: () => void;
-}) {
-  const subtitle = describeDays(viewDays(override.current));
-  // The scheduled future edit, in the default block's Upcoming shape.
-  const next = override.next;
-  return (
-    <Card padding="none">
-      <View style={styles.rowPress}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarInitial}>
-            {(override.employeeName || '?').slice(0, 1).toUpperCase()}
+        <>
+          {overrides.map((o) => (
+            <WeeklyOffOverrideRow
+              key={o.employeeId}
+              override={o}
+              onPress={() => onEdit(o)}
+            />
+          ))}
+          <Text style={styles.footer}>
+            {overrides.length === 1
+              ? '1 employee has a different weekly off'
+              : `${overrides.length} employees have a different weekly off`}
           </Text>
-        </View>
-        <View style={styles.rowTexts}>
-          <Text style={styles.rowName}>{override.employeeName}</Text>
-          <Text style={styles.rowMeta}>{subtitle}</Text>
-          {next ? (
-            <Text style={styles.rowUpcoming}>
-              {`From ${formatLongDate(next.validFrom)}: ${describeDays(next.days)}`}
-            </Text>
-          ) : null}
-        </View>
-        <Button variant="secondary" size="sm" onPress={onPress}>
-          Edit
-        </Button>
-      </View>
+        </>
+      )}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
+  outer: {
+    marginTop: spacing.s4,
+    gap: spacing.s3,
+  },
+  // Light blue so the group reads as a heading, not as one more person card.
+  sectionCard: {
+    gap: spacing.s2,
+    padding: spacing.s4,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.blue200,
+    backgroundColor: colors.primarySoft,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.s4,
   },
   skeleton: {
     paddingVertical: spacing.s8,
@@ -185,39 +189,37 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.s4,
   },
-  rowPress: {
+  addPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.s3,
-    padding: spacing.s4,
+    gap: spacing.s2,
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s4,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.blue200,
+    // White, so it stands out on the light-blue group it sits in.
+    backgroundColor: colors.surfaceCard,
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+  addPillDisabled: {
+    opacity: 0.5,
   },
-  avatarInitial: {
-    ...typography.heading,
+  addPillPressed: {
+    opacity: 0.85,
+  },
+  addPillText: {
+    ...typography.labelStrong,
     color: colors.primary,
   },
-  rowTexts: {
-    flex: 1,
-    gap: 2,
-  },
-  rowName: {
-    ...typography.heading,
-    color: colors.textStrong,
-  },
-  rowMeta: {
+  sectionHelper: {
     ...typography.bodySm,
     color: colors.textMuted,
   },
-  rowUpcoming: {
+  footer: {
     ...typography.bodySm,
-    color: colors.textBody,
+    color: colors.textMuted,
+    // Keeps the line clear of the corner drawing (it wraps, never overlaps).
+    marginRight: WEEKLY_OFF_BACKDROP_WIDTH + spacing.s2,
+    minHeight: spacing.s6,
   },
 });

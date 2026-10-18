@@ -16,6 +16,7 @@
 import type { IsoWeekday } from '../../../services';
 import {
   describeDays,
+  describeDaysOff,
   isOverrideSaveDisabled,
   isValidIsoDate,
   isWeeklyOffDirty,
@@ -262,16 +263,40 @@ describe('weeklyOffSaveHint — why Save is greyed out (UX finding 18)', () => {
   });
 
   it('on Add, tells the owner to change the days', () => {
-    expect(weeklyOffSaveHint({ ...base, isAdd: true })).toBe('Change the days off to enable Save.');
+    expect(weeklyOffSaveHint({ ...base, isAdd: true })).toBe('Change the days off to save.');
   });
 
   it('on Edit, says a day or the date must change', () => {
-    expect(weeklyOffSaveHint({ ...base })).toBe('Change a day or the start date to enable Save.');
+    expect(weeklyOffSaveHint({ ...base })).toBe('Change a day or the date to save.');
   });
 
   it('never returns a hint for an enabled button, whatever the other inputs', () => {
     expect(
       weeklyOffSaveHint({ ...base, saveDisabled: false, needsEmployee: true, dateValid: false }),
     ).toBeNull();
+  });
+});
+
+describe('describeDaysOff — plain-words days off for the redesigned cards', () => {
+  it('empty set says nobody is off (never a blank string)', () => {
+    expect(describeDaysOff([])).toBe('No day off');
+  });
+
+  it('one, two and three-plus days read naturally', () => {
+    expect(describeDaysOff([6])).toBe('Sat off');
+    expect(describeDaysOff([6, 7])).toBe('Sat & Sun off');
+    expect(describeDaysOff([1, 2, 3])).toBe('Mon, Tue & Wed off');
+  });
+
+  it('cleans up unsorted, duplicate and out-of-range input', () => {
+    expect(describeDaysOff([7, 6, 6] as IsoWeekday[])).toBe('Sat & Sun off');
+    expect(describeDaysOff([0, 9, 3] as unknown as IsoWeekday[])).toBe('Wed off');
+    expect(describeDaysOff([0, 8] as unknown as IsoWeekday[])).toBe('No day off');
+  });
+
+  it('a full week lists all seven days (the FR-18 gate lives elsewhere)', () => {
+    expect(describeDaysOff([1, 2, 3, 4, 5, 6, 7])).toBe(
+      'Mon, Tue, Wed, Thu, Fri, Sat & Sun off',
+    );
   });
 });

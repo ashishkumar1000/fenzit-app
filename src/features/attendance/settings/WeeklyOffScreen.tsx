@@ -39,6 +39,7 @@ import ScreenHeader from '../offices/ScreenHeader';
 import { useWeeklyOffs } from './useWeeklyOffs';
 import { useWeeklyOffOverrides } from './useWeeklyOffOverrides';
 import { useWeeklyOffDefaultForm } from './useWeeklyOffDefaultForm';
+import { viewDays } from './weeklyOffModel';
 import { WeeklyOffDefaultSection } from './WeeklyOffDefaultSection';
 import { WeeklyOffOverridesSection } from './WeeklyOffOverridesSection';
 import WeeklyOffOverrideSheet from './WeeklyOffOverrideSheet';
@@ -154,7 +155,7 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
 
         {error && hasLoaded ? (
           <View style={styles.staleError}>
-            <InlineError message="Couldn't refresh weekly off. Showing the last loaded selection." />
+            <InlineError message="Could not refresh. This is what you saw last time." />
             {/* The shown selection is stale — offer the re-fetch right here
                 instead of forcing a leave-and-return to recover (the same
                 affordance the holidays list carries; 15-6 review
@@ -195,6 +196,7 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
             saveDisabled={defaultForm.saveDisabled}
             onSave={defaultForm.onSave}
             upcoming={defaultForm.upcoming}
+            currentDays={viewDays(defaultView)}
           />
         )}
 
@@ -246,6 +248,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.s4,
+    // Room under the last row so the footer line clears the gesture bar.
+    paddingBottom: spacing.s10,
     gap: spacing.s3,
   },
   contentInner: {

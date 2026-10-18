@@ -37,6 +37,9 @@ export type DatePickerFieldProps = {
   error?: string;
   /** Helper copy shown only when there's no error. */
   helper?: string;
+  /** Small muted line INSIDE the field, under the date (e.g. "Schedule
+   *  takes effect from 12:00 AM"). Keeps the field a single card. */
+  subtitle?: string;
   /** Optional floor / ceiling (YYYY-MM-DD). Past dates are allowed on the
    *  holiday form, so the call site controls this. */
   minDate?: string;
@@ -52,6 +55,7 @@ export function DatePickerField({
   placeholder,
   error,
   helper,
+  subtitle,
   minDate,
   maxDate,
   disabled = false,
@@ -82,6 +86,7 @@ export function DatePickerField({
         disabled={disabled}
         style={({ pressed }) => [
           styles.field,
+          subtitle ? styles.fieldWithSubtitle : null,
           {
             borderColor,
             backgroundColor: disabled
@@ -90,11 +95,18 @@ export function DatePickerField({
             opacity: pressed ? 0.85 : 1,
           },
         ]}>
-        <Text
-          style={[styles.value, !value ? styles.valuePlaceholder : null]}
-          numberOfLines={1}>
-          {displayValue}
-        </Text>
+        <View style={styles.valueBlock}>
+          <Text
+            style={[styles.value, !value ? styles.valuePlaceholder : null]}
+            numberOfLines={1}>
+            {displayValue}
+          </Text>
+          {subtitle ? (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
         <View style={styles.icon}>
           <CalendarDays
             size={20}
@@ -151,11 +163,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.md,
   },
+  fieldWithSubtitle: {
+    height: undefined,
+    minHeight: touch.comfort,
+    paddingVertical: spacing.s2,
+  },
+  valueBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  subtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
   value: {
     ...typography.body,
     color: colors.textStrong,
-    flex: 1,
-    minWidth: 0,
   },
   valuePlaceholder: {
     color: colors.textMuted,

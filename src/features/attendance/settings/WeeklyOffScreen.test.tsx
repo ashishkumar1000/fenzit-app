@@ -6,7 +6,7 @@
  *  - The FR-18 gate: 7 selected days blocks Save with the inline rule.
  *  - The per-employee override list renders the row subtitle; Edit opens the
  *    sheet, and saving it closes the sheet with a transient success banner.
- *  - "Set weekly off" is disabled while the tenant has no employees.
+ *  - "Set Off" is disabled while the tenant has no employees.
  *  - The effective-date field KEEPS its `>= today` floor (the holiday form
  *    deliberately dropped its own) — the deliberate asymmetry, pinned.
  *
@@ -168,6 +168,18 @@ function textNodes(root: ReactTestRenderer.ReactTestInstance, value: string) {
   return root.findAll((n) => n.type === Text && n.props.children === value);
 }
 
+function hasTextContaining(
+  root: ReactTestRenderer.ReactTestInstance,
+  value: string,
+) {
+  return root.findAll(
+    (n) =>
+      n.type === Text &&
+      typeof n.props.children === 'string' &&
+      n.props.children.includes(value),
+  ).length > 0;
+}
+
 function hasText(root: ReactTestRenderer.ReactTestInstance, value: string) {
   return textNodes(root, value).length > 0;
 }
@@ -223,7 +235,7 @@ function findButtons(
 
 /** The screen's default-block Save (the sheet, when open, renders later). */
 function findDefaultSave(root: ReactTestRenderer.ReactTestInstance) {
-  return findButtons(root, 'Save')[0];
+  return findButtons(root, 'Save schedule')[0];
 }
 
 beforeEach(() => {
@@ -352,7 +364,7 @@ describe('WeeklyOffScreen tenant default', () => {
     const screen = await renderLoaded();
 
     expect(hasText(screen.root, 'Upcoming changes')).toBe(true);
-    expect(hasText(screen.root, 'Sat + Sun')).toBe(true);
+    expect(hasTextContaining(screen.root, 'Sat & Sun off from this date')).toBe(true);
   });
 
   it('the effective date seeds from the SCHEDULED edit only (P3 rule at the screen)', async () => {
@@ -389,7 +401,7 @@ describe('WeeklyOffScreen tenant default', () => {
     expect(hasText(screen.root, 'Upcoming changes')).toBe(true);
     expect(hasText(screen.root, formatLongDate('2020-01-01'))).toBe(false);
     expect(hasText(screen.root, formatLongDate('2099-01-05'))).toBe(true);
-    expect(hasText(screen.root, 'Sat + Sun')).toBe(true);
+    expect(hasTextContaining(screen.root, 'Sat & Sun off from this date')).toBe(true);
   });
 
   it('after a save the form RE-SEEDS from the server truth (P4 rule at the screen)', async () => {
@@ -566,7 +578,7 @@ describe('WeeklyOffScreen error and loading states', () => {
     expect(hasText(screen.root, 'No weekly off set yet.')).toBe(false);
     // No default-block Save anywhere (the helper throws on zero finds, so
     // count the raw label nodes instead).
-    expect(textNodes(screen.root, 'Save')).toHaveLength(0);
+    expect(textNodes(screen.root, 'Save schedule')).toHaveLength(0);
   });
 
   it('Retry on a failed default first load re-runs the GET', async () => {
@@ -606,7 +618,7 @@ describe('WeeklyOffScreen error and loading states', () => {
     expect(
       hasText(
         screen.root,
-        'No employee-wise weekly offs yet. Everyone follows the default weekly off above.',
+        'No employee-wise weekly offs yet. Everyone follows the "For everyone" weekly off above.',
       ),
     ).toBe(true);
   });
@@ -631,14 +643,14 @@ describe('WeeklyOffScreen error and loading states', () => {
     });
 
     expect(
-      hasText(screen.root, "Couldn't refresh weekly off. Showing the last loaded selection."),
+      hasText(screen.root, "Could not refresh. This is what you saw last time."),
     ).toBe(true);
     expect(findPill(screen.root, 6).props.accessibilityState).toEqual({
       checked: true,
     });
     // The saveable form is still there (the error did not flip the screen
     // into the first-load error state).
-    expect(findButtons(screen.root, 'Save').length).toBeGreaterThan(0);
+    expect(findButtons(screen.root, 'Save schedule').length).toBeGreaterThan(0);
   });
 });
 
@@ -649,7 +661,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
 
     expect(hasText(screen.root, 'Employee-wise weekly off')).toBe(true);
     expect(hasText(screen.root, 'Priya')).toBe(true);
-    expect(hasText(screen.root, 'Fri only')).toBe(true);
+    expect(hasText(screen.root, 'Fri off')).toBe(true);
   });
 
   it("surfaces the override's scheduled future edit on the row", async () => {
@@ -665,7 +677,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     expect(
       hasText(
         screen.root,
-        `From ${formatLongDate('2099-01-05')}: Thu + Fri`,
+        `From ${formatLongDate('2099-01-05')}: Thu & Fri off`,
       ),
     ).toBe(true);
   });
@@ -676,7 +688,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     expect(
       hasText(
         screen.root,
-        'No employee-wise weekly offs yet. Everyone follows the default weekly off above.',
+        'No employee-wise weekly offs yet. Everyone follows the "For everyone" weekly off above.',
       ),
     ).toBe(true);
   });
@@ -699,7 +711,9 @@ describe('WeeklyOffScreen per-employee overrides', () => {
       findPill(screen.root, 4, 1).props.onPress();
     });
     const saves = findButtons(screen.root, 'Save');
-    expect(saves.length).toBeGreaterThan(1); // the default block + the sheet
+    // The default block's button is "Save schedule", so plain "Save" is
+    // the sheet's own.
+    expect(saves).toHaveLength(1);
     const sheetSave = saves[saves.length - 1];
     expect(sheetSave.props.disabled).toBe(false);
 
@@ -716,7 +730,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     expect(hasText(screen.root, 'Employee weekly off saved')).toBe(true);
   });
 
-  it('"Set weekly off" is disabled when the tenant has no employees', async () => {
+  it('"Set Off" is disabled when the tenant has no employees', async () => {
     useMyProfileMock.mockReturnValue({
       profile: { technicians: [] },
       isLoading: false,
@@ -725,7 +739,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     });
     const screen = await renderLoaded();
 
-    expect(findButtons(screen.root, 'Set weekly off')[0].props.disabled).toBe(true);
+    expect(findButtons(screen.root, 'Set Off')[0].props.disabled).toBe(true);
     // The disabled CTA carries its reason — a dead button with no
     // explanation reads as a broken feature (device-check 2026-09-27).
     expect(
@@ -736,7 +750,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     ).toBe(true);
   });
 
-  it('an all-invited roster disables "Set weekly off" and says why', async () => {
+  it('an all-invited roster disables "Set Off" and says why', async () => {
     // Device-check regression: every technician still 'invited' left the
     // CTA dead with no on-screen reason — the owner could not tell a gate
     // from a defect. The copy names the unlock condition instead.
@@ -753,7 +767,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     });
     const screen = await renderLoaded();
 
-    expect(findButtons(screen.root, 'Set weekly off')[0].props.disabled).toBe(
+    expect(findButtons(screen.root, 'Set Off')[0].props.disabled).toBe(
       true,
     );
     expect(
@@ -766,10 +780,10 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     expect(hasText(screen.root, 'Priya')).toBe(false);
   });
 
-  it('"Set weekly off" opens the sheet in add mode when employees exist', async () => {
+  it('"Set Off" opens the sheet in add mode when employees exist', async () => {
     const screen = await renderLoaded();
 
-    const add = findButtons(screen.root, 'Set weekly off')[0];
+    const add = findButtons(screen.root, 'Set Off')[0];
     expect(add.props.disabled).toBe(false);
     // Enabled CTA — no disabled-reason copy anywhere.
     expect(
@@ -805,7 +819,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     const screen = await renderLoaded();
 
     act(() => {
-      findButtons(screen.root, 'Set weekly off')[0].props.onPress();
+      findButtons(screen.root, 'Set Off')[0].props.onPress();
     });
     act(() => {
       findButtons(screen.root, 'Pick an employee')[0].props.onPress();
@@ -919,5 +933,156 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     // onSaved('delete') — the banner names removal, not "saved".
     expect(hasText(screen.root, 'Employee weekly off removed')).toBe(true);
     expect(hasText(screen.root, 'Employee weekly off saved')).toBe(false);
+  });
+});
+
+describe('WeeklyOffScreen redesign — plain-words summaries', () => {
+  it('shows "Right now" for a configured default, and hides it on first use', async () => {
+    getDefaultMock.mockResolvedValue({
+      default: view([6, 7]),
+      next: null,
+      history: [],
+    });
+    const configured = await renderLoaded();
+    expect(hasText(configured.root, 'Right now: Sat & Sun off')).toBe(true);
+
+    getDefaultMock.mockResolvedValue({ default: null, next: null, history: [] });
+    const fresh = await renderLoaded();
+    expect(hasTextContaining(fresh.root, 'Right now:')).toBe(false);
+  });
+
+  it('the day-count chip follows the picks, with singular wording at 1', async () => {
+    getDefaultMock.mockResolvedValue({
+      default: view([7]),
+      next: null,
+      history: [],
+    });
+    const screen = await renderLoaded();
+    expect(hasText(screen.root, '1 day off, 6 working days')).toBe(true);
+
+    act(() => {
+      findPill(screen.root, 6).props.onPress();
+    });
+    expect(hasText(screen.root, '2 days off, 5 working days')).toBe(true);
+
+    // Six off leaves exactly one working day — singular, not "1 days".
+    for (const d of [1, 2, 3, 4] as IsoWeekday[]) {
+      act(() => {
+        findPill(screen.root, d).props.onPress();
+      });
+    }
+    expect(hasText(screen.root, '6 days off, 1 working day')).toBe(true);
+  });
+
+  it('clearing every day warns that everyone will work all 7 days, and Save still works', async () => {
+    getDefaultMock.mockResolvedValue({
+      default: view([7]),
+      next: null,
+      history: [],
+    });
+    const screen = await renderLoaded();
+    act(() => {
+      findPill(screen.root, 7).props.onPress();
+    });
+    expect(
+      hasText(
+        screen.root,
+        'No day is off. If you save, everyone will work all 7 days.',
+      ),
+    ).toBe(true);
+    expect(hasText(screen.root, '0 days off, 7 working days')).toBe(true);
+    expect(findDefaultSave(screen.root).props.disabled).toBe(false);
+  });
+
+  it('the upcoming panel names the change and what applies till then', async () => {
+    getDefaultMock.mockResolvedValue({
+      default: view([7]),
+      next: view([6, 7]),
+      history: [view([7]), { days: [6, 7], validFrom: '2099-01-05', validTo: null }],
+    });
+    const screen = await renderLoaded();
+    expect(hasText(screen.root, '1 change coming up')).toBe(true);
+    expect(
+      hasText(screen.root, 'Sat & Sun off from this date. Till then: Sun off.'),
+    ).toBe(true);
+  });
+
+  it('no upcoming change means no upcoming panel at all', async () => {
+    getDefaultMock.mockResolvedValue({
+      default: view([7]),
+      next: null,
+      history: [view([7])],
+    });
+    const screen = await renderLoaded();
+    expect(hasText(screen.root, 'Upcoming changes')).toBe(false);
+  });
+
+  it('employee footer: no overrides means no footer line', async () => {
+    const screen = await renderLoaded();
+    expect(hasTextContaining(screen.root, 'have a different weekly off')).toBe(false);
+    expect(hasTextContaining(screen.root, '1 employee has')).toBe(false);
+  });
+
+  it('employee footer and row: one person, singular wording', async () => {
+    listOverridesMock.mockResolvedValue([overrideFor(PRIYA, [5])]);
+    const screen = await renderLoaded();
+    expect(hasText(screen.root, '1 employee has a different weekly off')).toBe(true);
+    expect(hasText(screen.root, '6 working days')).toBe(true);
+  });
+
+  it('employee footer and row: many people, plural; six days off reads "1 working day"', async () => {
+    listOverridesMock.mockResolvedValue([
+      overrideFor(PRIYA, [6, 7]),
+      overrideFor(RAMESH, [1, 2, 3, 4, 5, 6]),
+    ]);
+    const screen = await renderLoaded();
+    expect(hasText(screen.root, '2 employees have a different weekly off')).toBe(true);
+    expect(hasText(screen.root, 'Sat & Sun off')).toBe(true);
+    expect(hasText(screen.root, '5 working days')).toBe(true);
+    expect(hasText(screen.root, '1 working day')).toBe(true);
+  });
+
+  it('a second queued change says "Till then" with the change before it', async () => {
+    getDefaultMock.mockResolvedValue({
+      default: view([7]),
+      next: view([6, 7]),
+      history: [
+        view([7]),
+        { days: [6, 7], validFrom: '2099-01-05', validTo: '2099-02-01' },
+        { days: [5], validFrom: '2099-02-01', validTo: null },
+      ],
+    });
+    const screen = await renderLoaded();
+    expect(hasText(screen.root, '2 changes coming up')).toBe(true);
+    expect(
+      hasText(screen.root, 'Sat & Sun off from this date. Till then: Sun off.'),
+    ).toBe(true);
+    expect(
+      hasText(screen.root, 'Fri off from this date. Till then: Sat & Sun off.'),
+    ).toBe(true);
+  });
+
+  it('a refresh failure on the employee list keeps the rows and says so', async () => {
+    listOverridesMock.mockResolvedValue([overrideFor(PRIYA, [5])]);
+    const screen = await renderLoaded();
+    listOverridesMock.mockRejectedValue({ status: 500 });
+    await act(async () => {
+      for (const focus of mockFocusEffects) focus();
+      await flush();
+    });
+    expect(hasText(screen.root, 'Priya')).toBe(true);
+    expect(
+      hasText(screen.root, 'Could not refresh. This is the list you saw last time.'),
+    ).toBe(true);
+  });
+
+  it('the Set Off pill is announced with its full purpose', async () => {
+    const screen = await renderLoaded();
+    const pill = screen.root.findAll(
+      (n) =>
+        n.props.accessibilityLabel === 'Set weekly off for an employee' &&
+        typeof n.props.onPress === 'function',
+    );
+    expect(pill.length).toBeGreaterThan(0);
   });
 });

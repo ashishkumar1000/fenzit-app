@@ -22,8 +22,9 @@
  *     builds — see utils/istDate's note), and the unused `locale` param is
  *     gone: the app is hardcoded-English with no i18n layer (the
  *     localization stance is a recorded review deferral).
- *   - 44px tall (touch.min floor; the calendar cells are the only stated
- *     exception in the attendance module).
+ *   - 56px tall two-line pills (letter + Work/Off). Seven must fit one row,
+ *     so the width is ~39dp on a 360dp phone — under the 44px floor, a
+ *     stated exception alongside the calendar cells; the height compensates.
  *
  * "All 7 selected" gate: surfaced as a sibling text (the parent renders
  * the inline rule). The picker itself never blocks a tap — the parent's
@@ -31,7 +32,7 @@
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, typography, touch } from '../../../theme';
+import { colors, radius, spacing, typography } from '../../../theme';
 import type { IsoWeekday } from '../../../services';
 
 export const WEEKLY_OFF_DAY_LETTERS: Record<IsoWeekday, string> = {
@@ -132,6 +133,13 @@ export function WeeklyOffDayPicker({
               ]}>
               {WEEKLY_OFF_DAY_LETTERS[day]}
             </Text>
+            <Text
+              style={[
+                styles.pillSubLabel,
+                isSelected && styles.pillLabelSelected,
+              ]}>
+              {isSelected ? 'Off' : 'Work'}
+            </Text>
           </Pressable>
         );
       })}
@@ -139,20 +147,24 @@ export function WeeklyOffDayPicker({
   );
 }
 
-const PILL_SIZE = touch.min;
+// Two-line pill (letter + Work/Off), 56px tall. Seven pills must fit one
+// row inside the card (~39dp wide on a 360dp phone), so the width sits
+// under the 44px floor — the height keeps the touch target generous, the
+// same stated exception as the calendar cells.
+const PILL_SIZE = 56;
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.s2,
+    gap: spacing.s1,
   },
   pill: {
     flex: 1,
     height: PILL_SIZE,
-    minWidth: PILL_SIZE,
-    borderRadius: radius.pill,
+    minWidth: 0,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     backgroundColor: colors.surfaceCard,
@@ -162,6 +174,12 @@ const styles = StyleSheet.create({
   pillSelected: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+    outlineColor: colors.primarySoft,
+    outlineWidth: 3,
+  },
+  pillSubLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   pillPressed: {
     opacity: 0.85,

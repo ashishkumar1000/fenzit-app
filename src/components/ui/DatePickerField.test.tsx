@@ -195,4 +195,36 @@ describe('DatePickerField', () => {
     // wouldn't open — the Pressable disables the press natively.
     expect(renderer.root.findAllByType(RNCDateTimePicker)).toHaveLength(0);
   });
+
+  it('shows the optional subtitle inside the field, alongside the value', () => {
+    const renderer = renderField({
+      value: '2026-10-01',
+      today: TODAY,
+      onChange: jest.fn(),
+      subtitle: 'Starts from the beginning of this day',
+    });
+    expect(
+      renderer.root.findAll(
+        n => n.type === Text && n.props.children === 'Starts from the beginning of this day',
+      ),
+    ).toHaveLength(1);
+    expect(findFieldButton(renderer)).toBeTruthy();
+  });
+
+  it('renders no subtitle line when none is given', () => {
+    const renderer = renderField({
+      value: '',
+      today: TODAY,
+      onChange: jest.fn(),
+      placeholder: TODAY,
+    });
+    expect(
+      renderer.root.findAll(
+        n => n.type === Text && n.props.children === 'Starts from the beginning of this day',
+      ),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAllByProps({ children: TODAY }).length,
+    ).toBeGreaterThan(0);
+  });
 });
