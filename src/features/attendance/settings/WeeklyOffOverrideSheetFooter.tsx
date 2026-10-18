@@ -15,16 +15,18 @@
  * Extracted from `WeeklyOffOverrideSheet.tsx` to keep that file under the
  * ~300-line file limit (15-6 review P17).
  */
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Trash2 } from 'lucide-react-native';
 import { Button, InlineError } from '../../../components/ui';
-import { colors, spacing } from '../../../theme';
+import { colors, spacing, typography } from '../../../theme';
 import type { ApiError } from '../../../services';
 
 export type WeeklyOffOverrideSheetFooterProps = {
   isEdit: boolean;
   isSaving: boolean;
   saveDisabled: boolean;
+  /** Plain-words reason Save is disabled, or null. */
+  saveHint?: string | null;
   saveError: ApiError | null;
   onSave: () => void;
   onRemove: () => void;
@@ -36,6 +38,7 @@ export default function WeeklyOffOverrideSheetFooter({
   isEdit,
   isSaving,
   saveDisabled,
+  saveHint = null,
   saveError,
   onSave,
   onRemove,
@@ -56,6 +59,7 @@ export default function WeeklyOffOverrideSheetFooter({
         fullWidth>
         Save
       </Button>
+      {saveHint ? <Text style={styles.hint}>{saveHint}</Text> : null}
       {isEdit ? (
         <Button
           variant="ghost"
@@ -74,7 +78,16 @@ export default function WeeklyOffOverrideSheetFooter({
 }
 
 const styles = StyleSheet.create({
+  // The Sheet's footer slot has no side padding (each footer owns its own,
+  // like HolidayFormSheetFooter) — without it Save ran edge to edge.
   footer: {
     gap: spacing.s3,
+    paddingHorizontal: spacing.s5,
+    paddingTop: spacing.s2,
+  },
+  hint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 });

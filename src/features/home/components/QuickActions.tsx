@@ -28,6 +28,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { HardHat, PlusCircle, UserPlus } from 'lucide-react-native';
 import { Card } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
+import PrimaryTileBackdrop from './PrimaryTileBackdrop';
 
 export type QuickActionsProps = {
   onNewJob: () => void;
@@ -79,6 +80,7 @@ export function QuickActions({
             styles.primaryTile,
             !canCreateJob && styles.disabledTile,
           ]}>
+          <PrimaryTileBackdrop />
           <PlusCircle
             color={colors.onPrimary}
             size={ICON_SIZE}
@@ -134,6 +136,7 @@ export function QuickActions({
           onPress={onAddTechnician}
           accessibilityRole="button"
           style={[styles.tile, !canCreateJob && styles.primaryTile]}>
+          {canCreateJob ? null : <PrimaryTileBackdrop />}
           <HardHat
             color={canCreateJob ? colors.primary : colors.onPrimary}
             size={ICON_SIZE}

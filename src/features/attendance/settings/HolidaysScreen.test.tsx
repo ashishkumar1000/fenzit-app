@@ -42,6 +42,7 @@ import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
 import { RefreshControl, Text } from 'react-native';
 import { ConfirmDialog } from '../../../components/ui';
+import { formatLongDate } from './holidayDates';
 import HolidaysScreen from './HolidaysScreen';
 import { holidaysService } from '../../../services';
 import { colors } from '../../../theme';
@@ -212,16 +213,18 @@ describe('HolidaysScreen grouping', () => {
     const screen = await renderLoaded();
     const root = screen.root;
 
-    expect(hasText(root, 'Upcoming')).toBe(true);
-    expect(hasText(root, 'Past')).toBe(true);
+    expect(hasText(root, 'Upcoming holidays')).toBe(true);
+    expect(hasText(root, 'Past holidays')).toBe(true);
     expect(hasText(root, 'Diwali')).toBe(true);
     expect(hasText(root, 'Holi')).toBe(true);
 
     const order = textOrder(root);
-    expect(order.indexOf('Upcoming')).toBeGreaterThanOrEqual(0);
-    expect(order.indexOf('Upcoming')).toBeLessThan(order.indexOf('Diwali'));
-    expect(order.indexOf('Diwali')).toBeLessThan(order.indexOf('Past'));
-    expect(order.indexOf('Past')).toBeLessThan(order.indexOf('Holi'));
+    // 'Diwali' shows twice: in the "Next upcoming holiday" card on top, then
+    // as the list row under the section label.
+    expect(order.indexOf('Upcoming holidays')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('Upcoming holidays')).toBeLessThan(order.lastIndexOf('Diwali'));
+    expect(order.lastIndexOf('Diwali')).toBeLessThan(order.indexOf('Past holidays'));
+    expect(order.indexOf('Past holidays')).toBeLessThan(order.indexOf('Holi'));
   });
 
   it('the section labels are a11y headers, so a screen reader can jump sections', async () => {
@@ -231,7 +234,7 @@ describe('HolidaysScreen grouping', () => {
     // These are the DS `Eyebrow` (the design system's one allowed caps use).
     // Hand-rolled label Texts carried no role — this pins the reason for
     // using the component rather than a local style.
-    for (const label of ['Upcoming', 'Past']) {
+    for (const label of ['Upcoming holidays', 'Past holidays']) {
       const nodes = textNodes(root, label);
       expect(nodes.length).toBeGreaterThan(0);
       expect(nodes[0].props.accessibilityRole).toBe('header');
@@ -243,8 +246,8 @@ describe('HolidaysScreen grouping', () => {
     const screen = await renderLoaded();
     const root = screen.root;
 
-    expect(hasText(root, 'Upcoming')).toBe(true);
-    expect(hasText(root, 'Past')).toBe(false);
+    expect(hasText(root, 'Upcoming holidays')).toBe(true);
+    expect(hasText(root, 'Past holidays')).toBe(false);
     expect(findRow(root, 'Today').props.accessibilityLabel).not.toMatch(/, past$/);
   });
 
@@ -253,8 +256,8 @@ describe('HolidaysScreen grouping', () => {
     const screen = await renderLoaded();
     const root = screen.root;
 
-    expect(hasText(root, 'Upcoming')).toBe(true);
-    expect(hasText(root, 'Past')).toBe(false);
+    expect(hasText(root, 'Upcoming holidays')).toBe(true);
+    expect(hasText(root, 'Past holidays')).toBe(false);
   });
 
   it('a past row is muted but still tappable — the tap opens the edit sheet', async () => {
@@ -264,11 +267,11 @@ describe('HolidaysScreen grouping', () => {
     // Muted: the name uses the muted text colour and the row announces
     // itself as past for screen readers.
     expect(flat(textNodes(screen.root, 'Holi')[0]).color).toBe(colors.textMuted);
-    expect(textNodes(screen.root, `${PAST_DATE} (past)`).length).toBeGreaterThan(0);
+    expect(textNodes(screen.root, `${formatLongDate(PAST_DATE)} (past)`).length).toBeGreaterThan(0);
 
     const row = findRow(screen.root, 'Holi');
     expect(row.props.accessibilityLabel).toBe(
-      `Holiday Holi, ${PAST_DATE}, past`,
+      `Holiday Holi, ${formatLongDate(PAST_DATE)}, past`,
     );
 
     // Tappable — the edit sheet opens for a past holiday (FR-20).
@@ -279,19 +282,21 @@ describe('HolidaysScreen grouping', () => {
     });
     expect(hasText(screen.root, 'Edit holiday')).toBe(true);
     // The date is read-only in edit mode (immutable since 15-5).
-    expect(hasText(screen.root, 'Date is immutable after creation.')).toBe(true);
+    expect(hasText(screen.root, "The date can't be changed. To use another date, delete this holiday and add a new one.")).toBe(true);
   });
 
   it('an upcoming row is not muted', async () => {
     listMock.mockResolvedValue([DIWALI]);
     const screen = await renderLoaded();
 
-    expect(flat(textNodes(screen.root, 'Diwali')[0]).color).toBe(
-      colors.textStrong,
-    );
-    expect(textNodes(screen.root, `${UPCOMING_DATE} (past)`)).toHaveLength(0);
+    // The last 'Diwali' text is the list row (the first is the hero card).
+    const names = textNodes(screen.root, 'Diwali');
+    expect(flat(names[names.length - 1]).color).toBe(colors.textStrong);
+    expect(
+      textNodes(screen.root, `${formatLongDate(UPCOMING_DATE)} (past)`),
+    ).toHaveLength(0);
     expect(findRow(screen.root, 'Diwali').props.accessibilityLabel).toBe(
-      `Holiday Diwali, ${UPCOMING_DATE}`,
+      `Holiday Diwali, ${formatLongDate(UPCOMING_DATE)}`,
     );
   });
 });
@@ -314,15 +319,17 @@ describe('HolidaysScreen add affordances', () => {
     // The add sheet is up (title + both fields) and edit mode is not.
     expect(hasText(screen.root, 'Add holiday')).toBe(true);
     expect(findNameInput(screen.root).length).toBeGreaterThan(0);
-    expect(hasText(screen.root, 'Date is immutable after creation.')).toBe(false);
+    expect(hasText(screen.root, "The date can't be changed. To use another date, delete this holiday and add a new one.")).toBe(false);
   });
 
   it('shows the empty state (and no FAB) when there are no holidays', async () => {
     listMock.mockResolvedValue([]);
     const screen = await renderLoaded();
 
-    expect(hasText(screen.root, 'No holidays yet')).toBe(true);
-    expect(hasText(screen.root, 'Upcoming')).toBe(false);
+    expect(hasText(screen.root, 'No holidays scheduled yet')).toBe(true);
+    // The notice must not promise anything the app doesn't do (no streaks).
+    expect(hasText(screen.root, 'Holidays are marked off automatically')).toBe(true);
+    expect(hasText(screen.root, 'Upcoming holidays')).toBe(false);
     expect(findFab(screen.root)).toHaveLength(0);
   });
 
@@ -526,12 +533,12 @@ describe('HolidaysScreen the empty-state add path and the 409 lifecycle', () => 
     createMock.mockResolvedValue({ id: 'h9', date: isoShift(30), name: 'Onam' });
     const screen = await renderLoaded();
 
-    expect(hasText(screen.root, 'No holidays yet')).toBe(true);
+    expect(hasText(screen.root, 'No holidays scheduled yet')).toBe(true);
     const cta = screen.root.findAll(
       (n) =>
         typeof n.props.onPress === 'function' &&
         n.findAll(
-          (m) => m.type === Text && m.props.children === 'Add holiday',
+          (m) => m.type === Text && m.props.children === 'Add first holiday',
         ).length > 0,
     );
     expect(cta.length).toBeGreaterThan(0);

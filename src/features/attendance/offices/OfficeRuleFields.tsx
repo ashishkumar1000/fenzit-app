@@ -11,21 +11,39 @@
  * remain as the unreachable safety net. The three minute/hour-count
  * fields stay typed.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  type TextInputFocusEvent,
+} from 'react-native';
 import { Info } from 'lucide-react-native';
 import { Card, Input, TimeField } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
-import type { OfficeFormErrors, OfficeFormState } from './officeFormModel';
+import {
+  END_TIME_PRESETS,
+  START_TIME_PRESETS,
+  type OfficeFormErrors,
+  type OfficeFormState,
+} from './officeFormModel';
 
 type Props = {
   state: OfficeFormState;
   errors: OfficeFormErrors;
   onChange: (patch: Partial<OfficeFormState>) => void;
+  /** Focus handler for the typed fields — lets the form scroll them clear of the keyboard. */
+  onFieldFocus?: (e: TextInputFocusEvent) => void;
   /** Edit mode: show the effective-from-tomorrow note. */
   isEdit: boolean;
 };
 
-export default function OfficeRuleFields({ state, errors, onChange, isEdit }: Props) {
+export default function OfficeRuleFields({
+  state,
+  errors,
+  onChange,
+  onFieldFocus,
+  isEdit,
+}: Props) {
   return (
     <Card>
       <View style={styles.stack}>
@@ -44,6 +62,8 @@ export default function OfficeRuleFields({ state, errors, onChange, isEdit }: Pr
           value={state.startTime}
           onChangeValue={(hhmm) => onChange({ startTime: hhmm })}
           placeholder="09:00"
+          pickerSubtitle="Select official clock-in schedule"
+          presets={START_TIME_PRESETS}
           error={errors.startTime}
           style={styles.timeInput}
         />
@@ -52,6 +72,8 @@ export default function OfficeRuleFields({ state, errors, onChange, isEdit }: Pr
           value={state.endTime}
           onChangeValue={(hhmm) => onChange({ endTime: hhmm })}
           placeholder="18:00"
+          pickerSubtitle="Select official clock-out schedule"
+          presets={END_TIME_PRESETS}
           error={errors.endTime}
           style={styles.timeInput}
         />
@@ -59,11 +81,12 @@ export default function OfficeRuleFields({ state, errors, onChange, isEdit }: Pr
       <Input
         label="Late after (minutes)"
         value={state.lateCutoffMinutes}
-        onChangeText={(text) => onChange({ lateCutoffMinutes: text })}
+        onChangeText={(text) => onChange({ lateCutoffMinutes: text.replace(/\D/g, '') })}
         placeholder="15"
         error={errors.lateCutoffMinutes}
-        helper="Time after the start that still counts as on time"
+        helper="Check-ins this many minutes after the start time are still on time. After that, they are marked late."
         keyboardType="number-pad"
+        onFocus={onFieldFocus}
         maxLength={3}
         trailingAdornment={<Text style={styles.suffix}>mins</Text>}
       />
@@ -75,6 +98,7 @@ export default function OfficeRuleFields({ state, errors, onChange, isEdit }: Pr
           placeholder="8"
           error={errors.fullDayHours}
           keyboardType="decimal-pad"
+          onFocus={onFieldFocus}
           maxLength={4}
           trailingAdornment={<Text style={styles.suffix}>hrs</Text>}
           style={styles.timeInput}
@@ -86,11 +110,15 @@ export default function OfficeRuleFields({ state, errors, onChange, isEdit }: Pr
           placeholder="4"
           error={errors.halfDayHours}
           keyboardType="decimal-pad"
+          onFocus={onFieldFocus}
           maxLength={4}
           trailingAdornment={<Text style={styles.suffix}>hrs</Text>}
           style={styles.timeInput}
         />
       </View>
+      <Text style={styles.hint}>
+        Hours an employee must work to be counted as a full day or a half day. For example, 8 and 4.
+      </Text>
       </View>
     </Card>
   );
@@ -129,6 +157,10 @@ const styles = StyleSheet.create({
   },
   timeInput: {
     flex: 1,
+  },
+  hint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
   },
   suffix: {
     ...typography.caption,

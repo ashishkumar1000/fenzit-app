@@ -17,7 +17,14 @@
  * shortcut lands in 15-9).
  */
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Archive, Building2, Check } from 'lucide-react-native';
@@ -32,6 +39,8 @@ import {
   emptyOfficeForm,
   formFromDetail,
   hasErrors,
+  isAddressChanged,
+  isFormDirty,
   validateOfficeForm,
   type OfficeFormErrors,
   type OfficeFormState,
@@ -39,18 +48,30 @@ import {
 import OfficeLocationCard from './OfficeLocationCard';
 import OfficeRuleFields from './OfficeRuleFields';
 import ScreenHeader from './ScreenHeader';
+import { useScrollFieldIntoView } from './useScrollFieldIntoView';
+import { useUnsavedChangesGuard } from './useUnsavedChangesGuard';
 import type { RootStackParamList } from '../../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OfficeForm'>;
+
+/** Fields whose validation compares against another field's value. */
+const DEPENDENT_ERROR: Partial<Record<keyof OfficeFormState, keyof OfficeFormErrors>> = {
+  startTime: 'endTime',
+  fullDayHours: 'halfDayHours',
+};
 
 export default function OfficeFormScreen({ navigation, route }: Props) {
   const officeId = route.params?.officeId;
   const isEdit = Boolean(officeId);
 
+  const { scrollRef, onScroll, onFieldFocus } = useScrollFieldIntoView();
   const [form, setForm] = useState<OfficeFormState>(emptyOfficeForm);
   // True only while the pin is the device's own fix (map picker locate-me).
   // An edit-loaded office has unknown provenance — the chip stays hidden.
   const [gpsVerified, setGpsVerified] = useState(false);
+  // Address of the pin — display text, saved with the office. Starts from the
+  // saved office; replaced by the picker's address when the pin is re-picked.
+  const [pinAddress, setPinAddress] = useState<string | null>(null);
   const [errors, setErrors] = useState<OfficeFormErrors>({});
   const [detail, setDetail] = useState<OfficeDetail | null>(null);
   const [isLoading, setIsLoading] = useState(isEdit);
@@ -64,8 +85,25 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
   // (the 20-1 modal ask) — same wording, in-app styling.
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
 
+  // Leaving with unsaved edits asks first; save/archive step past the ask.
+  const leaveGuard = useUnsavedChangesGuard(
+    navigation,
+    isFormDirty(form, detail) || isAddressChanged(detail, pinAddress),
+  );
+
+  // Editing a field clears its own error straight away (including a server
+  // "name taken"), plus the error of the field that is validated against it.
   const onChange = useCallback((patch: Partial<OfficeFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
+    setErrors((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(patch) as (keyof OfficeFormState)[]) {
+        if (key in next) delete next[key as keyof OfficeFormErrors];
+        const dependent = DEPENDENT_ERROR[key];
+        if (dependent) delete next[dependent];
+      }
+      return next;
+    });
   }, []);
 
   // Edit mode: pre-fill from the office's rules history. A 404 (unknown or
@@ -79,6 +117,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
         if (!active) return;
         setDetail(loaded);
         setForm(formFromDetail(loaded));
+        setPinAddress(loaded.formattedAddress ?? null);
         setIsLoading(false);
       })
       .catch((err: ApiError) => {
@@ -107,8 +146,16 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
       radiusM: picked.radiusM,
     }));
     setGpsVerified(Boolean(picked.gpsVerified));
+    // No address found for the new pin: keep the saved one only when the pin
+    // did not move (a failed lookup must not wipe a good address); otherwise
+    // the old address would name a different place.
+    const samePin =
+      detail !== null &&
+      picked.latitude === detail.latitude &&
+      picked.longitude === detail.longitude;
+    setPinAddress((prev) => picked.address ?? (samePin ? prev : null));
     setErrors((prev) => ({ ...prev, location: undefined }));
-  }, [route.params?.pickedLocation]);
+  }, [route.params?.pickedLocation, detail]);
 
   const handleSave = useCallback(async () => {
     const validation = validateOfficeForm(form);
@@ -118,9 +165,9 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
     setSaving(true);
     try {
       if (!isEdit) {
-        await officesService.create(buildCreateRequest(form));
+        await officesService.create(buildCreateRequest(form, pinAddress));
       } else if (detail) {
-        const patch = buildUpdatePatch(form, detail);
+        const patch = buildUpdatePatch(form, detail, pinAddress);
         if (Object.keys(patch).length > 0) {
           await officesService.update(officeId as string, patch);
         }
@@ -131,6 +178,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
         setSaveError('This office could not be loaded. Check your connection and try again.');
         return;
       }
+      leaveGuard.allowLeave();
       navigation.goBack();
     } catch (err) {
       const apiError = err as ApiError;
@@ -145,7 +193,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [form, isEdit, detail, officeId, navigation]);
+  }, [form, pinAddress, isEdit, detail, officeId, navigation, leaveGuard.allowLeave]);
 
   const handleArchive = useCallback(() => {
     if (!officeId) return;
@@ -161,7 +209,10 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
     // archiving the old one.
     officesService
       .archive(officeId as string)
-      .then(() => navigation.goBack())
+      .then(() => {
+        leaveGuard.allowLeave();
+        navigation.goBack();
+      })
       .catch((err: ApiError) => {
         if (err.code === 'ATTENDANCE_OFFICE_ARCHIVE_BLOCKED') {
           const blockers =
@@ -178,11 +229,11 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
         }
       })
       .finally(() => setArchiving(false));
-  }, [officeId, navigation]);
+  }, [officeId, navigation, leaveGuard.allowLeave]);
 
   if (notFound) {
     return (
-      <SafeAreaView style={styles.root} edges={['top']}>
+      <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
         <ScreenHeader title="Office" onBack={() => navigation.goBack()} />
         <View style={styles.content}>
           <InlineError message="This office is no longer available. It may have been archived." />
@@ -196,7 +247,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.root} edges={['top']}>
+      <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -205,7 +256,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <ScreenHeader
         title={isEdit ? 'Edit office' : 'Add office'}
         onBack={() => navigation.goBack()}
@@ -219,64 +270,84 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
           ) : undefined
         }
       />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {loadError ? <InlineError message={loadError} /> : null}
-        <Input
-          label="Office name"
-          value={form.name}
-          onChangeText={(text) => onChange({ name: text })}
-          placeholder="e.g. Andheri branch"
-          error={errors.name}
-          maxLength={80}
-          autoCorrect={false}
-          required
-          leadingIcon={<Building2 size={18} color={colors.textMuted} strokeWidth={2} />}
-        />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        // Pad on BOTH platforms: Android 15+ enforces edge-to-edge, so the
+        // manifest's adjustResize never resizes the window and the keyboard
+        // would cover the lower fields (Late after, Full/Half-day hours).
+        behavior="padding">
+        <ScrollView
+          ref={scrollRef}
+          onScroll={onScroll}
+          scrollEventThrottle={32}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          {loadError ? <InlineError message={loadError} /> : null}
+          <Input
+            label="Office name"
+            value={form.name}
+            onChangeText={(text) => onChange({ name: text })}
+            placeholder="e.g. Andheri branch"
+            error={errors.name}
+            maxLength={80}
+            autoCorrect={false}
+            required
+            leadingIcon={<Building2 size={18} color={colors.textMuted} strokeWidth={2} />}
+          />
 
-        <OfficeLocationCard
-          form={form}
-          errors={errors}
-          gpsVerified={gpsVerified}
-          onOpenPicker={() =>
-            navigation.navigate('MapPinPicker', {
-              mode: 'office',
-              initialLatitude: form.latitude ?? undefined,
-              initialLongitude: form.longitude ?? undefined,
-              radiusM: form.radiusM,
-            })
-          }
-        />
+          <OfficeLocationCard
+            form={form}
+            errors={errors}
+            gpsVerified={gpsVerified}
+            address={pinAddress}
+            onOpenPicker={() =>
+              navigation.navigate('MapPinPicker', {
+                mode: 'office',
+                initialLatitude: form.latitude ?? undefined,
+                initialLongitude: form.longitude ?? undefined,
+                radiusM: form.radiusM,
+              })
+            }
+          />
 
-        <OfficeRuleFields state={form} errors={errors} onChange={onChange} isEdit={isEdit} />
+          <OfficeRuleFields
+            state={form}
+            errors={errors}
+            onChange={onChange}
+            onFieldFocus={onFieldFocus}
+            isEdit={isEdit}
+          />
 
-        {saveError ? <InlineError message={saveError} /> : null}
-        <Button
-          fullWidth
-          loading={saving}
-          leadingIcon={
-            saving ? undefined : <Check size={18} color={colors.textOnColor} strokeWidth={2.5} />
-          }
-          onPress={() => void handleSave()}>
-          {isEdit ? 'Save changes' : 'Create office'}
-        </Button>
+          {saveError ? <InlineError message={saveError} /> : null}
+          <Button
+            fullWidth
+            loading={saving}
+            leadingIcon={
+              saving ? undefined : <Check size={18} color={colors.textOnColor} strokeWidth={2.5} />
+            }
+            onPress={() => void handleSave()}>
+            {isEdit ? 'Save changes' : 'Create office'}
+          </Button>
 
-        {isEdit ? (
-          <View style={styles.dangerBlock}>
-            {archiveError ? <InlineError message={archiveError} /> : null}
-            <Button
-              variant="ghost"
-              fullWidth
-              loading={archiving}
-              labelColor={colors.danger}
-              leadingIcon={
-                archiving ? undefined : <Archive size={16} color={colors.danger} strokeWidth={2} />
-              }
-              onPress={handleArchive}>
-              Archive office
-            </Button>
-          </View>
-        ) : null}
-      </ScrollView>
+          {isEdit ? (
+            <View style={styles.dangerBlock}>
+              {archiveError ? <InlineError message={archiveError} /> : null}
+              <Button
+                variant="ghost"
+                fullWidth
+                loading={archiving}
+                labelColor={colors.danger}
+                leadingIcon={
+                  archiving ? undefined : <Archive size={16} color={colors.danger} strokeWidth={2} />
+                }
+                onPress={handleArchive}>
+                Archive office
+              </Button>
+            </View>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ConfirmDialog
         visible={archiveConfirmOpen}
@@ -284,7 +355,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
         message={
           <Text>
             <Text style={styles.messageStrong}>{detail?.name ?? form.name.trim()}</Text>{' '}
-            will stop tracking attendance. This cannot be undone.
+            will stop tracking attendance and cannot be restored. It can only be archived once no employees are assigned to it.
           </Text>
         }
         confirmLabel="Archive office"
@@ -295,6 +366,17 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
         onConfirm={confirmArchive}
         onCancel={() => setArchiveConfirmOpen(false)}
       />
+
+      <ConfirmDialog
+        visible={leaveGuard.askOpen}
+        title="Discard changes?"
+        message="Your changes to this office haven't been saved."
+        confirmLabel="Discard"
+        confirmVariant="danger"
+        cancelLabel="Keep editing"
+        onConfirm={leaveGuard.discard}
+        onCancel={leaveGuard.keepEditing}
+      />
     </SafeAreaView>
   );
 }
@@ -303,6 +385,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.surfacePage,
+  },
+  flex: {
+    flex: 1,
   },
   center: {
     flex: 1,

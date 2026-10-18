@@ -52,6 +52,8 @@ type Props = {
   radiusM?: number;
   onRadiusChange?: (next: number) => void;
   onConfirm: () => void;
+  /** One-line prompt above Confirm (e.g. the pin has not been placed yet). */
+  notice?: string;
 };
 
 export default function PickerBottomCard({
@@ -66,6 +68,7 @@ export default function PickerBottomCard({
   radiusM,
   onRadiusChange,
   onConfirm,
+  notice,
 }: Props) {
   // The address card's bold first line is the place name — the first comma
   // segment of the reverse geocode; the rest renders muted beneath it.
@@ -146,6 +149,15 @@ export default function PickerBottomCard({
 
       {radiusM != null && onRadiusChange ? (
         <RadiusStepper radiusM={radiusM} onChange={onRadiusChange} />
+      ) : null}
+
+      {notice ? (
+        <Text
+          style={styles.locateErrorText}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite">
+          {notice}
+        </Text>
       ) : null}
 
       {servicesOff && onEnableServices ? (

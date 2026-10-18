@@ -41,7 +41,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PermissionsAndroid, Platform, StyleSheet } from 'react-native';
-import MapView, { type LatLng, type Region } from 'react-native-maps';
+import MapView, { type Details, type LatLng, type Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import AddressPickerSheet from '../../addressPicker/AddressPickerSheet';
@@ -54,6 +54,7 @@ import PickerMapArea from './PickerMapArea';
 import ScreenHeader from './ScreenHeader';
 import { buildCustomerPick, sameCentre } from './buildCustomerPick';
 import { usePickerLocate } from './usePickerLocate';
+import { pickerAddressLabel, stripPlusCode } from './pickerAddressLabel';
 import { useReverseAddress } from './useReverseAddress';
 import type { RootStackParamList } from '../../../navigation/types';
 
@@ -83,12 +84,18 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
   const [radiusM, setRadiusM] = useState(initialRadiusM ?? 100);
   const [isPanning, setIsPanning] = useState(false);
   // Provenance for the form's "GPS Verified" chip (office mode): true only
-  // while the pin is the device's own fix. A user pan or a search result
-  // clears it. animateToRegion also fires region events, so programmatic
-  // moves are marked in a ref and matched on settle (epsilon ≈ 11 m)
-  // instead of treating every region change as a manual pan.
+  // while the pin is the device's own fix. A search result clears it, and so
+  // does a finger gesture that moves the pin away from the fix. The map tags
+  // each settle with `isGesture`, so programmatic moves (animateToRegion
+  // after a fix or a search) never read as a manual pan, whatever order the
+  // map's events arrive in.
   const [gpsVerified, setGpsVerified] = useState(false);
-  const programmaticTargetRef = useRef<LatLng | null>(null);
+  const lastFixRef = useRef<LatLng | null>(null);
+  // The pin counts as placed once it comes from a saved office, a device fix,
+  // a search result or the owner's own pan. Until then it is only the
+  // India default centre, which must not be saved as the office location.
+  const [placed, setPlaced] = useState(initialLatitude != null && initialLongitude != null);
+  const [placeHint, setPlaceHint] = useState(false);
 
   const { addressText, addressLoading, reverseResult } = useReverseAddress(settled);
   // The last resolved search place and where it moved the pin — a Confirm
@@ -124,7 +131,9 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     setPin(loc);
     setSettled(loc);
     setGpsVerified(true);
-    programmaticTargetRef.current = loc;
+    setPlaced(true);
+    setPlaceHint(false);
+    lastFixRef.current = loc;
     mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
   }, []);
 
@@ -171,18 +180,19 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     setPin({ latitude: region.latitude, longitude: region.longitude });
   }, []);
 
-  const onRegionChangeComplete = useCallback((region: Region) => {
+  const onRegionChangeComplete = useCallback((region: Region, details?: Details) => {
     const centre: LatLng = { latitude: region.latitude, longitude: region.longitude };
     setPin(centre);
     setSettled(centre);
     setIsPanning(false);
-    // A settle matching the last programmatic target is that move's own
-    // completion, not a user pan — provenance is unchanged. Anything else
-    // is a manual placement.
-    const target = programmaticTargetRef.current;
-    programmaticTargetRef.current = null;
-    const isProgrammatic = target != null && sameCentre(target, centre);
-    if (!isProgrammatic) setGpsVerified(false);
+    // Only the owner's own gesture changes provenance. A pinch-zoom about
+    // the fix leaves the pin where it was, so it stays verified.
+    if (details?.isGesture) {
+      setPlaced(true);
+      setPlaceHint(false);
+      const fix = lastFixRef.current;
+      if (!fix || !sameCentre(fix, centre)) setGpsVerified(false);
+    }
   }, []);
 
   const handleResolvedPlace = useCallback(
@@ -192,9 +202,11 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
       setPin(loc);
       setSettled(loc);
       setGpsVerified(false);
+      setPlaced(true);
+      setPlaceHint(false);
+      lastFixRef.current = null;
       setSearchVisible(false);
       resolvedRef.current = { centre: loc, place };
-      programmaticTargetRef.current = loc;
       mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
     },
     [discardPendingFix],
@@ -206,7 +218,19 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     // that instead. After the settle the two are identical.
     const centre = isPanning ? pin : settled;
 
+    // Office mode: never save the untouched default centre as the office.
+    // Manual placement stays open — one pan or a search is enough.
+    if (!isCustomer && !placed) {
+      setPlaceHint(true);
+      return;
+    }
+
     if (!isCustomer) {
+      // Display-only street address (a stale lookup for an earlier centre is
+      // ignored by buildCustomerPick's centre match); none → form shows coordinates.
+      const formatted =
+        buildCustomerPick(centre, resolvedRef.current, reverseResult).snapshot.formattedAddress;
+      const address = formatted ? stripPlusCode(formatted) || null : null;
       navigation.popTo(
         'OfficeForm',
         {
@@ -215,6 +239,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
             longitude: centre.longitude,
             radiusM,
             gpsVerified,
+            address: address ?? undefined,
           },
         },
         { merge: true },
@@ -229,7 +254,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
       { pickedAddress: buildCustomerPick(centre, resolvedRef.current, reverseResult) },
       { merge: true },
     );
-  }, [navigation, settled, pin, isPanning, radiusM, gpsVerified, isCustomer, reverseResult]);
+  }, [navigation, settled, pin, isPanning, radiusM, gpsVerified, isCustomer, placed, reverseResult]);
 
   // Customer mode only — a hand-typed address returns with a null snapshot
   // (no coordinates), exactly like the form's own manual path.
@@ -255,8 +280,11 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
   // The card shows a spinner while a reverse geocode is in flight; before
   // the first answer arrives (or if none ever does) the raw coordinates are
   // the label — never an error state.
-  const addressLabel =
-    addressText || `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`;
+  const { label: addressLabel, fromSearch } = pickerAddressLabel(
+    pin,
+    resolvedRef.current,
+    addressText,
+  );
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -273,6 +301,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
         mapFailed={mapFailed}
         locating={locating}
         servicesOff={servicesOff}
+        pinPlaced={placed}
         onRegionChange={onRegionChange}
         onRegionChangeComplete={onRegionChangeComplete}
         onMapLoaded={() => setMapLoaded(true)}
@@ -283,7 +312,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
 
       <PickerBottomCard
         addressText={addressLabel}
-        addressLoading={addressLoading}
+        addressLoading={addressLoading && !fromSearch}
         locateError={locateError}
         canOpenSettings={canOpenSettings}
         onOpenSettings={openSettings}
@@ -293,6 +322,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
         radiusM={isCustomer ? undefined : radiusM}
         onRadiusChange={isCustomer ? undefined : setRadiusM}
         onConfirm={handleConfirm}
+        notice={placeHint ? 'Move the map or search for an address to place the pin.' : undefined}
       />
 
       <AddressPickerSheet

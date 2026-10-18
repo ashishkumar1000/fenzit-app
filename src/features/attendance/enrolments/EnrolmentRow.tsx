@@ -153,7 +153,9 @@ export function EnrolmentRow({
           <Text style={styles.toggleDescription}>
             {state === 'upcoming'
               ? `Tracking begins on their start date — nothing before that.`
-              : 'They check in near their office.'}
+              : covering
+                ? `They check in near ${row.officeName ?? 'their office'}.`
+                : 'Turn on to choose their office and start tracking.'}
           </Text>
         </Pressable>
         {/* In-flight write feedback: the switch is disabled while the PUT

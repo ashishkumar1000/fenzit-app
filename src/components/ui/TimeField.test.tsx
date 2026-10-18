@@ -1,40 +1,23 @@
 /**
  * Tests for the DS `TimeField` (Story 18-4 §10, D-TP1/D-TP4 + the triage
- * patches): the labeled tap-to-open time field. The package is mocked at
- * the root __mocks__ (the explicit jest.mock pins the intent here):
- *  - Android: the IMPERATIVE DateTimePickerAndroid.open(args) is recorded;
- *    tests fire the REAL v9 callback shape at the recorded args
- *    (onValueChange({nativeEvent:{timestamp,utcOffset}}, pickedDate) /
- *    onDismiss()) — the dialog itself can't exist in jest.
- *  - iOS: the declarative stub renders inside the (always-mounted) Sheet;
- *    tests drive onValueChange (commits live) and Done/onDismiss (closes).
+ * patches): the labeled tap-to-open time field. A press opens the
+ * TimePickerSheet — hour / minute / am-pm wheels on a DRAFT that commits
+ * only on Done. A drag can't be driven in jest, so the wheels are exercised
+ * through their screen-reader "increment"/"decrement" actions (the same
+ * onChange path a scroll settle takes).
  *
- * Pins: label/value/error/helper slots; the anchored Date (FIXED year-2000
- * date carrying only the hours+minutes); commit formatting to zero-padded
- * "HH:mm"; dismiss commits nothing; the Clear action (clearable optional
- * times — empty MEANS removal on the 18-2 wire); the a11y contract. The
- * jest preset resolves Platform.OS as 'ios' — the Android branch swaps it
- * directly (the photoPicker.test idiom).
+ * Pins: label/value/error/helper slots; the opening time (value →
+ * placeholder → 09:00) shown in 12-hour form; 12 am / 12 pm ↔ 00:xx / 12:xx;
+ * minute 59→00 and hour 12→1 wraps; am/pm clamps; Done commits zero-padded
+ * 24-hour "HH:mm"; closing without Done commits nothing and the next open
+ * re-seeds; the Clear action (clearable optional
+ * times — empty MEANS removal on the 18-2 wire); the a11y contract.
  */
-jest.mock('@react-native-community/datetimepicker');
-
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
-import { Platform, Text } from 'react-native';
+import { Modal, Platform, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import TimePickerStub, {
-  DateTimePickerAndroid,
-  // The root __mocks__ module carries these mock-only helpers; the real
-  // package's types do not.
-  // @ts-expect-error — mock-only named exports
-  __getLastAndroidOpenArgs,
-  // @ts-expect-error — mock-only named exports
-  __getLastTimePickerProps,
-  // @ts-expect-error — mock-only named exports
-  __resetTimePickerMock,
-} from '@react-native-community/datetimepicker';
 import { Button } from './Button';
-import { Sheet } from './Sheet';
 import { TimeField } from './TimeField';
 
 const realOs = Platform.OS;
@@ -84,14 +67,10 @@ function findClearButton(renderer: ReactTestRenderer.ReactTestRenderer) {
   );
 }
 
-function stubs(renderer: ReactTestRenderer.ReactTestRenderer) {
-  return renderer.root.findAllByType(TimePickerStub as never);
-}
-
 function sheetVisible(renderer: ReactTestRenderer.ReactTestRenderer): boolean {
-  const sheets = renderer.root.findAllByType(Sheet as never);
-  expect(sheets.length).toBe(1);
-  return Boolean(sheets[0].props.visible);
+  const modals = renderer.root.findAllByType(Modal);
+  expect(modals.length).toBe(1);
+  return Boolean(modals[0].props.visible);
 }
 
 function texts(renderer: ReactTestRenderer.ReactTestRenderer): string[] {
@@ -106,7 +85,6 @@ function texts(renderer: ReactTestRenderer.ReactTestRenderer): string[] {
 
 beforeEach(() => {
   Platform.OS = realOs;
-  __resetTimePickerMock();
 });
 
 afterEach(() => {
@@ -141,138 +119,187 @@ describe('TimeField', () => {
     expect(texts(renderer)).toContain('Pick a check-in time');
   });
 
-  it('ANDROID: a press opens the imperative dialog anchored at the value', () => {
-    Platform.OS = 'android';
-    const renderer = renderField({
-      label: 'Check-in time',
-      value: '08:57',
-      onChangeValue: jest.fn(),
-    });
-    act(() => {
-      findFieldButton(renderer).props.onPress();
-    });
-    const args = __getLastAndroidOpenArgs() as unknown as {
-      value: Date;
-      mode: string;
-      is24Hour: boolean;
-    };
-    expect(args.mode).toBe('time');
-    expect(args.is24Hour).toBe(true);
-    expect(args.value.getFullYear()).toBe(2000);
-    expect(args.value.getHours()).toBe(8);
-    expect(args.value.getMinutes()).toBe(57);
-  });
+  /** A wheel by its a11y name. */
+  function wheel(renderer: ReactTestRenderer.ReactTestRenderer, label: string) {
+    const found = renderer.root.findAll(
+      node =>
+        node.props.accessibilityRole === 'adjustable' &&
+        node.props.accessibilityLabel === label &&
+        typeof node.props.onAccessibilityAction === 'function',
+    );
+    expect(found.length).toBeGreaterThanOrEqual(1);
+    return found[0];
+  }
 
-  it('ANDROID: an empty value anchors at the placeholder, else 09:00', () => {
-    Platform.OS = 'android';
-    const withPlaceholder = renderField({
-      label: 'Start time',
-      value: '',
-      onChangeValue: jest.fn(),
-      placeholder: '18:00',
-    });
+  function step(
+    renderer: ReactTestRenderer.ReactTestRenderer,
+    label: 'Hour' | 'Minute' | 'AM or PM',
+    action: 'increment' | 'decrement',
+  ) {
     act(() => {
-      findFieldButton(withPlaceholder).props.onPress();
+      wheel(renderer, label).props.onAccessibilityAction({ nativeEvent: { actionName: action } });
     });
-    let args = __getLastAndroidOpenArgs() as unknown as { value: Date };
-    expect(args.value.getHours()).toBe(18);
-    expect(args.value.getMinutes()).toBe(0);
+  }
 
-    const bare = renderField({
-      label: 'Start time',
-      value: '',
-      onChangeValue: jest.fn(),
-    });
-    act(() => {
-      findFieldButton(bare).props.onPress();
-    });
-    args = __getLastAndroidOpenArgs() as unknown as { value: Date };
-    expect(args.value.getHours()).toBe(9);
-    expect(args.value.getMinutes()).toBe(0);
-  });
+  /** What the wheels currently show, e.g. "9:05 am". */
+  function shown(renderer: ReactTestRenderer.ReactTestRenderer): string {
+    const v = (label: string) => wheel(renderer, label).props.accessibilityValue.text;
+    return `${Number(v('Hour'))}:${v('Minute')} ${v('AM or PM')}`;
+  }
 
-  it('ANDROID: the picked Date commits the zero-padded HH:mm via onValueChange', () => {
-    Platform.OS = 'android';
-    const onChangeValue = jest.fn();
-    const renderer = renderField({
-      label: 'Check-in time',
-      value: '',
-      onChangeValue,
-      placeholder: '09:00',
-    });
-    act(() => {
-      findFieldButton(renderer).props.onPress();
-    });
-    const args = __getLastAndroidOpenArgs() as unknown as {
-      onValueChange: (event: unknown, date: Date) => void;
-    };
-    // The REAL v9 imperative shape: the picked Date as the second arg
-    // (20:05 device-local).
-    act(() => {
-      args.onValueChange(
-        { nativeEvent: { timestamp: 0, utcOffset: 0 } },
-        new Date(2026, 8, 29, 20, 5, 0),
-      );
-    });
-    expect(onChangeValue).toHaveBeenCalledTimes(1);
-    expect(onChangeValue).toHaveBeenCalledWith('20:05');
-  });
-
-  it('ANDROID: onDismiss commits nothing', () => {
-    Platform.OS = 'android';
-    const onChangeValue = jest.fn();
-    const renderer = renderField({
-      label: 'Check-in time',
-      value: '08:57',
-      onChangeValue,
-    });
-    act(() => {
-      findFieldButton(renderer).props.onPress();
-    });
-    const args = __getLastAndroidOpenArgs() as unknown as { onDismiss: () => void };
-    expect(typeof args.onDismiss).toBe('function');
-    act(() => {
-      args.onDismiss();
-    });
-    expect(onChangeValue).not.toHaveBeenCalled();
-  });
-
-  it('iOS: the press opens the Sheet; "set" commits live while spinning; Done closes', () => {
-    const onChangeValue = jest.fn();
-    const renderer = renderField({
-      label: 'Check-in time',
-      value: '08:57',
-      onChangeValue,
-    });
-    expect(sheetVisible(renderer)).toBe(false);
-    act(() => {
-      findFieldButton(renderer).props.onPress();
-    });
-    expect(sheetVisible(renderer)).toBe(true);
-
-    const props = __getLastTimePickerProps() as unknown as {
-      onValueChange: (event: unknown, date: Date) => void;
-      value: Date;
-    };
-    expect(props.value.getHours()).toBe(8);
-    act(() => {
-      props.onValueChange(
-        { nativeEvent: { timestamp: 0, utcOffset: 0 } },
-        new Date(2000, 0, 1, 6, 30, 0),
-      );
-    });
-    expect(onChangeValue).toHaveBeenCalledWith('06:30');
-    // The spinner is still up — only Done closes it.
-    expect(sheetVisible(renderer)).toBe(true);
-
-    const done = renderer.root
-      .findAllByType(Button)
-      .find(b => b.props.children === 'Done');
+  function pressDone(renderer: ReactTestRenderer.ReactTestRenderer) {
+    const done = renderer.root.findAllByType(Button).find(b => b.props.children === 'Done');
     expect(done).toBeTruthy();
     act(() => {
       done!.props.onPress();
     });
+  }
+
+  function open(props: React.ComponentProps<typeof TimeField>) {
+    const renderer = renderField(props);
     expect(sheetVisible(renderer)).toBe(false);
+    act(() => {
+      findFieldButton(renderer).props.onPress();
+    });
+    expect(sheetVisible(renderer)).toBe(true);
+    return renderer;
+  }
+
+  const base = { label: 'Start time', onChangeValue: jest.fn() };
+
+  it('opens at the value in 12-hour form; empty → placeholder; no placeholder → 09:00', () => {
+    expect(shown(open({ ...base, value: '08:57' }))).toBe('8:57 AM');
+    expect(shown(open({ ...base, value: '', placeholder: '18:00' }))).toBe('6:00 PM');
+    expect(shown(open({ ...base, value: '' }))).toBe('9:00 AM');
+    // A malformed value is never shown to the owner as the starting time.
+    expect(shown(open({ ...base, value: '9:5' }))).toBe('9:00 AM');
+  });
+
+  it('maps midnight, noon and the last minute of the day correctly', () => {
+    expect(shown(open({ ...base, value: '00:00' }))).toBe('12:00 AM');
+    expect(shown(open({ ...base, value: '12:00' }))).toBe('12:00 PM');
+    expect(shown(open({ ...base, value: '23:59' }))).toBe('11:59 PM');
+  });
+
+  it('Done commits the stepped time as zero-padded 24-hour HH:mm', () => {
+    const onChangeValue = jest.fn();
+    const renderer = open({ ...base, onChangeValue, value: '09:05' });
+    step(renderer, 'Minute', 'increment');
+    step(renderer, 'Minute', 'increment');
+    step(renderer, 'Hour', 'decrement');
+    expect(shown(renderer)).toBe('8:07 AM');
+    expect(onChangeValue).not.toHaveBeenCalled();
+    pressDone(renderer);
+    expect(onChangeValue).toHaveBeenCalledTimes(1);
+    expect(onChangeValue).toHaveBeenCalledWith('08:07');
+    expect(sheetVisible(renderer)).toBe(false);
+  });
+
+  it('pm is 12 hours later and 12 am is hour 00', () => {
+    const toPm = jest.fn();
+    const r1 = open({ ...base, onChangeValue: toPm, value: '09:30' });
+    step(r1, 'AM or PM', 'increment');
+    pressDone(r1);
+    expect(toPm).toHaveBeenCalledWith('21:30');
+
+    const midnight = jest.fn();
+    const r2 = open({ ...base, onChangeValue: midnight, value: '01:15' });
+    step(r2, 'Hour', 'decrement');
+    expect(shown(r2)).toBe('12:15 AM');
+    pressDone(r2);
+    expect(midnight).toHaveBeenCalledWith('00:15');
+
+    const noon = jest.fn();
+    const r3 = open({ ...base, onChangeValue: noon, value: '12:15' });
+    step(r3, 'Hour', 'increment');
+    expect(shown(r3)).toBe('1:15 PM');
+    pressDone(r3);
+    expect(noon).toHaveBeenCalledWith('13:15');
+  });
+
+  it('wraps round: minute 59→00 and 00→59 keep the hour; hour 12→1 and 1→12 keep am/pm', () => {
+    const renderer = open({ ...base, value: '23:59' });
+    step(renderer, 'Minute', 'increment');
+    expect(shown(renderer)).toBe('11:00 PM');
+    step(renderer, 'Minute', 'decrement');
+    expect(shown(renderer)).toBe('11:59 PM');
+    step(renderer, 'Hour', 'increment');
+    expect(shown(renderer)).toBe('12:59 PM');
+    step(renderer, 'Hour', 'increment');
+    expect(shown(renderer)).toBe('1:59 PM');
+    step(renderer, 'Hour', 'decrement');
+    expect(shown(renderer)).toBe('12:59 PM');
+  });
+
+  it('am/pm does not wrap: pm cannot go past pm, am cannot go before am', () => {
+    const renderer = open({ ...base, value: '09:00' });
+    step(renderer, 'AM or PM', 'decrement');
+    expect(shown(renderer)).toBe('9:00 AM');
+    step(renderer, 'AM or PM', 'increment');
+    step(renderer, 'AM or PM', 'increment');
+    expect(shown(renderer)).toBe('9:00 PM');
+  });
+
+  it('a chip sets the wheels but commits nothing until Done; it is marked only while the wheels match', () => {
+    const onChangeValue = jest.fn();
+    const renderer = open({
+      ...base,
+      onChangeValue,
+      value: '08:57',
+      placeholder: '09:00',
+      presets: ['08:30', '09:00', '09:30'],
+    });
+    const chip = (label: string) =>
+      renderer.root.findAll(
+        n => typeof n.props.onPress === 'function' && n.props.accessibilityLabel === label,
+      )[0];
+    // Chips read as plain times; nothing is marked while the wheels are on 08:57.
+    expect(texts(renderer)).toContain('09:00 AM');
+    expect(texts(renderer).join(' ')).not.toContain('Default');
+    expect(chip('Set Start time to 09:30 AM').props.accessibilityState.selected).toBe(false);
+
+    act(() => {
+      chip('Set Start time to 09:30 AM').props.onPress();
+    });
+    expect(shown(renderer)).toBe('9:30 AM');
+    expect(chip('Set Start time to 09:30 AM').props.accessibilityState.selected).toBe(true);
+    expect(onChangeValue).not.toHaveBeenCalled();
+
+    // Nudging the wheels off the chip's time un-marks it.
+    step(renderer, 'Minute', 'increment');
+    expect(chip('Set Start time to 09:30 AM').props.accessibilityState.selected).toBe(false);
+
+    act(() => {
+      chip('Set Start time to 09:00 AM').props.onPress();
+    });
+    pressDone(renderer);
+    expect(onChangeValue).toHaveBeenCalledWith('09:00');
+  });
+
+  it('shows the subtitle under the title', () => {
+    const renderer = open({
+      ...base,
+      value: '09:00',
+      pickerSubtitle: 'Select official clock-in schedule',
+    });
+    expect(texts(renderer)).toContain('Select official clock-in schedule');
+  });
+
+  it('closing without Done commits nothing, and the next open starts from the saved value', () => {
+    const onChangeValue = jest.fn();
+    const renderer = open({ ...base, onChangeValue, value: '08:57' });
+    step(renderer, 'Hour', 'increment');
+    expect(shown(renderer)).toBe('9:57 AM');
+    act(() => {
+      renderer.root.findByType(Modal).props.onRequestClose();
+    });
+    expect(sheetVisible(renderer)).toBe(false);
+    expect(onChangeValue).not.toHaveBeenCalled();
+
+    act(() => {
+      findFieldButton(renderer).props.onPress();
+    });
+    expect(shown(renderer)).toBe('8:57 AM');
   });
 
   it('CLEAR: a filled clearable field offers the action; pressing empties it', () => {

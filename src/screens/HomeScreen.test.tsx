@@ -27,6 +27,14 @@ jest.mock('../features/profile', () => ({
   loadMyProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Today's Pulse has its own request; the hook is mocked so each test picks
+// the posture (loading / error / ready) and can see the `enabled` argument.
+const mockPulse: { value: unknown } = { value: { status: 'error' } };
+const mockUseTodayPulse = jest.fn((_enabled: boolean) => mockPulse.value);
+jest.mock('../features/home/useTodayPulse', () => ({
+  useTodayPulse: (enabled: boolean) => mockUseTodayPulse(enabled),
+}));
+
 jest.mock('../features/notifications', () => ({
   useNotifications: () => ({
     unreadCount: null,
@@ -99,9 +107,10 @@ function texts(root: ReactTestRenderer.ReactTestRenderer['root']): string[] {
 describe('HomeScreen — the Attendance entry tile', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPulse.value = { status: 'error' };
   });
 
-  it('renders the tile when the mirror says enabled, and navigates to the hub', () => {
+  it('falls back to the plain tile when the Pulse request fails, and navigates to the hub', () => {
     mockProfileState.profile = ownerProfile({
       attendanceEnabled: true,
       attendanceAccess: 'none',
@@ -111,7 +120,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
     const root = renderScreen();
 
     expect(texts(root)).toContain('Attendance');
-    expect(texts(root)).toContain("Who's in, leave & monthly review");
+    expect(texts(root)).toContain("Who's in, leave, offices & team");
 
     // The label query alone matches jest's wrapper duplicates (the store
     // mock's known RTR gotcha) — pin the one PRESSABLE via predicate.
@@ -179,5 +188,65 @@ describe('HomeScreen — the Attendance entry tile', () => {
         typeof node.props.onPress === 'function',
     );
     expect(tile).toHaveLength(1);
+  });
+
+  const enabledProfile = () =>
+    ownerProfile({
+      attendanceEnabled: true,
+      attendanceAccess: 'none',
+      attendanceStartDate: null,
+      onboardedAt: null,
+    });
+
+  it('shows Today\'s Pulse (not the plain tile) once the numbers load, and opens the hub', () => {
+    mockProfileState.profile = enabledProfile();
+    mockPulse.value = {
+      status: 'ready',
+      date: '2026-10-24',
+      counts: { tracked: 50, checkedIn: 42, notCheckedIn: 2, shortDay: 0, late: 2, onLeave: 4 },
+    };
+    const root = renderScreen();
+
+    expect(texts(root)).toContain("Today's Pulse");
+    expect(texts(root)).toContain('Saturday, Oct 24');
+    expect(texts(root)).toContain('84%');
+    expect(texts(root)).not.toContain("Who's in, leave, offices & team");
+    const card = root.findAll(
+      (node: ReactTestRenderer.ReactTestInstance) =>
+        String(node.props?.accessibilityLabel ?? '').startsWith("Today's Pulse") &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(card).toHaveLength(1);
+    act(() => {
+      card[0].props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('AttendanceHome');
+  });
+
+  it('shimmers while the Pulse request is in flight — no tile, no numbers', () => {
+    mockProfileState.profile = enabledProfile();
+    mockPulse.value = { status: 'loading' };
+    const root = renderScreen();
+
+    expect(
+      root.findAll(
+        (n: ReactTestRenderer.ReactTestInstance) =>
+          n.props?.accessibilityLabel === "Loading today's attendance",
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(texts(root)).not.toContain("Today's Pulse");
+    expect(texts(root)).not.toContain('Attendance');
+  });
+
+  it('asks for the Pulse only while attendance is enabled', () => {
+    mockProfileState.profile = ownerProfile(undefined);
+    renderScreen();
+    expect(mockUseTodayPulse).toHaveBeenCalledWith(false);
+    expect(mockUseTodayPulse).not.toHaveBeenCalledWith(true);
+
+    mockUseTodayPulse.mockClear();
+    mockProfileState.profile = enabledProfile();
+    renderScreen();
+    expect(mockUseTodayPulse).toHaveBeenCalledWith(true);
   });
 });

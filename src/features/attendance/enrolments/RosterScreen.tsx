@@ -176,7 +176,7 @@ export default function RosterScreen({ navigation, route }: Props) {
       if (cancelledStart == null) return '';
       return `${deleteRow.employeeName} was going to start being tracked from ${formatLongDate(cancelledStart)}. Cancelling this removes the start. You can add it again later.`;
     }
-    return `${deleteRow.employeeName} will not be able to check in for attendance. Any planned change for them is also removed. You can turn it back on later.`;
+    return `${deleteRow.employeeName} will not be able to check in for attendance. Any scheduled office move for them is also cancelled. You can turn it back on later.`;
   })();
 
   return (
@@ -302,6 +302,7 @@ export default function RosterScreen({ navigation, route }: Props) {
         visible={reassignRow !== null}
         employeeName={reassignRow?.employeeName ?? null}
         offices={offices.activeOffices}
+        currentOfficeId={reassignRow?.officeId ?? null}
         defaultEffectiveFrom={
           reassignRow ? reassignSheetDefaults(reassignRow, today).effectiveFrom : today
         }

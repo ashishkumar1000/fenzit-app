@@ -115,7 +115,7 @@ export function WeeklyOffOverridesSection({
         null
       ) : overrides.length === 0 ? (
         <Text style={styles.emptyText}>
-          No employee-wise weekly offs yet. Everyone follows the tenant default
+          No employee-wise weekly offs yet. Everyone follows the default weekly off
           above.
         </Text>
       ) : (

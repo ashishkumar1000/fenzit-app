@@ -1,13 +1,12 @@
 /**
  * OfficesStep — wizard step 1 (Story 15-8). A server-truth SUMMARY of the
  * tenant's live offices; all editing is delegated to the shipped routes
- * ("Manage offices" pushes `AttendanceOffices`, which owns create/edit/
- * archive + their loading/error/save handling — the wizard owns progress
- * only). The tri-state follows the `useOffices` contract: first-load
+ * (a card tap opens the shipped `OfficeForm` to edit — archive lives
+ * there — and "Add office" opens it blank; the wizard owns progress only). The tri-state follows the `useOffices` contract: first-load
  * shimmer, first-load InlineError + Retry, stale banner over live rows.
  */
 import { StyleSheet, Text, View } from 'react-native';
-import { MapPin, Plus } from 'lucide-react-native';
+import { ChevronRight, MapPin, Plus } from 'lucide-react-native';
 import {
   Button,
   Card,
@@ -18,7 +17,7 @@ import {
 import { colors, spacing, typography } from '../../../theme';
 import type { ApiError } from '../../../services';
 import type { Office } from '../../../types/office';
-import { describeOfficeRule } from './wizardModel';
+import { describeOfficeLocation, describeOfficeRule } from './wizardModel';
 
 type Props = {
   /** Live offices only (the model's `liveOffices` filter). */
@@ -27,7 +26,10 @@ type Props = {
   hasLoaded: boolean;
   error: ApiError | null;
   onRetry: () => void;
-  onManageOffices: () => void;
+  /** A card tap — opens the office form in edit mode. */
+  onEditOffice: (officeId: string) => void;
+  /** Opens the office form empty. */
+  onAddOffice: () => void;
 };
 
 export function OfficesStep({
@@ -36,7 +38,8 @@ export function OfficesStep({
   hasLoaded,
   error,
   onRetry,
-  onManageOffices,
+  onEditOffice,
+  onAddOffice,
 }: Props) {
   if (isLoading && !hasLoaded) {
     // First load: a card-shaped shimmer, labelled (the 19-5 idiom).
@@ -64,10 +67,10 @@ export function OfficesStep({
         <EmptyState
           icon={<MapPin size={24} color={colors.primary} strokeWidth={1.5} />}
           title="No offices yet"
-          description="Add your first office — its pin on the map and its working hours are what attendance is checked against."
+          description="Add your first office to set where staff can check in and their shift timings."
           ctaLabel="Add office"
           ctaIcon={<Plus size={16} color={colors.onPrimary} strokeWidth={2} />}
-          onPressCta={onManageOffices}
+          onPressCta={onAddOffice}
         />
       </View>
     );
@@ -75,21 +78,56 @@ export function OfficesStep({
 
   return (
     <View style={styles.stack}>
-      {offices.map((office) => (
-        <Card key={office.id} padding="md">
-          <Text style={styles.officeName} numberOfLines={1}>
-            {office.name}
-          </Text>
-          <Text style={styles.officeRule} numberOfLines={1}>
-            {office.rule ? describeOfficeRule(office.rule) : 'Timings not set'}
-          </Text>
-        </Card>
-      ))}
+      {offices.map((office) => {
+        const location = describeOfficeLocation(office);
+        return (
+          <Card
+            key={office.id}
+            padding="md"
+            interactive
+            onPress={() => onEditOffice(office.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${office.name}`}>
+            <View style={styles.cardRow}>
+              <View style={styles.cardText}>
+                <Text style={styles.officeName} numberOfLines={1}>
+                  {office.name}
+                </Text>
+                <Text style={styles.officeRule} numberOfLines={1}>
+                  {office.rule
+                    ? describeOfficeRule(office.rule)
+                    : 'Timings not set'}
+                </Text>
+                <View style={styles.locationRow}>
+                  <MapPin
+                    size={14}
+                    color={location.set ? colors.success : colors.warning}
+                    strokeWidth={2}
+                  />
+                  <Text
+                    style={[
+                      styles.officeLocation,
+                      !location.set && styles.officeLocationWarn,
+                    ]}
+                    numberOfLines={1}>
+                    {location.label}
+                  </Text>
+                </View>
+              </View>
+              <ChevronRight
+                size={18}
+                color={colors.textMuted}
+                strokeWidth={2}
+              />
+            </View>
+          </Card>
+        );
+      })}
       <Button
         variant="secondary"
         leadingIcon={<Plus size={16} color={colors.primary} strokeWidth={2} />}
-        onPress={onManageOffices}>
-        Manage offices
+        onPress={onAddOffice}>
+        Add office
       </Button>
     </View>
   );
@@ -102,6 +140,14 @@ const styles = StyleSheet.create({
   skeleton: {
     paddingVertical: spacing.s8,
   },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s3,
+  },
+  cardText: {
+    flex: 1,
+  },
   officeName: {
     ...typography.body,
     fontWeight: '600',
@@ -111,5 +157,19 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.textMuted,
     marginTop: spacing.s1,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s1,
+    marginTop: spacing.s2,
+  },
+  officeLocation: {
+    ...typography.bodySm,
+    color: colors.textBody,
+    flexShrink: 1,
+  },
+  officeLocationWarn: {
+    color: colors.warning,
   },
 });

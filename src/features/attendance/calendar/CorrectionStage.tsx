@@ -40,7 +40,7 @@ import type {
   CorrectionWriteBody,
 } from '../../../services/resources/attendanceCorrections';
 import type { DayStatusRow } from '../../../services/resources/attendanceDayStatus';
-import { isValidTime } from '../offices/officeFormModel';
+import { END_TIME_PRESETS, START_TIME_PRESETS, isValidTime } from '../offices/officeFormModel';
 import {
   DAY_STATUS_VISUALS,
   dayFlagVisuals,
@@ -169,6 +169,8 @@ export function CorrectionStage(input: {
             label="Check-in time"
             value={checkin}
             placeholder="09:00"
+            pickerSubtitle="Select the check-in time"
+            presets={START_TIME_PRESETS}
             helper={checkin === '' ? 'Pick a check-in time' : undefined}
             onChangeValue={setCheckin}
             style={styles.timeInput}
@@ -177,6 +179,8 @@ export function CorrectionStage(input: {
             label="Check-out time (optional)"
             value={checkout}
             placeholder="18:00"
+            pickerSubtitle="Select the check-out time"
+            presets={END_TIME_PRESETS}
             error={checkoutError}
             onChangeValue={setCheckout}
             clearable

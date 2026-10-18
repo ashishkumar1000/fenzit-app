@@ -205,7 +205,7 @@ export function EmployeesStep({
       <ConfirmDialog
         visible={disableRow != null}
         title={`Turn off tracking for ${disableRow?.employeeName ?? ''}?`}
-        message={`${disableRow?.employeeName ?? ''} will not be able to check in for attendance. Any planned change for them is also removed. You can turn it back on later.`}
+        message={`${disableRow?.employeeName ?? ''} will not be able to check in for attendance. Any scheduled office move for them is also cancelled. You can turn it back on later.`}
         confirmLabel="Turn off tracking"
         confirmVariant="danger"
         icon={<XCircle size={20} color={colors.danger} strokeWidth={2} />}

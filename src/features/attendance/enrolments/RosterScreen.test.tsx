@@ -616,3 +616,16 @@ describe('reassignment (FR-6)', () => {
     expect(textNodes(screen.root, 'Office: HQ').length).toBe(1);
   });
 });
+
+describe('reassignment — current office (UX finding 20)', () => {
+  it("tells the sheet which office the employee is already in, so it cannot be picked", async () => {
+    const screen = await renderLoaded();
+    const change = pressableWithLabel(screen.root, 'Change office for Ramesh');
+    await act(async () => {
+      change.props.onPress();
+      await flush();
+    });
+    const sheet = screen.root.findByType(ReassignOfficeSheet);
+    expect(sheet.props.currentOfficeId).toBe('o1');
+  });
+});

@@ -2,7 +2,11 @@
  * AttendanceHomeScreen — the owner entry into attendance (Story 15-6,
  * gated by the 15-8 setup wizard).
  *
- * For 15-6 this was a minimal shim: two tiles (Offices + Settings). 15-8
+ * For 15-6 this was a minimal shim: two tiles (Offices + Settings). Finding 9
+ * of the office-setup UX report split the hub into "Every day" (Today,
+ * Monthly, Leave) and "Set up" (Offices, Team attendance, Weekly off,
+ * Holidays) — the old Settings tile hid Team attendance two taps deep; the
+ * `AttendanceSettings` route stays registered as a deep-link shim. 15-8
  * adds the ENTRY GATE: on every focus, an affirmative 200 from
  * `GET /attendance/setup` whose `setupCompletedAt` is still null
  * `replace`s this screen with the wizard (FR-3: the tile opens the wizard,
@@ -20,18 +24,34 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Building2, CalendarDays, CalendarOff, LayoutDashboard, Settings as SettingsIcon } from 'lucide-react-native';
+import { Building2, Calendar, CalendarDays, CalendarOff, LayoutDashboard, Users } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { colors, spacing } from '../../../theme';
 import { attendanceSetupService } from '../../../services';
 import { Tile } from '../../../components/Tile';
+import { Eyebrow, InlineNotice } from '../../../components/ui';
+import { useFlashMessage } from '../../../hooks/useFlashMessage';
 import ScreenHeader from '../offices/ScreenHeader';
 import type { RootStackParamList } from '../../../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AttendanceHome'>;
 
-export default function AttendanceHomeScreen({ navigation }: Props) {
+/** How long the "Attendance is on" confirmation stays — longer than a save flash, it is a milestone. */
+const ENABLED_NOTICE_MS = 5000;
+
+export default function AttendanceHomeScreen({ navigation, route }: Props) {
+  // One-time confirmation after the wizard's "Enable attendance". The param is
+  // cleared straight away so coming back to this screen never repeats it.
+  const enabledNotice = useFlashMessage(ENABLED_NOTICE_MS);
+  const justEnabled = route?.params?.justEnabled === true;
+  useEffect(() => {
+    if (!justEnabled) return;
+    enabledNotice.flash('Attendance is on. Employees you turned on can now check in.');
+    navigation.setParams?.({ justEnabled: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justEnabled]);
+
   // Back that works from anywhere: when this screen is the only route on
   // the stack (a deep link — 15-8's wizard may land here), `goBack` would
   // strand the user — reset to the tabs (the HolidaysScreen pattern).
@@ -87,6 +107,14 @@ export default function AttendanceHomeScreen({ navigation }: Props) {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
+        {enabledNotice.message ? (
+          <InlineNotice
+            tone="success"
+            message={enabledNotice.message}
+            onDismiss={enabledNotice.dismiss}
+          />
+        ) : null}
+        <Eyebrow>Every day</Eyebrow>
         {/* 19-4 D1 — the FR-24 dashboard tile, FIRST (the today snapshot is
             the owner's entry answer, ahead of the setup surfaces below). */}
         <Tile
@@ -115,19 +143,34 @@ export default function AttendanceHomeScreen({ navigation }: Props) {
           subtitle="Pending requests & history"
           onPress={() => navigation.navigate('OwnerLeave')}
         />
+        <Eyebrow style={styles.sectionGap}>Set up</Eyebrow>
         <Tile
           icon={<Building2 size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
           iconBg={colors.status.scheduled.bg}
           title="Offices"
-          subtitle="Locations & timing rules"
+          subtitle="Add offices, set location and timings"
           onPress={() => navigation.navigate('AttendanceOffices')}
         />
         <Tile
-          icon={<SettingsIcon size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
+          icon={<Users size={20} color={colors.primary} strokeWidth={1.5} />}
+          iconBg={colors.surfacePage}
+          title="Team attendance"
+          subtitle="Choose each person's office and start date"
+          onPress={() => navigation.navigate('AttendanceEnrolments')}
+        />
+        <Tile
+          icon={<CalendarDays size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
+          iconBg={colors.status.scheduled.bg}
+          title="Weekly off"
+          subtitle="Same for everyone, or set per employee"
+          onPress={() => navigation.navigate('AttendanceWeeklyOff')}
+        />
+        <Tile
+          icon={<Calendar size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
           iconBg={colors.status.progress.bg}
-          title="Settings"
-          subtitle="Weekly off & holidays"
-          onPress={() => navigation.navigate('AttendanceSettings')}
+          title="Holidays"
+          subtitle="Company holiday list"
+          onPress={() => navigation.navigate('AttendanceHolidays')}
         />
       </ScrollView>
     </SafeAreaView>
@@ -142,5 +185,8 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.s4,
     gap: spacing.s3,
+  },
+  sectionGap: {
+    marginTop: spacing.s3,
   },
 });

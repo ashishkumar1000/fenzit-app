@@ -10,7 +10,7 @@
  * behind it.
  */
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import MapView, { Circle, type LatLng, type Region } from 'react-native-maps';
+import MapView, { Circle, type Details, type LatLng, type Region } from 'react-native-maps';
 import { Crosshair, MapPin, Search } from 'lucide-react-native';
 import { Button } from '../../../components/ui';
 import PickerCentrePin from './PickerCentrePin';
@@ -37,8 +37,10 @@ type Props = {
    *  locate pill hides and the chip dot turns amber. The same flag
    *  the bottom card receives. */
   servicesOff: boolean;
+  /** The pin is already placed — the centre chip reads "Drag map to move pin". */
+  pinPlaced?: boolean;
   onRegionChange: (region: Region) => void;
-  onRegionChangeComplete: (region: Region) => void;
+  onRegionChangeComplete: (region: Region, details?: Details) => void;
   onMapLoaded: () => void;
   /** Re-mounts the map after the "Map unavailable" fallback — a slow map
    *  gets a second load deadline instead of a terminal fallback. */
@@ -55,6 +57,7 @@ export default function PickerMapArea({
   mapFailed,
   locating,
   servicesOff,
+  pinPlaced = false,
   onRegionChange,
   onRegionChangeComplete,
   onMapLoaded,
@@ -83,6 +86,9 @@ export default function PickerMapArea({
           ref={mapRef}
           style={styles.map}
           provider="google"
+          // Dragging a map is not possible with a screen reader — point to
+          // the controls that set the pin without it.
+          accessibilityLabel="Map. To set the pin, use search or current location."
           customMapStyle={LIGHT_MAP_STYLE}
           initialRegion={{ ...pin, latitudeDelta: 0.01, longitudeDelta: 0.01 }}
           onRegionChange={onRegionChange}
@@ -101,7 +107,7 @@ export default function PickerMapArea({
         </MapView>
       )}
 
-      <PickerCentrePin servicesOff={servicesOff} isPanning={isPanning} mapFailed={mapFailed} />
+      <PickerCentrePin servicesOff={servicesOff} hasPin={pinPlaced} isPanning={isPanning} mapFailed={mapFailed} />
 
       {/* Floating controls: search bar on top, locate-me pill bottom-right. */}
       <View style={styles.searchWrap}>

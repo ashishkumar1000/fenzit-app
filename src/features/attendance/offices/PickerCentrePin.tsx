@@ -14,6 +14,8 @@ import { colors, radius, spacing, typography } from '../../../theme';
 
 type Props = {
   servicesOff: boolean;
+  /** A pin is already set (saved office, device fix or a moved map) — the chip says "move", not "set". */
+  hasPin?: boolean;
   isPanning: boolean;
   mapFailed: boolean;
 };
@@ -24,7 +26,7 @@ type Props = {
  * not a loop (the puck ripple already runs one), and skipped entirely when
  * the OS reduce-motion setting is on.
  */
-function StateChip({ servicesOff }: { servicesOff: boolean }) {
+function StateChip({ servicesOff, hasPin }: { servicesOff: boolean; hasPin: boolean }) {
   const bounce = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let cancelled = false;
@@ -62,13 +64,13 @@ function StateChip({ servicesOff }: { servicesOff: boolean }) {
       }}>
       <View style={styles.mapChip}>
         <View style={servicesOff ? styles.mapChipDotOff : styles.mapChipDot} />
-        <Text style={styles.mapChipText}>Drag map to set pin</Text>
+        <Text style={styles.mapChipText}>{hasPin ? 'Drag map to move pin' : 'Drag map to set pin'}</Text>
       </View>
     </Animated.View>
   );
 }
 
-export default function PickerCentrePin({ servicesOff, isPanning, mapFailed }: Props) {
+export default function PickerCentrePin({ servicesOff, hasPin = false, isPanning, mapFailed }: Props) {
   // Beacon/ripple on the pin dot: a ring expanding + fading behind the dot
   // — the "this spot is live" radar read. Looping for the lifetime of the
   // overlay (stops on unmount); with the OS reduce-motion setting on, the
@@ -130,7 +132,7 @@ export default function PickerCentrePin({ servicesOff, isPanning, mapFailed }: P
       {!isPanning && !mapFailed ? (
         <View style={styles.centreLayer}>
           {/* Keyed so the settle-bounce replays when the state flips. */}
-          <StateChip key={servicesOff ? 'off' : 'on'} servicesOff={servicesOff} />
+          <StateChip key={servicesOff ? 'off' : 'on'} servicesOff={servicesOff} hasPin={hasPin} />
         </View>
       ) : null}
     </View>

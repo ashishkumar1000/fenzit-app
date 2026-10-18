@@ -41,7 +41,7 @@ type Props = {
  *  announces itself where its rows are on screen. */
 const STEP_SURFACES: Record<SetupStep, Array<'offices' | 'weeklyOff' | 'holidays' | 'roster'>> = {
   offices: ['offices'],
-  timings: ['offices'],
+  timings: ['offices'], // legacy marker, shows the offices step
   weekly_off: ['weeklyOff'],
   holidays: ['holidays'],
   employees: ['offices', 'roster'],

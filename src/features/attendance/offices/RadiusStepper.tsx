@@ -1,6 +1,6 @@
 /**
  * RadiusStepper — the geofence radius control (Story 15-4). Stepper −/+
- * in 50 m steps plus quick preset chips (100/200/500 m), clamped to the
+ * in 1 m steps plus quick preset chips (100/150/200/250 m), clamped to the
  * DB range 50–1000 (15-3 CHECKs) so a 422 can never happen in practice.
  * The value is announced to screen readers on every change ("Radius,
  * 100 metres") and the circle redraws live — no preview step (UX-DR3).
@@ -11,8 +11,8 @@ import { colors, radius, spacing, typography } from '../../../theme';
 
 export const RADIUS_MIN_M = 50;
 export const RADIUS_MAX_M = 1000;
-const STEP_M = 50;
-const PRESETS_M = [100, 200, 500] as const;
+const STEP_M = 1;
+const PRESETS_M = [100, 150, 200, 250] as const;
 
 type Props = {
   radiusM: number;

@@ -24,8 +24,8 @@ type Props = {
   total: number;
   title: string;
   description: string;
-  /** The back control's accessible name — "Previous step" on steps 2+,
-   *  an exit label on step 1 (the two behaviors differ). */
+  /** The back control's accessible name — "Back" on every step
+   *  (on step 1 it leaves the wizard, on later steps it goes back one step). */
   backLabel: string;
   onBack: () => void;
   /** Retry banners etc., rendered between the indicator and the body. */

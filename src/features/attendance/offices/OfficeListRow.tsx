@@ -1,8 +1,9 @@
 /**
- * OfficeListRow — one office in the Offices list (Story 15-4, reshaped to
- * the user-approved sample design 2026-09-28): identity header (icon tile,
- * name + status pill, chevron) over a hairline-separated facts row
- * (check-in distance · shift hours).
+ * OfficeListRow — one office in the Offices list. Identity header (icon tile,
+ * name + status pill, chevron, the shift hours ONCE underneath, then the pin's
+ * address when one was saved) over a single
+ * stats panel of four columns (check-in distance · late cut-off · full day ·
+ * half day), then the rule's valid-from date as a quiet footer line.
  *
  * Archived rows render read-only (muted, no press, neutral pill) — they are
  * grouped behind the screen's "Archived" disclosure/tab and can never be
@@ -10,10 +11,12 @@
  * never unarchive).
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Building2, ChevronRight, Clock, LocateFixed } from 'lucide-react-native';
+import { Building2, CalendarDays, ChevronRight, Clock } from 'lucide-react-native';
 import { Badge, Card } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { formatLongDate } from '../../../utils';
+import AddressMapBackdrop from './AddressMapBackdrop';
+import OfficeCardBackdrop from './OfficeCardBackdrop';
 import type { Office } from '../../../types/office';
 
 type Props = {
@@ -28,34 +31,58 @@ export function officeTimingSummary(office: Office): string {
   return `${office.rule.startTime} – ${office.rule.endTime}`;
 }
 
-/** "Full day 8 hrs · Half day 4 hrs" — JS number formatting already drops a trailing .0. */
-export function officeHoursSummary(office: Office): string | null {
-  if (!office.rule) return null;
-  return `Full day ${office.rule.fullDayHours} hrs · Half day ${office.rule.halfDayHours} hrs`;
+/**
+ * The address as the card shows it: the place without the country and the
+ * "State 560066" tail ("Mana Placido Apartments, Pattandur Agrahara,
+ * Whitefield, Bengaluru"), so it fits two lines. The full text stays on the
+ * edit screen and in the card's spoken label. Falls back to the whole address
+ * when trimming would leave nothing.
+ */
+export function officeCardAddress(address: string): string {
+  const parts = address.split(',').map(part => part.trim()).filter(Boolean);
+  if (parts.length > 2 && /^(india)$/i.test(parts[parts.length - 1])) parts.pop();
+  if (parts.length > 2 && /\d{5,6}$/.test(parts[parts.length - 1])) parts.pop();
+  return parts.join(', ') || address;
 }
 
-/** "12.938° N, 77.690° E" — 3 decimals, hemisphere suffixes. */
-export function officeCoordinates(office: Office): string {
-  const lat = `${Math.abs(office.latitude).toFixed(3)}° ${office.latitude >= 0 ? 'N' : 'S'}`;
-  const lng = `${Math.abs(office.longitude).toFixed(3)}° ${office.longitude >= 0 ? 'E' : 'W'}`;
-  return `${lat}, ${lng}`;
+type StatProps = { label: string; value: string; tone?: 'late'; muted: boolean };
+
+function Stat({ label, value, tone, muted }: StatProps) {
+  return (
+    <View style={styles.stat}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.statValue,
+          tone === 'late' && !muted && styles.statValueLate,
+          muted && styles.textArchived,
+        ]}
+        numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
 }
 
 export default function OfficeListRow({ office, onPress }: Props) {
   const archived = office.archivedAt !== null;
-  const hours = officeHoursSummary(office);
+  const rule = office.rule;
+  const footerText = archived
+    ? `Archived ${formatLongDate((office.archivedAt ?? '').slice(0, 10))}`
+    : rule?.validFrom
+      ? `Valid from ${formatLongDate(rule.validFrom)}`
+      : null;
+  const address = office.formattedAddress?.trim() || null;
   return (
     <Card padding="none" style={archived ? styles.cardArchived : undefined}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Office ${office.name}`}
+        accessibilityLabel={`Office ${office.name}${address ? `, ${address}` : ''}`}
         accessibilityState={archived ? { disabled: true } : undefined}
         onPress={onPress}
         disabled={archived}
-        style={({ pressed }) => [
-          styles.row,
-          pressed && !archived && styles.rowPressed,
-        ]}>
+        style={({ pressed }) => [styles.row, pressed && !archived && styles.rowPressed]}>
+        {archived ? null : <OfficeCardBackdrop />}
         <View style={styles.header}>
           <View style={styles.iconTile}>
             <Building2 size={20} color={colors.primary} strokeWidth={1.8} />
@@ -69,63 +96,49 @@ export default function OfficeListRow({ office, onPress }: Props) {
                 {archived ? 'Archived' : 'Active'}
               </Badge>
             </View>
-            {/* Plain-English location line (offices carry no free-text
-                address): the timing summary, or the check-in distance when
-                no timing is set. Raw coordinates never render on the row. */}
-            <Text style={[styles.coords, archived && styles.textArchived]} numberOfLines={1}>
-              {office.rule
-                ? officeTimingSummary(office)
-                : `Check-in within ${office.radiusM} m`}
-            </Text>
+            <View style={styles.timeRow}>
+              <Clock size={13} color={colors.textMuted} strokeWidth={2} />
+              <Text style={styles.time} numberOfLines={1}>
+                {officeTimingSummary(office)}
+              </Text>
+            </View>
           </View>
-          {archived ? null : (
-            <ChevronRight size={16} color={colors.textMuted} strokeWidth={2} />
-          )}
+          {archived ? null : <ChevronRight size={16} color={colors.textMuted} strokeWidth={2} />}
         </View>
 
-        <View style={styles.facts}>
-          <View style={styles.fact}>
-            <LocateFixed size={14} color={colors.primary} strokeWidth={2} />
-            <Text style={[styles.factStrong, archived && styles.textArchived]}>
-              Check-in within {office.radiusM} m
+        {address ? (
+          <View style={styles.addressRow}>
+            <AddressMapBackdrop />
+            <Text style={[styles.address, archived && styles.textArchived]} numberOfLines={2}>
+              {officeCardAddress(address)}
             </Text>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.fact}>
-            <Clock size={14} color={colors.textStrong} strokeWidth={2} />
-            <Text style={[styles.factStrong, archived && styles.textArchived]} numberOfLines={1}>
-              {officeTimingSummary(office)}
-            </Text>
-          </View>
-          {office.rule ? (
+        ) : null}
+
+        <View style={styles.stats}>
+          <Stat label="Check-in" value={`${office.radiusM} m`} muted={archived} />
+          {rule ? (
             <>
               <View style={styles.divider} />
-              <View style={styles.cutoffChip}>
-                <Text style={styles.cutoffText}>
-                  Late after {office.rule.lateCutoffMinutes} min
-                </Text>
-              </View>
+              <Stat
+                label="Late after"
+                value={`${rule.lateCutoffMinutes} min`}
+                tone="late"
+                muted={archived}
+              />
+              <View style={styles.divider} />
+              <Stat label="Full day" value={`${rule.fullDayHours} hrs`} muted={archived} />
+              <View style={styles.divider} />
+              <Stat label="Half day" value={`${rule.halfDayHours} hrs`} muted={archived} />
             </>
           ) : null}
         </View>
 
-        {office.rule ? (
-          <View style={styles.extraRow}>
-            <View style={styles.hoursChip}>
-              <Text style={styles.hoursText}>{hours}</Text>
-            </View>
+        {footerText ? (
+          <View style={styles.footer}>
+            <CalendarDays size={13} color={colors.textMuted} strokeWidth={2} />
+            <Text style={styles.footerText}>{footerText}</Text>
           </View>
-        ) : null}
-
-        {office.rule ? (
-          <Text style={[styles.validFrom, archived && styles.textArchived]}>
-            Valid from {formatLongDate(office.rule.validFrom)}
-          </Text>
-        ) : null}
-        {archived ? (
-          <Text style={styles.validFrom}>
-            Archived {formatLongDate((office.archivedAt ?? '').slice(0, 10))}
-          </Text>
         ) : null}
       </Pressable>
     </Card>
@@ -150,8 +163,8 @@ const styles = StyleSheet.create({
     gap: spacing.s3,
   },
   iconTile: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: radius.md,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
@@ -160,7 +173,7 @@ const styles = StyleSheet.create({
   texts: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: spacing.s1,
   },
   nameRow: {
     flexDirection: 'row',
@@ -169,66 +182,70 @@ const styles = StyleSheet.create({
   },
   name: {
     ...typography.heading,
+    flexShrink: 1,
     color: colors.textStrong,
   },
-  coords: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  facts: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: spacing.s2,
-    backgroundColor: colors.surfacePage,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.s3,
-    paddingVertical: spacing.s2,
-  },
-  fact: {
+  timeRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.s1,
-    flexShrink: 1,
   },
-  factStrong: {
+  time: {
     ...typography.bodySm,
-    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  // The pin's address: its own full-width line under the header, on a soft
+  // blue street-map chip.
+  addressRow: {
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingLeft: spacing.s3,
+    paddingRight: spacing.s3,
+    paddingVertical: spacing.s2,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    overflow: 'hidden',
+  },
+  address: {
+    ...typography.bodySm,
     color: colors.textStrong,
+  },
+  stats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfacePage,
+    borderRadius: radius.md,
+    paddingVertical: spacing.s3,
+    paddingHorizontal: spacing.s2,
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: spacing.s1,
+  },
+  statLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  statValue: {
+    ...typography.labelStrong,
+    color: colors.textStrong,
+  },
+  statValueLate: {
+    color: colors.status.scheduled.fg,
   },
   divider: {
     width: 1,
-    height: 14,
+    alignSelf: 'stretch',
     backgroundColor: colors.borderDefault,
   },
-  cutoffChip: {
-    backgroundColor: colors.status.scheduled.bg,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.s2,
-    paddingVertical: 2,
-  },
-  cutoffText: {
-    ...typography.caption,
-    fontWeight: '600',
-    color: colors.status.scheduled.solid,
-  },
-  extraRow: {
+  footer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.s1,
   },
-  hoursChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: colors.surfaceSunken,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.s2,
-    paddingVertical: 2,
-  },
-  hoursText: {
-    ...typography.caption,
-    fontWeight: '600',
-    color: colors.textStrong,
-  },
-  validFrom: {
+  footerText: {
     ...typography.caption,
     color: colors.textMuted,
   },

@@ -30,8 +30,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Button,
-  EmptyState,
-  Eyebrow,
   IconButton,
   InlineError,
   InlineNotice,
@@ -42,7 +40,10 @@ import type { Holiday } from '../../../services';
 import { useFlashMessage, useIstToday } from '../../../hooks';
 import ScreenHeader from '../offices/ScreenHeader';
 import HolidayRow from './HolidayRow';
+import HolidayHeroCard from './HolidayHeroCard';
+import HolidaySectionHead from './HolidaySectionHead';
 import HolidayFormSheet from './HolidayFormSheet';
+import HolidaysEmptyState from './HolidaysEmptyState';
 import { useHolidays } from './useHolidays';
 import type { RootStackParamList } from '../../../navigation/types';
 
@@ -122,7 +123,7 @@ export default function HolidaysScreen({ navigation }: Props) {
   }, [holidays, today]);
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <ScreenHeader title="Holidays" onBack={goBackSafely} />
 
       <View style={styles.body}>
@@ -160,18 +161,7 @@ export default function HolidaysScreen({ navigation }: Props) {
             </Button>
           </View>
         ) : holidays.length === 0 ? (
-          <View style={styles.empty}>
-            <EmptyState
-              icon={<Plus size={24} color={colors.primary} strokeWidth={1.5} />}
-              title="No holidays yet"
-              description="Add company holidays so attendance marks these days off for everyone."
-              ctaLabel="Add holiday"
-              ctaIcon={
-                <Plus size={16} color={colors.onPrimary} strokeWidth={2} />
-              }
-              onPressCta={() => setOpenSheet({ kind: 'add' })}
-            />
-          </View>
+          <HolidaysEmptyState onAdd={() => setOpenSheet({ kind: 'add' })} />
         ) : (
           <ScrollView
             contentContainerStyle={styles.content}
@@ -181,7 +171,8 @@ export default function HolidaysScreen({ navigation }: Props) {
             }>
             {upcoming.length > 0 ? (
               <>
-                <Eyebrow style={styles.sectionSpacing}>Upcoming</Eyebrow>
+                <HolidayHeroCard holiday={upcoming[0]} today={today} />
+                <HolidaySectionHead label="Upcoming holidays" count={upcoming.length} />
                 {upcoming.map((h) => (
                   <HolidayRow
                     key={h.id}
@@ -195,7 +186,7 @@ export default function HolidaysScreen({ navigation }: Props) {
 
             {past.length > 0 ? (
               <>
-                <Eyebrow style={styles.sectionSpacing}>Past</Eyebrow>
+                <HolidaySectionHead label="Past holidays" count={past.length} />
                 {past.map((h) => (
                   <HolidayRow
                     key={h.id}
@@ -268,9 +259,6 @@ const styles = StyleSheet.create({
   skeleton: {
     padding: spacing.s4,
   },
-  empty: {
-    flex: 1,
-  },
   content: {
     padding: spacing.s4,
     gap: spacing.s3,
@@ -280,9 +268,6 @@ const styles = StyleSheet.create({
   },
   // The DS `Eyebrow` owns the type and the caps; this only positions it
   // (the same breathing room the hand-rolled label used to carry).
-  sectionSpacing: {
-    marginTop: spacing.s2,
-  },
   fab: {
     position: 'absolute',
     right: spacing.s5,

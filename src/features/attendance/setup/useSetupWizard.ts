@@ -31,7 +31,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { attendanceSetupService } from '../../../services';
 import type { ApiError, SetupStep } from '../../../services';
-import { SETUP_STEPS, nextStep, previousStep } from './wizardModel';
+import { nextStep, previousStep, resumeStep } from './wizardModel';
 
 /** Why the wizard left for AttendanceHome. `completed` — the owner's own
  *  "Enable attendance" succeeded; `completed-elsewhere` — setup was
@@ -105,14 +105,11 @@ export function useSetupWizard(
         state = await attendanceSetupService.startSetup();
         if (seq !== bootSeqRef.current) return;
       }
-      // Consume-seam guard: the resource layer normalizes nullish, but a
-      // garbage/unknown step VALUE from the wire must never enter the step
-      // machine (stepIndex would be −1, "Step 0 of 5") — fall back to the
-      // first step. Unreachable via the shipped DB CHECK; cheap insurance.
-      const resumed = state.currentStep;
-      setCurrentStep(
-        resumed !== null && SETUP_STEPS.includes(resumed) ? resumed : 'offices',
-      );
+      // Consume-seam guard: a garbage/unknown step VALUE from the wire must
+      // never enter the step machine (stepIndex would be −1, "Step 0 of 4"),
+      // and the retired 'timings' marker lands on the merged offices step —
+      // `resumeStep` handles both.
+      setCurrentStep(resumeStep(state.currentStep));
     } catch (err) {
       if (seq !== bootSeqRef.current) return;
       const apiError = err as ApiError;

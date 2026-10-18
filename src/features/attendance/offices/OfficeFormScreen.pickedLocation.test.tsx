@@ -29,7 +29,13 @@ const PICKED = {
 };
 
 function renderForm(params?: Record<string, unknown>) {
-  const navigation = { navigate: jest.fn(), goBack: jest.fn(), popTo: jest.fn() };
+  const navigation = {
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+    popTo: jest.fn(),
+    dispatch: jest.fn(),
+    addListener: jest.fn(() => () => {}),
+  };
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = create(
@@ -43,7 +49,7 @@ function renderForm(params?: Record<string, unknown>) {
 }
 
 /**
- * The form renders coordinates with 5 decimals, comma-separated. RN mirrors
+ * The form renders coordinates as 4 decimals with hemisphere letters. RN mirrors
  * nodes onto host wrappers in this tree (the React 19 duplicate-fiber quirk
  * noted in AddressPickerSheet.test.tsx), so presence is asserted as "> 0",
  * never an exact doubled count.
@@ -56,8 +62,8 @@ describe('OfficeFormScreen pickedLocation handoff', () => {
   it('applies the picked pin — coordinates render, the placeholder is gone', () => {
     const { root } = renderForm({ pickedLocation: PICKED });
 
-    expect(hasText(root, '19.13640, 72.82960')).toBe(true);
-    expect(hasText(root, 'No pin placed yet')).toBe(false);
+    expect(hasText(root, '19.1364° N, 72.8296° E')).toBe(true);
+    expect(hasText(root, 'No location selected')).toBe(false);
   });
 
   it('shows the GPS Verified chip only when the pin is the device fix', () => {
@@ -70,10 +76,48 @@ describe('OfficeFormScreen pickedLocation handoff', () => {
     expect(hasText(unverified.root, 'GPS Verified')).toBe(false);
   });
 
-  it('still shows the "No pin placed yet" placeholder without route params', () => {
+  it('still shows the "No location selected" placeholder without route params', () => {
     const { root } = renderForm({});
 
-    expect(hasText(root, '19.13640, 72.82960')).toBe(false);
-    expect(hasText(root, 'No pin placed yet')).toBe(true);
+    expect(hasText(root, '19.1364° N, 72.8296° E')).toBe(false);
+    expect(hasText(root, 'No location selected')).toBe(true);
+  });
+});
+
+describe('OfficeFormScreen discard-changes prompt (UX finding 16)', () => {
+  function renderWithGuard() {
+    const view = renderForm({});
+    const listener = (view.navigation.addListener.mock.calls as unknown as [string, (e: unknown) => void][])
+      .filter(([event]) => event === 'beforeRemove')
+      .at(-1)![1];
+    const leave = () => {
+      const e = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+      act(() => listener(e));
+      return e;
+    };
+    const dialog = () =>
+      view.root.findAll((n) => n.props?.title === 'Discard changes?' && 'visible' in n.props);
+    return { ...view, leave, dialog };
+  }
+
+  it('lets a pristine Add form close without asking', () => {
+    const { leave, dialog } = renderWithGuard();
+    expect(leave().preventDefault).not.toHaveBeenCalled();
+    expect(dialog().every((d) => d.props.visible === false)).toBe(true);
+  });
+
+  it('asks before closing once a name has been typed', () => {
+    const { root, navigation } = renderForm({});
+    const nameInput = root.findAll((n) => n.props?.label === 'Office name' && n.props.onChangeText)[0];
+    act(() => nameInput.props.onChangeText('HQ'));
+    const listener = (navigation.addListener.mock.calls as unknown as [string, (e: unknown) => void][])
+      .filter(([event]) => event === 'beforeRemove')
+      .at(-1)![1];
+    const e = { preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } };
+    act(() => listener(e));
+    expect(e.preventDefault).toHaveBeenCalled();
+    const dialog = root.findAll((n) => n.props?.title === 'Discard changes?' && 'visible' in n.props);
+    expect(dialog.some((d) => d.props.visible === true)).toBe(true);
+    expect(navigation.dispatch).not.toHaveBeenCalled();
   });
 });

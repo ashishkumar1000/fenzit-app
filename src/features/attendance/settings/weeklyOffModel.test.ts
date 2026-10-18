@@ -22,6 +22,7 @@ import {
   isWeeklyOffSaveDisabled,
   SUNDAY,
   viewDays,
+  weeklyOffSaveHint,
 } from './weeklyOffModel';
 
 describe('describeDays', () => {
@@ -232,5 +233,45 @@ describe('isOverrideSaveDisabled — the 15-8 add-mode fix', () => {
   it('BOTH modes: a save already in flight blocks', () => {
     expect(add({ isSaving: true })).toBe(true);
     expect(add({ isEdit: true, dirty: true, isSaving: true })).toBe(true);
+  });
+});
+
+describe('weeklyOffSaveHint — why Save is greyed out (UX finding 18)', () => {
+  const base = { saveDisabled: true, isSaving: false, workingDays: [1, 2, 3] as IsoWeekday[], dateValid: true };
+
+  it('is null when Save is enabled', () => {
+    expect(weeklyOffSaveHint({ ...base, saveDisabled: false })).toBeNull();
+  });
+
+  it('is null while saving, even if Save is disabled', () => {
+    expect(weeklyOffSaveHint({ ...base, isSaving: true })).toBeNull();
+  });
+
+  it('asks for an employee first, before any other reason', () => {
+    expect(
+      weeklyOffSaveHint({ ...base, needsEmployee: true, dateValid: false }),
+    ).toBe('Choose an employee to save.');
+  });
+
+  it('stays silent when a full week off is the reason (its own notice explains it)', () => {
+    expect(weeklyOffSaveHint({ ...base, workingDays: [1, 2, 3, 4, 5, 6, 7] })).toBeNull();
+  });
+
+  it('names a bad date', () => {
+    expect(weeklyOffSaveHint({ ...base, dateValid: false })).toBe('Pick a valid start date to save.');
+  });
+
+  it('on Add, tells the owner to change the days', () => {
+    expect(weeklyOffSaveHint({ ...base, isAdd: true })).toBe('Change the days off to enable Save.');
+  });
+
+  it('on Edit, says a day or the date must change', () => {
+    expect(weeklyOffSaveHint({ ...base })).toBe('Change a day or the start date to enable Save.');
+  });
+
+  it('never returns a hint for an enabled button, whatever the other inputs', () => {
+    expect(
+      weeklyOffSaveHint({ ...base, saveDisabled: false, needsEmployee: true, dateValid: false }),
+    ).toBeNull();
   });
 });

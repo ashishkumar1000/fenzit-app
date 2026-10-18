@@ -1,11 +1,12 @@
 /**
  * Direct unit tests for the 15-8 setup wizard's pure model:
- *  - SETUP_STEPS mirrors 15-2's DB CHECK vocabulary in UX-DR6 order (a
+ *  - SETUP_STEPS is the four-step walk in UX-DR6 order (the old "timings"
+ *    step was folded into offices — resumeStep maps its saved marker; a
  *    resumed server `currentStep` is an index into THIS list — reordering
  *    shipped wizards would corrupt every in-flight resume).
  *  - stepIndex/stepNumber/next/previous edges.
- *  - continueGateReason per step: offices needs a live office; timings
- *    needs every live office ruled; weekly_off needs a saved canonical
+ *  - continueGateReason per step: offices needs a live office and every
+ *    live office ruled; weekly_off needs a saved canonical
  *    default — a saved EMPTY set (days: [], the works-all-week rule) is a
  *    real view and COUNTS as saved, only null gates (the screen maps
  *    `defaultView === null` to null); holidays is always continuable (the
@@ -22,9 +23,11 @@ import {
   STEP_TITLES,
   completionGateReason,
   continueGateReason,
+  describeOfficeLocation,
   liveOffices,
   nextStep,
   previousStep,
+  resumeStep,
   stepIndex,
   stepNumber,
 } from './wizardModel';
@@ -72,10 +75,9 @@ function row(overrides: Partial<EnrolmentOverview> = {}): EnrolmentOverview {
 const TODAY = '2026-09-28';
 
 describe('SETUP_STEPS — the walking order', () => {
-  it('mirrors the DB CHECK vocabulary in UX-DR6 order', () => {
+  it('walks four steps in UX-DR6 order — the old "timings" step is folded into offices (finding 12)', () => {
     expect(SETUP_STEPS).toEqual([
       'offices',
-      'timings',
       'weekly_off',
       'holidays',
       'employees',
@@ -93,22 +95,43 @@ describe('stepIndex / stepNumber', () => {
   it('is 0-based in the model and 1-based for the StepIndicator', () => {
     expect(stepIndex('offices')).toBe(0);
     expect(stepNumber('offices')).toBe(1);
-    expect(stepIndex('employees')).toBe(4);
-    expect(stepNumber('employees')).toBe(5);
+    expect(stepIndex('employees')).toBe(3);
+    expect(stepNumber('employees')).toBe(4);
+  });
+
+  it('the retired timings step has no position in the walk', () => {
+    expect(stepIndex('timings')).toBe(-1);
   });
 });
 
 describe('nextStep / previousStep', () => {
   it('walks forward and stops at Employees (Enable owns that step)', () => {
-    expect(nextStep('offices')).toBe('timings');
+    expect(nextStep('offices')).toBe('weekly_off');
     expect(nextStep('holidays')).toBe('employees');
     expect(nextStep('employees')).toBeNull();
   });
 
   it('walks backward and stops at Offices (the marker never does)', () => {
-    expect(previousStep('timings')).toBe('offices');
+    expect(previousStep('weekly_off')).toBe('offices');
     expect(previousStep('employees')).toBe('holidays');
     expect(previousStep('offices')).toBeNull();
+  });
+});
+
+describe('resumeStep — which step a saved server marker shows', () => {
+  it('shows each walking step as saved', () => {
+    for (const step of SETUP_STEPS) {
+      expect(resumeStep(step)).toBe(step);
+    }
+  });
+
+  it('lands the retired "timings" marker on the merged offices step', () => {
+    expect(resumeStep('timings')).toBe('offices');
+  });
+
+  it('falls back to offices for no marker or an unknown value', () => {
+    expect(resumeStep(null)).toBe('offices');
+    expect(resumeStep('bogus' as never)).toBe('offices');
   });
 });
 
@@ -137,20 +160,14 @@ describe('continueGateReason', () => {
     expect(continueGateReason('offices', base)).toBeNull();
   });
 
-  it('timings: zero live offices blocks with the OFFICES caption', () => {
+  it('offices: a live office missing its rule blocks (the merged step also owns the hours)', () => {
     expect(
-      continueGateReason('timings', { ...base, liveOfficeCount: 0 }),
-    ).toBe('Add at least one office to continue.');
-  });
-
-  it('timings: a live office missing its rule blocks', () => {
-    expect(
-      continueGateReason('timings', { ...base, liveOfficesMissingRule: 1 }),
+      continueGateReason('offices', { ...base, liveOfficesMissingRule: 1 }),
     ).toBe('Every office needs its timings set before you continue.');
   });
 
-  it('timings: every live office ruled enables', () => {
-    expect(continueGateReason('timings', base)).toBeNull();
+  it('offices: every live office ruled enables', () => {
+    expect(continueGateReason('offices', base)).toBeNull();
   });
 
   it('weekly_off: no saved default blocks with its caption', () => {
@@ -263,5 +280,30 @@ describe('completionGateReason', () => {
       row({ employeeId: 'e3', attendanceStartDate: '2026-09-15' }),
     ];
     expect(gate([office('o1')], roster)).toBeNull();
+  });
+});
+
+describe('describeOfficeLocation — the office card location line', () => {
+  it('says the pin is set and how wide the zone is', () => {
+    expect(describeOfficeLocation({ latitude: 19.1, longitude: 72.8, radiusM: 150 })).toEqual({
+      set: true,
+      label: 'Pin set \u00B7 150 m radius',
+    });
+  });
+
+  it('treats 0,0 as a real placed coordinate (finite is what counts)', () => {
+    expect(describeOfficeLocation({ latitude: 0, longitude: 0, radiusM: 50 }).set).toBe(true);
+  });
+
+  it.each([
+    [NaN, 72.8],
+    [19.1, NaN],
+    [Infinity, 72.8],
+    [undefined as unknown as number, 72.8],
+  ])('says "No pin set" for unusable coordinates (%p, %p)', (latitude, longitude) => {
+    expect(describeOfficeLocation({ latitude, longitude, radiusM: 100 })).toEqual({
+      set: false,
+      label: 'No pin set',
+    });
   });
 });

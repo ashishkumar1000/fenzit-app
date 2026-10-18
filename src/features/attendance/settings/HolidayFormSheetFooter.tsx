@@ -67,7 +67,12 @@ export default function HolidayFormSheetFooter({
 }
 
 const styles = StyleSheet.create({
+  // Same side gutter as the sheet's content, so the buttons line up with the
+  // fields above them instead of running edge to edge (the Sheet adds the
+  // bottom safe-area inset below this).
   footer: {
     gap: spacing.s3,
+    paddingHorizontal: spacing.s5,
+    paddingTop: spacing.s2,
   },
 });

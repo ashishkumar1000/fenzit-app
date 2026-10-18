@@ -114,6 +114,12 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
             setFocused(false);
             onBlur?.(e);
           }}
+          // The visible label is a separate Text, so a screen reader would
+          // read only the value ("15") with no field name. Name the field by
+          // its label and read the error/helper as its hint; a caller's own
+          // accessibilityLabel (in `rest`) still wins.
+          accessibilityLabel={label || undefined}
+          accessibilityHint={error || helper || undefined}
           style={[styles.input, rest.multiline ? styles.inputMultiline : null]}
           {...rest}
         />

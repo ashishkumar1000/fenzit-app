@@ -119,7 +119,7 @@ export function validateOfficeForm(state: OfficeFormState): OfficeFormErrors {
   if (cutoffRaw === '') {
     errors.lateCutoffMinutes = 'Enter the late cut-off minutes';
   } else if (!Number.isInteger(cutoff) || cutoff < 0 || cutoff > 120) {
-    errors.lateCutoffMinutes = 'Late cut-off must be 0–120 minutes';
+    errors.lateCutoffMinutes = 'Late cut-off must be a whole number from 0 to 120 minutes';
   }
   const full = Number(state.fullDayHours);
   if (!Number.isFinite(full) || full <= 0) {
@@ -128,7 +128,9 @@ export function validateOfficeForm(state: OfficeFormState): OfficeFormErrors {
   const half = Number(state.halfDayHours);
   if (!Number.isFinite(half) || half <= 0) {
     errors.halfDayHours = 'Half-day hours must be greater than 0';
-  } else if (Number.isFinite(full) && full > 0 && half >= full) {
+  } else if (state.fullDayHours.trim() !== '' && Number.isFinite(full) && half >= full) {
+    // Checked even while the full-day value is itself invalid (0), so both
+    // wrong fields show their error at once instead of one after the other.
     errors.halfDayHours = 'Half-day hours must be less than full-day hours';
   }
   return errors;
@@ -165,8 +167,49 @@ export function profileChanged(state: OfficeFormState, detail: OfficeDetail): bo
     state.radiusM !== detail.radiusM
   );
 }
+/**
+ * True when the owner has changed anything since the form opened — against
+ * the loaded office (edit) or the blank defaults (add). Drives the "discard
+ * changes?" prompt. A name that differs only by surrounding spaces is not a
+ * change; a rule-less office compares against the seed defaults the form
+ * shows, so merely opening it is never "dirty".
+ */
+export function isFormDirty(form: OfficeFormState, detail: OfficeDetail | null): boolean {
+  const base = detail ? formFromDetail(detail) : emptyOfficeForm();
+  return (Object.keys(base) as (keyof OfficeFormState)[]).some((key) => {
+    const a = form[key];
+    const b = base[key];
+    return typeof a === 'string' && typeof b === 'string' ? a.trim() !== b.trim() : a !== b;
+  });
+}
+
+/** Server cap on the stored address (display text only). */
+export const OFFICE_ADDRESS_MAX = 500;
+
+/** The address to send: trimmed, capped at the server limit, null when blank. */
+export function cleanAddress(address?: string | null): string | null {
+  const text = address?.trim().slice(0, OFFICE_ADDRESS_MAX).trim();
+  return text ? text : null;
+}
+
+/**
+ * Edit only: the pin's address differs from the saved one (a same-spot
+ * re-pick that found or changed an address). The form fields alone do not
+ * show it, so the unsaved-changes ask must check it too.
+ */
+export function isAddressChanged(
+  detail: OfficeDetail | null,
+  address?: string | null,
+): boolean {
+  return detail !== null && cleanAddress(address) !== cleanAddress(detail.formattedAddress);
+}
+
 /** The validated form's create payload (validation runs before this). */
-export function buildCreateRequest(form: OfficeFormState): CreateOfficeRequest {
+export function buildCreateRequest(
+  form: OfficeFormState,
+  address?: string | null,
+): CreateOfficeRequest {
+  const cleaned = cleanAddress(address);
   return {
     name: form.name.trim(),
     latitude: form.latitude as number,
@@ -177,6 +220,7 @@ export function buildCreateRequest(form: OfficeFormState): CreateOfficeRequest {
     lateCutoffMinutes: Number(form.lateCutoffMinutes),
     fullDayHours: Number(form.fullDayHours),
     halfDayHours: Number(form.halfDayHours),
+    ...(cleaned ? { formattedAddress: cleaned } : {}),
   };
 }
 
@@ -185,17 +229,26 @@ export function buildCreateRequest(form: OfficeFormState): CreateOfficeRequest {
  * unchanged save must not rewrite them), the rules five-field set only when
  * a rule field changed (a partial set is a 400 server-side, and an
  * unchanged save must not seed a redundant effective-dated row).
+ *
+ * `address` is the pin's address shown on the form. It rides with every
+ * profile write (the server clears the stored address whenever a pin arrives
+ * without one, so a rename must resend it) and also triggers a write by
+ * itself when a re-picked pin gained an address the office did not have.
  */
 export function buildUpdatePatch(
   form: OfficeFormState,
   detail: OfficeDetail,
+  address?: string | null,
 ): UpdateOfficeRequest {
   const patch: UpdateOfficeRequest = {};
-  if (profileChanged(form, detail)) {
+  const cleaned = cleanAddress(address);
+  const addressGained = cleaned !== null && cleaned !== cleanAddress(detail.formattedAddress);
+  if (profileChanged(form, detail) || addressGained) {
     patch.name = form.name.trim();
     patch.latitude = form.latitude as number;
     patch.longitude = form.longitude as number;
     patch.radiusM = form.radiusM;
+    if (cleaned) patch.formattedAddress = cleaned;
   }
   if (rulesChanged(form, detail)) {
     patch.startTime = form.startTime;
@@ -206,3 +259,7 @@ export function buildUpdatePatch(
   }
   return patch;
 }
+
+/** Usual shift times offered as chips in the time picker — start / end of day. */
+export const START_TIME_PRESETS = ['08:00', '08:30', '09:00', '09:30', '10:00'] as const;
+export const END_TIME_PRESETS = ['17:00', '17:30', '18:00', '18:30', '19:00'] as const;

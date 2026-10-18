@@ -16,6 +16,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import type { WeeklyOffOverrideResponse } from '../../../services';
+import { formatLongDate } from './weeklyOffModel';
 
 export function useOverrideRemove({
   override,
@@ -42,8 +43,8 @@ export function useOverrideRemove({
   const effective = effectiveFrom || undefined;
   const removeMessage = override
     ? effective
-      ? `${override.employeeName} will follow the tenant default from ${effective}.`
-      : `${override.employeeName} will follow the tenant default from today.`
+      ? `${override.employeeName} will follow the default weekly off from ${formatLongDate(effective)}.`
+      : `${override.employeeName} will follow the default weekly off from today.`
     : '';
 
   const onRemove = useCallback(() => {

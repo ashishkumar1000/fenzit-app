@@ -9,7 +9,8 @@
 import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
+import { spacing } from '../../theme';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { TrueSheet } from '@lodev09/react-native-true-sheet';
 import { Sheet, type SheetProps } from './Sheet';
@@ -112,4 +113,42 @@ it('renders the title and content while closed (stays mounted)', () => {
   expect(texts).toContain('Test sheet');
   expect(texts).toContain('Sub');
   expect(texts).toContain('body');
+});
+
+describe('footer clearance (UX finding 10)', () => {
+  const footerNode = (r: ReactTestRenderer.ReactTestRenderer) =>
+    r.root.findAll((n) => typeof n.props?.onLayout === 'function' && n.props?.style)[0];
+  const paddedBy = (r: ReactTestRenderer.ReactTestRenderer, px: number) =>
+    r.root.findAll(
+      (n) =>
+        (StyleSheet.flatten(n.props?.style) as { paddingBottom?: number } | undefined)?.paddingBottom ===
+        spacing.s4 + px,
+    ).length > 0;
+
+  it('pads the content by the measured footer height so the last field is never covered', () => {
+    const r = renderSheet({ ...baseProps, visible: true, onClose: () => {}, footer: <Text>Save</Text> });
+    act(() => footerNode(r).props.onLayout({ nativeEvent: { layout: { height: 84 } } }));
+    expect(paddedBy(r, 84)).toBe(true);
+  });
+
+  it('releases the clearance when the footer goes away', () => {
+    const r = renderSheet({ ...baseProps, visible: true, onClose: () => {}, footer: <Text>Save</Text> });
+    act(() => footerNode(r).props.onLayout({ nativeEvent: { layout: { height: 84 } } }));
+    act(() => {
+      r.update(safeWrap(<Sheet {...baseProps} visible onClose={() => {}} />));
+    });
+    expect(paddedBy(r, 84)).toBe(false);
+  });
+
+  it('adds no extra padding on a scrollable sheet (it scrolls past the footer itself)', () => {
+    const r = renderSheet({
+      ...baseProps,
+      visible: true,
+      onClose: () => {},
+      scrollable: true,
+      footer: <Text>Save</Text>,
+    });
+    act(() => footerNode(r).props.onLayout({ nativeEvent: { layout: { height: 84 } } }));
+    expect(paddedBy(r, 84)).toBe(false);
+  });
 });

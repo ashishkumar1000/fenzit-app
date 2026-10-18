@@ -3,7 +3,7 @@
  * design 2026-09-28): the segmented All/Active/Archived filter with live
  * counts, the sample card anatomy (icon tile, name + status pill, geofence
  * · hours facts row), the read-only archived rows, and the full-width
- * "Add new office" CTA.
+ * "Add office" CTA.
  *
  * Conventions per the other screen suites: the focus hook runs its callback
  * on mount, services are mocked at the barrel, the root getter is read
@@ -158,25 +158,27 @@ describe('OfficesScreen — the sample redesign', () => {
     expect(pressableWithLabel(screen.root, 'Show archived offices (1)')).toBeTruthy();
   });
 
-  it('cards carry the sample anatomy: pill, check-in · hours · cutoff, plain-English location, valid-from', async () => {
+  it('cards carry the stats-panel anatomy: pill, shift hours once, check-in · late · full/half, valid-from', async () => {
     const screen = await renderLoaded();
     expect(pressableWithLabel(screen.root, 'Office HQ')).toBeTruthy();
     expect(textNodes(screen.root, 'Active').length).toBeGreaterThan(0);
-    // Facts row (JSX interpolation makes these children arrays — flatten).
-    expect(textContaining(screen.root, 'Check-in within 100 m').length).toBe(1);
-    // HQ has a rule: its timing summary is both the location line and the
-    // facts-row fact.
-    expect(textContaining(screen.root, '09:00 – 18:00').length).toBe(2);
-    // The late-cutoff chip (amber, from rule.lateCutoffMinutes). Only HQ's
-    // card is visible here (archived rows hide behind the disclosure).
-    expect(textContaining(screen.root, 'Late after 15 min').length).toBe(1);
-    // The hours chip.
-    expect(textNodes(screen.root, 'Full day 8 hrs · Half day 4 hrs').length).toBe(1);
-    // The location line is plain English — raw coordinates never render.
-    // Branch (no rule) falls back to its check-in distance (location line +
-    // facts row), and keeps the honest timing gap on the facts row.
+    // HQ's shift hours appear ONCE (header only — no duplicate in the stats).
+    expect(textContaining(screen.root, '09:00 – 18:00').length).toBe(1);
+    // Stats panel: label over value. Only HQ's card is visible here
+    // (archived rows hide behind the disclosure).
+    expect(textNodes(screen.root, 'Late after').length).toBe(1);
+    expect(textNodes(screen.root, '15 min').length).toBe(1);
+    expect(textNodes(screen.root, 'Full day').length).toBe(1);
+    expect(textNodes(screen.root, '8 hrs').length).toBe(1);
+    expect(textNodes(screen.root, 'Half day').length).toBe(1);
+    expect(textNodes(screen.root, '4 hrs').length).toBe(1);
+    // Check-in distance: one stat per card, HQ 100 m + Branch 200 m.
+    expect(textNodes(screen.root, 'Check-in').length).toBe(2);
+    expect(textNodes(screen.root, '100 m').length).toBe(1);
+    expect(textNodes(screen.root, '200 m').length).toBe(1);
+    // Raw coordinates never render.
     expect(textContaining(screen.root, '12.970° N, 77.590° E').length).toBe(0);
-    expect(textContaining(screen.root, 'Check-in within 200 m').length).toBe(2);
+    // Branch has no rule: no late/hours stats, no valid-from, honest timing gap.
     expect(textContaining(screen.root, 'Valid from').length).toBe(1);
     expect(textNodes(screen.root, 'Timing not set').length).toBe(1);
   });
@@ -222,7 +224,7 @@ describe('OfficesScreen — the sample redesign', () => {
   it('the Add-new-office CTA opens the empty form', async () => {
     const screen = await renderLoaded();
     await act(async () => {
-      pressableWithLabel(screen.root, 'Add new office').props.onPress();
+      pressableWithLabel(screen.root, 'Add office').props.onPress();
     });
     expect(screen.navigation.navigate).toHaveBeenCalledWith('OfficeForm', {
       officeId: undefined,

@@ -35,7 +35,7 @@ function setupState(overrides: Partial<SetupState> = {}): SetupState {
   };
 }
 
-function renderHome(canGoBack = true) {
+function renderHome(canGoBack = true, params?: { justEnabled?: boolean }) {
   const navigation = {
     navigate: jest.fn(),
     goBack: jest.fn(),
@@ -48,8 +48,9 @@ function renderHome(canGoBack = true) {
     // The 15-8 gate subscribes imperatively; the real navigator always
     // provides addListener and the unsubscribe it returns.
     addListener: jest.fn(() => jest.fn()),
+    setParams: jest.fn(),
   };
-  const route = { params: undefined };
+  const route = { params };
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   act(() => {
     renderer = create(
@@ -102,7 +103,7 @@ function findTile(
 }
 
 describe('AttendanceHomeScreen', () => {
-  it('renders the Today/Monthly/Leave/Offices/Settings tiles', () => {
+  it('renders the every-day and set-up tiles', () => {
     const { renderer } = renderHome();
     const texts = renderer.root
       .findAll(node => typeof node.props.children === 'string')
@@ -114,12 +115,20 @@ describe('AttendanceHomeScreen', () => {
     expect(texts).toContain('Leave');
     expect(texts).toContain('Pending requests & history');
     expect(texts).toContain('Offices');
-    expect(texts).toContain('Locations & timing rules');
-    expect(texts).toContain('Settings');
-    expect(texts).toContain('Weekly off & holidays');
+    expect(texts).toContain('Add offices, set location and timings');
+    expect(texts).toContain('Team attendance');
+    expect(texts).toContain("Choose each person's office and start date");
+    expect(texts).toContain('Weekly off');
+    expect(texts).toContain('Same for everyone, or set per employee');
+    expect(texts).toContain('Holidays');
+    expect(texts).toContain('Company holiday list');
+    // Section labels, and the retired catch-all tile.
+    expect(texts).toContain('Every day');
+    expect(texts).toContain('Set up');
+    expect(texts).not.toContain('Settings');
   });
 
-  it('renders the full tappable inventory: the five tiles (the dev lab row retired with 19-6)', () => {
+  it('renders the full tappable inventory: the seven tiles (the dev lab row retired with 19-6)', () => {
     const { renderer } = renderHome();
     // NO pre-filter: every button-role label on the screen, deduped (RTR
     // mirrors Pressables through host Views, so a raw findAll counts each
@@ -135,11 +144,13 @@ describe('AttendanceHomeScreen', () => {
     );
     expect(labels.sort()).toEqual([
       'Go back',
+      'Holidays',
       'Leave',
       'Monthly',
       'Offices',
-      'Settings',
+      'Team attendance',
       'Today',
+      'Weekly off',
     ]);
   });
 
@@ -186,13 +197,16 @@ describe('AttendanceHomeScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('AttendanceOffices');
   });
 
-  it('tapping "Settings" navigates to AttendanceSettings', () => {
+  it.each([
+    ['Team attendance', 'AttendanceEnrolments'],
+    ['Weekly off', 'AttendanceWeeklyOff'],
+    ['Holidays', 'AttendanceHolidays'],
+  ])('tapping "%s" goes straight to %s (no Settings detour)', (title, route) => {
     const { renderer, navigation } = renderHome();
-    const settingsButton = findTile(renderer, 'Settings');
     act(() => {
-      settingsButton.props.onPress();
+      findTile(renderer, title).props.onPress();
     });
-    expect(navigation.navigate).toHaveBeenCalledWith('AttendanceSettings');
+    expect(navigation.navigate).toHaveBeenCalledWith(route);
   });
 
   it('back goes back when there is a screen beneath (test gap)', () => {
@@ -388,3 +402,49 @@ describe('AttendanceHomeScreen — the 15-8 setup entry gate', () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('AttendanceHomeScreen — "Attendance is on" notice (UX finding 26)', () => {
+  const MESSAGE = 'Attendance is on. Employees you turned on can now check in.';
+  const notices = (r: ReactTestRenderer.ReactTestRenderer) =>
+    r.root.findAll((n) => n.props?.message === MESSAGE);
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    getSetup.mockResolvedValue(setupState({ setupCompletedAt: '2026-10-18T00:00:00Z', enabled: true }));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('shows the success notice when the wizard just finished', () => {
+    const { renderer } = renderHome(true, { justEnabled: true });
+    expect(notices(renderer).length).toBeGreaterThan(0);
+    expect(notices(renderer)[0].props.tone).toBe('success');
+  });
+
+  it('clears the param so a later refocus or rotation does not replay it', () => {
+    const { navigation } = renderHome(true, { justEnabled: true });
+    expect(navigation.setParams).toHaveBeenCalledWith({ justEnabled: undefined });
+  });
+
+  it('shows no notice on an ordinary visit', () => {
+    const { renderer, navigation } = renderHome(true, undefined);
+    expect(notices(renderer)).toHaveLength(0);
+    expect(navigation.setParams).not.toHaveBeenCalled();
+  });
+
+  it('ignores a non-true flag', () => {
+    const { renderer } = renderHome(true, { justEnabled: false });
+    expect(notices(renderer)).toHaveLength(0);
+  });
+
+  it('hides the notice by itself after about five seconds', () => {
+    const { renderer } = renderHome(true, { justEnabled: true });
+    expect(notices(renderer).length).toBeGreaterThan(0);
+    act(() => {
+      jest.advanceTimersByTime(5100);
+    });
+    expect(notices(renderer)).toHaveLength(0);
+  });
+});
+

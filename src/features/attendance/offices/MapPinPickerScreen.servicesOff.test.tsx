@@ -332,11 +332,11 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     expect(hasText(root, GENERIC_FAILED_COPY)).toBe(false);
   });
 
-  it('the map chip says the same thing in both states ("Drag map to set pin") — services off and healthy', async () => {
+  it('the map chip says the same thing in both states ("Drag map to move pin") — services off and healthy', async () => {
     servicesMock.mockResolvedValue(false);
     const { root } = renderPicker();
     await settle();
-    expect(hasText(root, 'Drag map to set pin')).toBe(true);
+    expect(hasText(root, 'Drag map to move pin')).toBe(true);
     expect(hasText(root, 'Exact location')).toBe(false);
 
     servicesMock.mockResolvedValue(true);
@@ -344,7 +344,7 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
       appStateListener!('active');
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
-    expect(hasText(root, 'Drag map to set pin')).toBe(true);
+    expect(hasText(root, 'Drag map to move pin')).toBe(true);
     expect(hasText(root, 'Exact location')).toBe(false);
   });
 
@@ -363,7 +363,7 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     servicesMock.mockResolvedValue(false);
     const { root } = renderPicker();
     await settle();
-    expect(hasText(root, 'Drag map to set pin')).toBe(true);
+    expect(hasText(root, 'Drag map to move pin')).toBe(true);
 
     const map = () =>
       root.findAll(n => typeof n.props?.onRegionChange === 'function')[0];
@@ -371,13 +371,13 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     await act(async () => {
       map().props.onRegionChange(region);
     });
-    expect(hasText(root, 'Drag map to set pin')).toBe(false);
+    expect(hasText(root, 'Drag map to move pin')).toBe(false);
 
     await act(async () => {
       map().props.onRegionChangeComplete(region);
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
-    expect(hasText(root, 'Drag map to set pin')).toBe(true);
+    expect(hasText(root, 'Drag map to move pin')).toBe(true);
   });
 
   it('an EMPTY reverse-geocode address falls back to the raw coordinates, not a blank row', async () => {

@@ -9,9 +9,13 @@
 import {
   buildCreateRequest,
   buildUpdatePatch,
+  cleanAddress,
   emptyOfficeForm,
   formFromDetail,
   hasErrors,
+  isAddressChanged,
+  isFormDirty,
+  OFFICE_ADDRESS_MAX,
   isValidTime,
   profileChanged,
   rulesChanged,
@@ -316,5 +320,200 @@ describe('buildUpdatePatch', () => {
       'radiusM',
       'startTime',
     ]);
+  });
+});
+
+describe('validateOfficeForm — late cut-off and half/full day (UX findings 6, 23)', () => {
+  it.each(['1.5', '-1', '121', 'abc'])('late cut-off "%s" says whole number', (value) => {
+    const errors = validateOfficeForm(form({ lateCutoffMinutes: value }));
+    expect(errors.lateCutoffMinutes).toMatch(/whole number/);
+  });
+
+  it.each(['0', '15', '120'])('late cut-off "%s" is accepted', (value) => {
+    expect(validateOfficeForm(form({ lateCutoffMinutes: value })).lateCutoffMinutes).toBeUndefined();
+  });
+
+  it('shows BOTH errors when full-day is 0 and half-day is larger', () => {
+    const errors = validateOfficeForm(form({ fullDayHours: '0', halfDayHours: '10' }));
+    expect(errors.fullDayHours).toBeDefined();
+    expect(errors.halfDayHours).toMatch(/less than full-day/);
+  });
+
+  it('does not compare half-day against a blank full-day', () => {
+    const errors = validateOfficeForm(form({ fullDayHours: '', halfDayHours: '10' }));
+    expect(errors.fullDayHours).toBeDefined();
+    expect(errors.halfDayHours).toBeUndefined();
+  });
+
+  it('half-day equal to full-day is rejected', () => {
+    const errors = validateOfficeForm(form({ fullDayHours: '8', halfDayHours: '8' }));
+    expect(errors.halfDayHours).toMatch(/less than full-day/);
+  });
+
+  it('half-day just under full-day passes', () => {
+    const errors = validateOfficeForm(form({ fullDayHours: '8', halfDayHours: '7.5' }));
+    expect(errors.halfDayHours).toBeUndefined();
+  });
+});
+
+describe('isFormDirty — drives the discard-changes prompt (UX finding 16)', () => {
+  it('is false for an untouched edit form', () => {
+    const d = detail();
+    expect(isFormDirty(formFromDetail(d), d)).toBe(false);
+  });
+
+  it('is false for an untouched blank Add form', () => {
+    expect(isFormDirty(emptyOfficeForm(), null)).toBe(false);
+  });
+
+  it('is false for a rule-less office opened and left alone', () => {
+    const d = detail({ rules: [] });
+    expect(isFormDirty(formFromDetail(d), d)).toBe(false);
+  });
+
+  it('ignores leading and trailing spaces in text fields', () => {
+    const d = detail();
+    const f = { ...formFromDetail(d), name: `  ${d.name}  ` };
+    expect(isFormDirty(f, d)).toBe(false);
+  });
+
+  it('is true once a name is typed on Add', () => {
+    expect(isFormDirty({ ...emptyOfficeForm(), name: 'HQ' }, null)).toBe(true);
+  });
+
+  it('is true when only whitespace differs in meaning (name emptied on Edit)', () => {
+    const d = detail();
+    expect(isFormDirty({ ...formFromDetail(d), name: '   ' }, d)).toBe(true);
+  });
+
+  it.each([
+    ['radiusM', 250],
+    ['latitude', 12.9],
+    ['longitude', 77.7],
+    ['startTime', '10:00'],
+    ['endTime', '19:00'],
+    ['lateCutoffMinutes', '20'],
+    ['fullDayHours', '9'],
+    ['halfDayHours', '3'],
+  ] as const)('is true when %s changes', (key, value) => {
+    const d = detail();
+    expect(isFormDirty({ ...formFromDetail(d), [key]: value }, d)).toBe(true);
+  });
+
+  it('is false again after a change is reverted', () => {
+    const d = detail();
+    const changed = { ...formFromDetail(d), lateCutoffMinutes: '99' };
+    expect(isFormDirty(changed, d)).toBe(true);
+    expect(isFormDirty({ ...changed, lateCutoffMinutes: String(d.rules[0].lateCutoffMinutes) }, d)).toBe(false);
+  });
+
+  it('is true when a pin is placed on Add', () => {
+    expect(isFormDirty({ ...emptyOfficeForm(), latitude: 1, longitude: 2 }, null)).toBe(true);
+  });
+});
+
+describe('pin address in the requests', () => {
+  const ADDRESS = 'Koramangala, Bengaluru';
+  const saved = detail({ formattedAddress: ADDRESS });
+  const savedForm = formFromDetail(saved);
+
+  it('create sends the address when there is one', () => {
+    expect(buildCreateRequest(form(), ADDRESS).formattedAddress).toBe(ADDRESS);
+  });
+
+  it.each([undefined, null, ''])('create leaves the field out for %p (no key at all)', (address) => {
+    expect('formattedAddress' in buildCreateRequest(form(), address)).toBe(false);
+  });
+
+  it('create without an address argument is the same payload as before', () => {
+    expect(buildCreateRequest(form())).toEqual(buildCreateRequest(form(), null));
+  });
+
+  it('edit with nothing changed sends nothing — even though an address is shown', () => {
+    expect(buildUpdatePatch(savedForm, saved, ADDRESS)).toEqual({});
+  });
+
+  it('renaming resends the pin AND the address (the server clears an address sent without one)', () => {
+    const patch = buildUpdatePatch({ ...savedForm, name: 'HQ' }, saved, ADDRESS);
+    expect(patch).toMatchObject({
+      name: 'HQ',
+      latitude: saved.latitude,
+      longitude: saved.longitude,
+      formattedAddress: ADDRESS,
+    });
+  });
+
+  it('a radius-only change also carries the address', () => {
+    const patch = buildUpdatePatch({ ...savedForm, radiusM: 300 }, saved, ADDRESS);
+    expect(patch.radiusM).toBe(300);
+    expect(patch.formattedAddress).toBe(ADDRESS);
+  });
+
+  it('a moved pin with a new address sends both', () => {
+    const patch = buildUpdatePatch(
+      { ...savedForm, latitude: 12.9, longitude: 77.6 },
+      saved,
+      'HSR Layout, Bengaluru',
+    );
+    expect(patch).toMatchObject({ latitude: 12.9, longitude: 77.6, formattedAddress: 'HSR Layout, Bengaluru' });
+  });
+
+  it('a moved pin with NO address omits the field, so the server clears the old one', () => {
+    const patch = buildUpdatePatch({ ...savedForm, latitude: 12.9, longitude: 77.6 }, saved, null);
+    expect(patch.latitude).toBe(12.9);
+    expect('formattedAddress' in patch).toBe(false);
+  });
+
+  it('an office saved before addresses existed gains one when its pin is re-picked in place', () => {
+    const legacy = detail();
+    const patch = buildUpdatePatch(formFromDetail(legacy), legacy, ADDRESS);
+    expect(patch).toMatchObject({
+      latitude: legacy.latitude,
+      longitude: legacy.longitude,
+      formattedAddress: ADDRESS,
+    });
+  });
+
+  it('a legacy office left alone (no address anywhere) still sends nothing', () => {
+    const legacy = detail();
+    expect(buildUpdatePatch(formFromDetail(legacy), legacy, null)).toEqual({});
+    expect(buildUpdatePatch(formFromDetail(legacy), legacy)).toEqual({});
+  });
+
+  it('a rule-only change does not touch the pin or the address', () => {
+    const patch = buildUpdatePatch({ ...savedForm, lateCutoffMinutes: '30' }, saved, ADDRESS);
+    expect('latitude' in patch).toBe(false);
+    expect('formattedAddress' in patch).toBe(false);
+    expect(patch.lateCutoffMinutes).toBe(30);
+  });
+});
+
+
+describe('address clean-up and change detection', () => {
+  it.each([undefined, null, '', '   '])('cleanAddress turns %p into null', (v) => {
+    expect(cleanAddress(v)).toBeNull();
+  });
+
+  it('trims, and caps at the server limit so a long lookup result cannot fail the save', () => {
+    expect(cleanAddress('  Whitefield  ')).toBe('Whitefield');
+    const long = 'a'.repeat(OFFICE_ADDRESS_MAX + 40);
+    expect(cleanAddress(long)).toHaveLength(OFFICE_ADDRESS_MAX);
+    expect(buildCreateRequest(form(), long).formattedAddress).toHaveLength(OFFICE_ADDRESS_MAX);
+  });
+
+  it('a whitespace-only address is never sent on create or edit', () => {
+    expect('formattedAddress' in buildCreateRequest(form(), '   ')).toBe(false);
+    const d = detail({ formattedAddress: null });
+    expect(buildUpdatePatch(formFromDetail(d), d, '   ')).toEqual({});
+  });
+
+  it('isAddressChanged: false on Add, false when equal (ignoring spaces), true when gained, changed or lost', () => {
+    const d = detail({ formattedAddress: 'Koramangala, Bengaluru' });
+    expect(isAddressChanged(null, 'Anywhere')).toBe(false);
+    expect(isAddressChanged(d, ' Koramangala, Bengaluru ')).toBe(false);
+    expect(isAddressChanged(d, 'Indiranagar, Bengaluru')).toBe(true);
+    expect(isAddressChanged(d, null)).toBe(true);
+    expect(isAddressChanged(detail({ formattedAddress: null }), 'Koramangala')).toBe(true);
+    expect(isAddressChanged(detail({ formattedAddress: null }), null)).toBe(false);
   });
 });

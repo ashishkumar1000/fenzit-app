@@ -69,3 +69,5 @@ export type { EyebrowProps } from './Eyebrow';
 
 export { SectionHead } from './SectionHead';
 export type { SectionHeadProps } from './SectionHead';
+
+export { GradientSurface } from './GradientSurface';

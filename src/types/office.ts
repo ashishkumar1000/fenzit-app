@@ -32,6 +32,8 @@ export interface Office {
   latitude: number;
   longitude: number;
   radiusM: number;
+  /** Address of the pin as saved; null/absent for offices saved before addresses existed. */
+  formattedAddress?: string | null;
   archivedAt: string | null;
   rule: OfficeRule | null;
   nextRule: OfficeRule | null;
@@ -47,6 +49,7 @@ export interface OfficeDetail {
   latitude: number;
   longitude: number;
   radiusM: number;
+  formattedAddress?: string | null;
   archivedAt: string | null;
   rules: OfficeRule[];
 }
@@ -69,4 +72,6 @@ export interface PickedOfficeLocation {
   longitude: number;
   radiusM: number;
   gpsVerified?: boolean;
+  /** Street address of the pin when the picker resolved one — saved with the office as display text; the coordinates stay the geofence truth. */
+  address?: string;
 }

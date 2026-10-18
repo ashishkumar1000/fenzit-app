@@ -1,7 +1,7 @@
 /**
  * Tests for the 15-8 SetupWizardScreen's highest-value flows:
  *  - Resume lands on the SERVER MARKER step (the AuthFlow-style machine
- *    renders one step at a time, StepIndicator showing "Step X of 5").
+ *    renders one step at a time, StepIndicator showing "Step X of 4").
  *  - The per-step Continue gate: offices with zero live offices disables
  *    Continue with its caption; a never-started tenant POSTs the start.
  *  - Continue PATCHes the NEXT step's marker; Holidays' "Skip for now"
@@ -231,7 +231,7 @@ function stepIndicatorLabel(
   root: ReactTestRenderer.ReactTestInstance,
 ): string {
   const nodes = root.findAll((n) =>
-    /^Step \d of 5$/.test(String(n.props.accessibilityLabel ?? '')),
+    /^Step \d of 4$/.test(String(n.props.accessibilityLabel ?? '')),
   );
   expect(nodes.length).toBeGreaterThan(0);
   return nodes[0].props.accessibilityLabel as string;
@@ -258,7 +258,7 @@ function stepIndicatorLabelSafe(
 ): boolean {
   return (
     root.findAll((n) =>
-      /^Step \d of 5$/.test(String(n.props.accessibilityLabel ?? '')),
+      /^Step \d of 4$/.test(String(n.props.accessibilityLabel ?? '')),
     ).length > 0
   );
 }
@@ -269,7 +269,7 @@ describe('bootstrap and resume', () => {
     mockStepData();
     const wizard = await renderLoaded();
 
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 3 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 2 of 4');
     expect(hasText(wizard.root, 'Weekly off')).toBe(true);
     // The SAVED canonical default (describeDays([7])), not a preselection.
     expect(hasText(wizard.root, 'Sun only')).toBe(true);
@@ -290,8 +290,8 @@ describe('bootstrap and resume', () => {
     const wizard = await renderLoaded();
 
     expect(startSetup).toHaveBeenCalledTimes(1);
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 1 of 5');
-    expect(hasText(wizard.root, 'Offices')).toBe(true);
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 1 of 4');
+    expect(hasText(wizard.root, 'Offices & hours')).toBe(true);
   });
 
   it('a 403 bootstrap shows the permission copy with Retry — never the steps', async () => {
@@ -330,11 +330,11 @@ describe('bootstrap and resume', () => {
     getSetup.mockResolvedValue(setupState({ currentStep: 'holidays' }));
     mockStepData();
     const wizard = await renderLoaded();
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 4 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 3 of 4');
 
     const back = wizard.root.findAll(
       (n) =>
-        n.props.accessibilityLabel === 'Previous step' &&
+        n.props.accessibilityLabel === 'Back' &&
         typeof n.props.onPress === 'function',
     );
     expect(back.length).toBeGreaterThan(0);
@@ -343,7 +343,7 @@ describe('bootstrap and resume', () => {
       await flush();
     });
 
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 3 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 2 of 4');
     expect(saveSetupStep).not.toHaveBeenCalled();
 
     // Step 1's back control is the EXIT (delegates to goBackSafely — the
@@ -351,11 +351,11 @@ describe('bootstrap and resume', () => {
     await act(async () => {
       findButton(wizard.root, 'Continue').props.onPress();
       await flush();
-    }); // advance back to step 4
-    for (let i = 0; i < 3; i++) {
+    }); // advance back to step 3
+    for (let i = 0; i < 2; i++) {
       const prev = wizard.root.findAll(
         (n) =>
-          n.props.accessibilityLabel === 'Previous step' &&
+          n.props.accessibilityLabel === 'Back' &&
           typeof n.props.onPress === 'function',
       );
       await act(async () => {
@@ -363,10 +363,10 @@ describe('bootstrap and resume', () => {
         await flush();
       });
     }
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 1 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 1 of 4');
     const exit = wizard.root.findAll(
       (n) =>
-        n.props.accessibilityLabel === 'Exit setup' &&
+        n.props.accessibilityLabel === 'Back' &&
         typeof n.props.onPress === 'function',
     );
     expect(exit.length).toBeGreaterThan(0);
@@ -452,7 +452,7 @@ describe('the per-step Continue gate', () => {
 
     expect(saveSetupStep).toHaveBeenCalledTimes(1);
     expect(saveSetupStep).toHaveBeenCalledWith('holidays');
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 4 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 3 of 4');
   });
 });
 
@@ -463,7 +463,7 @@ describe('Holidays — the only skippable step', () => {
     saveSetupStep.mockResolvedValue(setupState({ currentStep: 'employees' }));
     const wizard = await renderLoaded();
 
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 4 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 3 of 4');
     await act(async () => {
       findButton(wizard.root, 'Skip for now').props.onPress();
       await flush();
@@ -472,7 +472,7 @@ describe('Holidays — the only skippable step', () => {
     expect(saveSetupStep).toHaveBeenCalledTimes(1);
     expect(saveSetupStep).toHaveBeenCalledWith('employees');
     expect(completeSetup).not.toHaveBeenCalled();
-    expect(stepIndicatorLabel(wizard.root)).toBe('Step 5 of 5');
+    expect(stepIndicatorLabel(wizard.root)).toBe('Step 4 of 4');
     expect(hasText(wizard.root, 'Employees')).toBe(true);
   });
 });
@@ -592,7 +592,9 @@ describe('completion', () => {
     });
 
     expect(completeSetup).toHaveBeenCalledTimes(1);
-    expect(wizard.navigation.replace).toHaveBeenCalledWith('AttendanceHome');
+    expect(wizard.navigation.replace).toHaveBeenCalledWith('AttendanceHome', {
+      justEnabled: true,
+    });
   });
 
   it('a 422 INCOMPLETE shows the banner, refetches BOTH sides of the gate, and stays', async () => {
@@ -624,5 +626,60 @@ describe('completion', () => {
     expect(listOffices.mock.calls.length).toBe(officeListsBefore + 1);
     // Never a fake success — the wizard did not leave.
     expect(wizard.navigation.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('Offices step (merged timings step)', () => {
+  const pressByLabel = (root: ReactTestRenderer.ReactTestInstance, label: string) =>
+    root.findAll(
+      (n) => n.props?.accessibilityLabel === label && typeof n.props.onPress === 'function',
+    )[0];
+
+  it('tapping an office card opens that office in the form', async () => {
+    getSetup.mockResolvedValue(setupState({ currentStep: 'offices' }));
+    mockStepData({ offices: [LIVE_OFFICE] });
+    const wizard = await renderLoaded();
+
+    await act(async () => {
+      pressByLabel(wizard.root, 'Edit HQ').props.onPress();
+    });
+
+    expect(wizard.navigation.navigate).toHaveBeenCalledWith('OfficeForm', { officeId: 'o1' });
+  });
+
+  it('"Add office" opens a blank form', async () => {
+    getSetup.mockResolvedValue(setupState({ currentStep: 'offices' }));
+    mockStepData({ offices: [LIVE_OFFICE] });
+    const wizard = await renderLoaded();
+
+    await act(async () => {
+      findButton(wizard.root, 'Add office').props.onPress();
+    });
+
+    expect(wizard.navigation.navigate).toHaveBeenCalledWith('OfficeForm', undefined);
+  });
+
+  it('with no office yet, the empty-state "Add office" also opens a blank form', async () => {
+    getSetup.mockResolvedValue(setupState({ currentStep: 'offices' }));
+    mockStepData({ offices: [] });
+    const wizard = await renderLoaded();
+
+    await act(async () => {
+      findButton(wizard.root, 'Add office').props.onPress();
+    });
+
+    expect(wizard.navigation.navigate).toHaveBeenCalledWith('OfficeForm', undefined);
+  });
+});
+
+describe('exit without the "Attendance is on" notice', () => {
+  it('a setup already completed elsewhere replaces to AttendanceHome with NO justEnabled', async () => {
+    getSetup.mockResolvedValue(
+      setupState({ setupCompletedAt: '2026-09-28T10:00:00Z', enabled: true }),
+    );
+    mockStepData();
+    const wizard = await renderLoaded();
+
+    expect(wizard.navigation.replace).toHaveBeenCalledWith('AttendanceHome', undefined);
   });
 });

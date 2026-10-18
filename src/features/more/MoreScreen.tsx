@@ -200,7 +200,7 @@ export default function MoreScreen({ navigation }: Props) {
           icon={<Building2 size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
           iconBg={colors.status.scheduled.bg}
           title="Attendance"
-          subtitle="Who's in, leave & monthly review"
+          subtitle="Who's in, leave, offices & team"
           onPress={() => navigation.navigate('AttendanceHome')}
         />
 

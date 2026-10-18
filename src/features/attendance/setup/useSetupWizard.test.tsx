@@ -134,9 +134,20 @@ describe('bootstrap — start or resume', () => {
     expect(probe.currentStep).toBe('weekly_off');
   });
 
+  it('the retired "timings" marker (saved before finding 12) resumes on the merged Offices step', async () => {
+    getSetup.mockResolvedValue(setupState({ currentStep: 'timings' }));
+
+    renderHook();
+    await act(async () => {
+      await flush();
+    });
+
+    expect(probe.currentStep).toBe('offices');
+  });
+
   it('a GARBAGE marker from the wire falls back to Offices (never enters the machine)', async () => {
     // Unreachable via the shipped DB CHECK, but the consume seam must not
-    // trust the wire: an unknown value would be stepIndex −1 ("Step 0 of 5").
+    // trust the wire: an unknown value would be stepIndex −1 ("Step 0 of 4").
     getSetup.mockResolvedValue(
       setupState({ currentStep: 'garbage' as unknown as SetupState['currentStep'] }),
     );
@@ -203,7 +214,7 @@ describe('bootstrap — start or resume', () => {
 
 describe('advance — the step marker', () => {
   it('PATCHes the NEXT step and moves there on success', async () => {
-    saveSetupStep.mockResolvedValue(setupState({ currentStep: 'timings' }));
+    saveSetupStep.mockResolvedValue(setupState({ currentStep: 'weekly_off' }));
     await renderResumed('offices');
 
     await act(async () => {
@@ -211,8 +222,8 @@ describe('advance — the step marker', () => {
     });
 
     expect(saveSetupStep).toHaveBeenCalledTimes(1);
-    expect(saveSetupStep).toHaveBeenCalledWith('timings');
-    expect(probe.currentStep).toBe('timings');
+    expect(saveSetupStep).toHaveBeenCalledWith('weekly_off');
+    expect(probe.currentStep).toBe('weekly_off');
     expect(probe.advanceError).toBeNull();
   });
 
@@ -226,12 +237,12 @@ describe('advance — the step marker', () => {
     await act(async () => {
       const first = probe.advance();
       const second = probe.advance(); // the race window
-      release(setupState({ currentStep: 'timings' }));
+      release(setupState({ currentStep: 'weekly_off' }));
       await Promise.all([first, second]);
     });
 
     expect(saveSetupStep).toHaveBeenCalledTimes(1);
-    expect(probe.currentStep).toBe('timings');
+    expect(probe.currentStep).toBe('weekly_off');
   });
 
   it('a failed PATCH sets the retry banner, does NOT advance, keeps the step', async () => {
@@ -262,13 +273,13 @@ describe('advance — the step marker', () => {
     expect(probe.currentStep).toBe('offices');
 
     // Retry semantics: the next advance re-PATCHes the SAME marker.
-    saveSetupStep.mockResolvedValueOnce(setupState({ currentStep: 'timings' }));
+    saveSetupStep.mockResolvedValueOnce(setupState({ currentStep: 'weekly_off' }));
     await act(async () => {
       await probe.advance();
     });
     expect(saveSetupStep).toHaveBeenCalledTimes(2);
-    expect(saveSetupStep).toHaveBeenLastCalledWith('timings');
-    expect(probe.currentStep).toBe('timings');
+    expect(saveSetupStep).toHaveBeenLastCalledWith('weekly_off');
+    expect(probe.currentStep).toBe('weekly_off');
     expect(probe.advanceError).toBeNull();
   });
 
@@ -287,14 +298,14 @@ describe('advance — the step marker', () => {
 
   it('a 409 mid-wizard (other device finished) exits without advancing', async () => {
     saveSetupStep.mockRejectedValue(alreadyCompleted);
-    await renderResumed('timings');
+    await renderResumed('weekly_off');
 
     await act(async () => {
       await probe.advance();
     });
 
     expect(probe.exitReason).toBe('completed-elsewhere');
-    expect(probe.currentStep).toBe('timings');
+    expect(probe.currentStep).toBe('weekly_off');
   });
 
   it('does nothing on the final step (Employees has no Continue)', async () => {
@@ -317,7 +328,7 @@ describe('back — in-session backward walk', () => {
       probe.back();
     });
 
-    expect(probe.currentStep).toBe('timings');
+    expect(probe.currentStep).toBe('offices');
     expect(saveSetupStep).not.toHaveBeenCalled();
   });
 

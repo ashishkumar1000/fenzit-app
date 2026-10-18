@@ -606,7 +606,7 @@ describe('WeeklyOffScreen error and loading states', () => {
     expect(
       hasText(
         screen.root,
-        'No employee-wise weekly offs yet. Everyone follows the tenant default above.',
+        'No employee-wise weekly offs yet. Everyone follows the default weekly off above.',
       ),
     ).toBe(true);
   });
@@ -676,7 +676,7 @@ describe('WeeklyOffScreen per-employee overrides', () => {
     expect(
       hasText(
         screen.root,
-        'No employee-wise weekly offs yet. Everyone follows the tenant default above.',
+        'No employee-wise weekly offs yet. Everyone follows the default weekly off above.',
       ),
     ).toBe(true);
   });

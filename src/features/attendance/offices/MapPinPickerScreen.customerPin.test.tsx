@@ -220,9 +220,16 @@ describe('MapPinPickerScreen customer mode', () => {
 });
 
 describe('MapPinPickerScreen office mode (unchanged)', () => {
+  // Finding 8: an untouched default centre must never be saved as the office.
+  // A saved office's own pin (edit mode) is already a placed pin.
   it('renders the radius stepper, hides the manual fallback, and returns pickedLocation', async () => {
     reverseMock.mockResolvedValue(REVERSE_HIT);
-    const { root, navigation } = renderPicker({ mode: 'office', radiusM: 250 });
+    const { root, navigation } = renderPicker({
+      mode: 'office',
+      radiusM: 250,
+      initialLatitude: CENTRE.latitude,
+      initialLongitude: CENTRE.longitude,
+    });
     await flush();
 
     expect(root.findAllByType(RadiusStepper)).toHaveLength(1);
@@ -237,10 +244,27 @@ describe('MapPinPickerScreen office mode (unchanged)', () => {
           longitude: CENTRE.longitude,
           radiusM: 250,
           gpsVerified: false,
+          // The resolved street address rides along for the form card (display only).
+          address: REVERSE_HIT.formattedAddress,
         },
       },
       { merge: true },
     );
+  });
+
+  it('Confirm on the untouched default pin does not leave the picker and asks the owner to place it', async () => {
+    reverseMock.mockResolvedValue(REVERSE_HIT);
+    const { root, navigation } = renderPicker({ mode: 'office', radiusM: 250 });
+    await flush();
+
+    confirmLocation(root);
+
+    expect(navigation.popTo).not.toHaveBeenCalled();
+    expect(
+      root.findAllByType(Text).some(t =>
+        String(t.props.children).includes('place the pin'),
+      ),
+    ).toBe(true);
   });
 
   it('the stepper renders BETWEEN the address area and Confirm (frozen sheet order, ux-map-pin-picker-2026-10-18)', async () => {

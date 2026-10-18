@@ -344,7 +344,7 @@ describe('WeeklyOffOverrideSheet — the scheduled next edit (15-6 review P12)',
     });
     const ask = visibleConfirmDialogs(root).at(-1);
     // The confirm copy names the date the removal takes effect from.
-    expect(String(ask?.props.message)).toContain('2026-10-20');
+    expect(String(ask?.props.message)).toContain('Tue, 20 Oct, 2026'); // long date, not ISO (UX finding 18)
 
     await act(async () => {
       ask?.props.onConfirm();
@@ -510,5 +510,32 @@ describe('WeeklyOffOverrideSheet — the Remove weekly off confirm flow', () => 
     });
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('WeeklyOffOverrideSheet — why Save is disabled (UX finding 18)', () => {
+  it('add mode with no employee says to choose one', () => {
+    const { root } = renderSheet();
+    act(() => {
+      findPill(root, 5).props.onPress();
+    });
+    expect(hasText(root, 'Choose an employee to save.')).toBe(true);
+  });
+
+  it('add mode with an employee but nothing changed says to change the days', () => {
+    const { root } = renderSheet({ employees: [PRIYA, RAMESH] });
+    expect(hasText(root, 'Choose an employee to save.')).toBe(true);
+    expect(hasText(root, 'Change the days off to enable Save.')).toBe(false);
+  });
+
+  it('no hint once Save is enabled', () => {
+    const { root } = renderSheet({ initialEmployee: PRIYA } as never);
+    act(() => {
+      findPill(root, 5).props.onPress();
+    });
+    const save = findButton(root, 'Save');
+    if (!save.props.disabled) {
+      expect(hasText(root, 'Choose an employee to save.')).toBe(false);
+    }
   });
 });

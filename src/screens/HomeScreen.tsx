@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Calendar, CalendarCheck, CloudOff, RefreshCw } from 'lucide-react-native';
+import { CalendarCheck, CloudOff, RefreshCw } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -16,12 +16,19 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 import type { JobScope } from '../services';
 import HomeHeader from '../components/HomeHeader';
-import { Card, EmptyState, InlineError } from '../components/ui';
+import { EmptyState, InlineError, Skeleton } from '../components/ui';
 import { Tile } from '../components/Tile';
 import { colors, radius, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
 import { firstName, loadMyProfile, useMyProfile } from '../features/profile';
-import { QuickActions, TodaysJobsSection, hasAnyJobCount } from '../features/home';
+import {
+  QuickActions,
+  TodayPulseCard,
+  NoJobsCard,
+  TodaysJobsSection,
+  hasAnyJobCount,
+  useTodayPulse,
+} from '../features/home';
 import { useNotifications } from '../features/notifications';
 
 type Props = CompositeScreenProps<
@@ -36,6 +43,8 @@ export default function HomeScreen({ navigation }: Props) {
   // failed load gets its own error branch rather than a placeholder.
   const { profile, isLoading, error, refresh, dismissError } = useMyProfile();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Today's Pulse — its own request, made only while attendance is enabled.
+  const pulse = useTodayPulse(profile?.attendance?.attendanceEnabled === true);
   // The Home bell's badge (Story 3.4) — refreshed on focus below, TTL-throttled
   // in the store, and driven live by the 3.3 socket's own refetch.
   const { unreadCount, loadUnreadCount } = useNotifications();
@@ -189,8 +198,7 @@ export default function HomeScreen({ navigation }: Props) {
   // stale-mirror race: a tap that somehow lands before setup completes is
   // replaced into the wizard, never an empty dashboard. (Defined after the
   // loading/error early returns, where `profile` is narrowed non-null.)
-  const attendanceTile =
-    profile.attendance?.attendanceEnabled === true ? (
+  const plainAttendanceTile = (
       <Tile
         icon={
           <CalendarCheck
@@ -201,10 +209,23 @@ export default function HomeScreen({ navigation }: Props) {
         }
         iconBg={colors.status.progress.bg}
         title="Attendance"
-        subtitle="Who's in, leave & monthly review"
+        subtitle="Who's in, leave, offices & team"
         onPress={() => navigation.navigate('AttendanceHome')}
       />
-    ) : null;
+    );
+
+  // Enabled tenants get the Pulse card (shimmer while its own request is in
+  // flight); if that request fails the plain tile keeps the entry point.
+  const attendanceTile =
+    profile.attendance?.attendanceEnabled !== true ? null : pulse.status === 'ready' ? (
+      <TodayPulseCard pulse={pulse} onPress={() => navigation.navigate('AttendanceHome')} />
+    ) : pulse.status === 'loading' ? (
+      <View accessibilityLabel="Loading today's attendance">
+        <Skeleton rows={1} height={150} />
+      </View>
+    ) : (
+      plainAttendanceTile
+    );
 
   // First-run: simplified Home until the account has a team and a job. Both
   // facts come from the server, so an account set up on another device shows
@@ -234,17 +255,7 @@ export default function HomeScreen({ navigation }: Props) {
 
           <View style={styles.jobsSection}>
             <Text style={styles.sectionTitle}>Today's jobs</Text>
-            <Card padding="lg" style={styles.noJobsCard}>
-              <View style={styles.noJobsIconBadge}>
-                <Calendar size={24} color={colors.primary} strokeWidth={1.5} />
-              </View>
-              <Text style={styles.noJobsTitle}>No jobs yet</Text>
-              <Text style={styles.noJobsBody}>
-                {hasTechnicians
-                  ? 'Create your first job to assign it to a technician.'
-                  : 'Add a technician first, then you can create and assign jobs.'}
-              </Text>
-            </Card>
+            <NoJobsCard hasTechnicians={hasTechnicians} />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -322,29 +333,6 @@ const styles = StyleSheet.create({
   },
   jobsSection: {
     gap: spacing.s3,
-  },
-  noJobsCard: {
-    alignItems: 'center',
-    gap: spacing.s1,
-  },
-  noJobsIconBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.pill,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.s1,
-  },
-  noJobsTitle: {
-    ...typography.heading,
-    fontSize: 16,
-    color: colors.textStrong,
-  },
-  noJobsBody: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-    textAlign: 'center',
   },
 
   // --- Established dashboard ---

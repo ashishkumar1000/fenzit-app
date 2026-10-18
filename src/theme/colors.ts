@@ -96,6 +96,13 @@ export const colors = {
   // Scrim — modal / sheet backdrop overlay (gray900 @ 45% alpha).
   scrim: 'rgba(17, 24, 39, 0.45)',
 
+  // The Home Today's Pulse card's diagonal gradient (blue500 → blue700).
+  primaryGradientStart: palette.blue500,
+  primaryGradientEnd: palette.blue700,
+  // Map chip — a white label floating over an illustration; translucent so
+  // the map still shows through (white @ 80% alpha).
+  surfaceCardGlass: 'rgba(255, 255, 255, 0.8)',
+
   // Shimmer sheen — the Skeleton's moving highlight bar over the
   // borderSubtle placeholder blocks (translucent white; the skeleton
   // promises "content is coming", so the sheen stays neutral).

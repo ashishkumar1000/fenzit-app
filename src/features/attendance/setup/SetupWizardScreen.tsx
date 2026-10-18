@@ -2,12 +2,12 @@
  * SetupWizardScreen — the 15-8 first-run attendance setup wizard.
  *
  * An AuthFlow-style component state machine (steps are component state,
- * never navigator routes): the fixed five-step vocabulary walks via
- * `useSetupWizard`'s server-authoritative marker. Steps 1–4 render
- * server-truth SUMMARIES and push the shipped routes (AttendanceOffices /
- * OfficeForm / AttendanceWeeklyOff / AttendanceHolidays) for all editing —
+ * never navigator routes): the fixed four-step walk walks via
+ * `useSetupWizard`'s server-authoritative marker. Steps 1–3 render
+ * server-truth SUMMARIES and push the shipped routes (OfficeForm /
+ * AttendanceWeeklyOff / AttendanceHolidays) for all editing —
  * those screens own their own loading/error/save handling; the wizard owns
- * progress only. Step 5 is the enrolment-lite Employees step.
+ * progress only. Step 4 is the enrolment-lite Employees step.
  *
  * All step data is fetched here (the hooks' focus-refetch refreshes the
  * summaries every time a pushed screen pops) so the per-step Continue gate
@@ -49,7 +49,6 @@ import { WizardStepFrame } from './WizardStepFrame';
 import { WizardFooter } from './WizardFooter';
 import { WizardBanners } from './WizardBanners';
 import { OfficesStep } from './OfficesStep';
-import { TimingsStep } from './TimingsStep';
 import { WeeklyOffStep } from './WeeklyOffStep';
 import { HolidaysStep } from './HolidaysStep';
 import { EmployeesStep } from './EmployeesStep';
@@ -92,7 +91,10 @@ export default function SetupWizardScreen({ navigation }: Props) {
   // AttendanceHome was, and the gate runs only THERE (no redirect loop).
   useEffect(() => {
     if (wizard.exitReason) {
-      navigation.replace('AttendanceHome');
+      navigation.replace(
+        'AttendanceHome',
+        wizard.exitReason === 'completed' ? { justEnabled: true } : undefined,
+      );
     }
   }, [wizard.exitReason, navigation]);
 
@@ -173,7 +175,7 @@ export default function SetupWizardScreen({ navigation }: Props) {
   // satisfy a gate. (Mirrors WizardBanners' step→surface split; holidays
   // has no gate, hence no loaded requirement.)
   const gateLoaded =
-    step === 'offices' || step === 'timings'
+    step === 'offices'
       ? offices.hasLoaded
       : step === 'weekly_off'
         ? weeklyOffs.hasLoaded
@@ -224,17 +226,6 @@ export default function SetupWizardScreen({ navigation }: Props) {
   if (step === 'offices') {
     body = (
       <OfficesStep
-        offices={live}
-        isLoading={offices.isLoading}
-        hasLoaded={offices.hasLoaded}
-        error={offices.error}
-        onRetry={offices.refresh}
-        onManageOffices={() => navigation.navigate('AttendanceOffices')}
-      />
-    );
-  } else if (step === 'timings') {
-    body = (
-      <TimingsStep
         offices={live}
         isLoading={offices.isLoading}
         hasLoaded={offices.hasLoaded}
@@ -291,7 +282,7 @@ export default function SetupWizardScreen({ navigation }: Props) {
       total={SETUP_STEPS.length}
       title={STEP_TITLES[step]}
       description={STEP_DESCRIPTIONS[step]}
-      backLabel={inSession ? 'Previous step' : 'Exit setup'}
+      backLabel="Back"
       onBack={inSession ? wizard.back : goBackSafely}
       banner={banners}
       footer={

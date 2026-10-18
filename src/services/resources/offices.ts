@@ -34,6 +34,8 @@ export interface CreateOfficeRequest {
   name: string;
   latitude: number;
   longitude: number;
+  /** Address of the pin (display text); omit when the picker found none. */
+  formattedAddress?: string;
   radiusM?: number;
   startTime: string;
   endTime: string;
@@ -53,6 +55,8 @@ export interface UpdateOfficeRequest {
   name?: string;
   latitude?: number;
   longitude?: number;
+  /** Send with latitude/longitude: the server clears the stored address whenever a pin arrives without one. */
+  formattedAddress?: string;
   radiusM?: number;
   startTime?: string;
   endTime?: string;

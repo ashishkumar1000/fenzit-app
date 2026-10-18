@@ -35,6 +35,8 @@ type Props = {
    *  accessible label. */
   employeeName: string | null;
   offices: Office[];
+  /** The employee's current office — shown as "Current office" and not pickable (moving to it is a no-op). */
+  currentOfficeId?: string | null;
   /** Sheet defaults from `reassignSheetDefaults(row, today)`. */
   defaultEffectiveFrom: string;
   minEffectiveFrom: string;
@@ -55,6 +57,7 @@ export function ReassignOfficeSheet({
   visible,
   employeeName,
   offices,
+  currentOfficeId = null,
   defaultEffectiveFrom,
   minEffectiveFrom,
   effectiveFrom,
@@ -106,16 +109,23 @@ export function ReassignOfficeSheet({
         </Text>
       ) : (
         <View style={styles.content}>
+          {currentOfficeId && offices.every((o) => o.id === currentOfficeId) ? (
+            <Text style={styles.empty}>
+              {`This is the only office. Add another office to move ${employeeName ?? 'them'}.`}
+            </Text>
+          ) : null}
           {offices.map((office) => {
             const selected = office.id === officeId;
+            const isCurrent = office.id === currentOfficeId;
             return (
               <Pressable
                 key={office.id}
                 accessibilityRole="button"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`Move ${employeeName ?? 'this employee'} to ${office.name}`}
+                accessibilityState={{ selected, disabled: isCurrent }}
+                disabled={isCurrent}
+                accessibilityLabel={isCurrent ? `${office.name}, current office` : `Move ${employeeName ?? 'this employee'} to ${office.name}`}
                 onPress={() => setOfficeId(office.id)}
-                style={[styles.row, selected && styles.rowSelected]}>
+                style={[styles.row, selected && styles.rowSelected, isCurrent && styles.rowCurrent]}>
                 <View style={styles.rowIcon}>
                   <Building2 size={18} color={colors.primary} strokeWidth={1.5} />
                 </View>
@@ -123,9 +133,14 @@ export function ReassignOfficeSheet({
                   <Text style={styles.rowTitle} numberOfLines={1}>
                     {office.name}
                   </Text>
-                  {office.rule ? (
+                  {office.rule || isCurrent ? (
                     <Text style={styles.rowSubtitle} numberOfLines={1}>
-                      {`${office.rule.startTime}\u2013${office.rule.endTime}`}
+                      {[
+                        isCurrent ? 'Current office' : null,
+                        office.rule ? `${office.rule.startTime}\u2013${office.rule.endTime}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' \u00B7 ')}
                     </Text>
                   ) : null}
                 </View>
@@ -188,6 +203,9 @@ const styles = StyleSheet.create({
   rowSelected: {
     borderColor: colors.primary,
     backgroundColor: colors.surfacePage,
+  },
+  rowCurrent: {
+    opacity: 0.55,
   },
   rowIcon: {
     width: 36,

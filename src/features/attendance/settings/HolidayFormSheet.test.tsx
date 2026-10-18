@@ -320,7 +320,7 @@ describe('HolidayFormSheet date floor (FR-20 back-dating)', () => {
     expect(
       sheet.root.findAllByType(RNCDateTimePicker),
     ).toHaveLength(0);
-    expect(hasText(sheet.root, 'Date is immutable after creation.')).toBe(true);
+    expect(hasText(sheet.root, "The date can't be changed. To use another date, delete this holiday and add a new one.")).toBe(true);
   });
 });
 
@@ -638,5 +638,39 @@ describe('HolidayFormSheet 409 on a taken date (post-open arrival)', () => {
       resolveRemove(undefined);
       await flush();
     });
+  });
+});
+
+describe('Name field error timing (UX finding 10)', () => {
+  const nameField = (root: ReactTestRenderer.ReactTestInstance) =>
+    root.findAll((n) => n.props.placeholder === 'e.g. Diwali' && 'error' in n.props)[0];
+
+  it('a fresh Add sheet does not shout "Name is required." before the owner types', () => {
+    const { root } = renderSheet();
+    expect(nameField(root).props.error).toBeFalsy();
+    expect(findButton(root, 'Save').props.disabled).toBe(true);
+  });
+
+  it('shows the error after the owner types and clears the name', () => {
+    const { root } = renderSheet();
+    act(() => nameField(root).props.onChangeText('Diwali'));
+    expect(nameField(root).props.error).toBeFalsy();
+    act(() => nameField(root).props.onChangeText(''));
+    expect(nameField(root).props.error).toMatch(/required/i);
+  });
+
+  it('shows the error when the owner leaves the field empty (blur)', () => {
+    const { root } = renderSheet();
+    act(() => nameField(root).props.onBlur?.({}));
+    expect(nameField(root).props.error).toMatch(/required/i);
+  });
+
+  it('reopening the sheet starts quiet again', () => {
+    const view = renderSheet();
+    act(() => nameField(view.root).props.onChangeText(''));
+    expect(nameField(view.root).props.error).toMatch(/required/i);
+    view.updateWith({ visible: false });
+    view.updateWith({ visible: true });
+    expect(nameField(view.root).props.error).toBeFalsy();
   });
 });

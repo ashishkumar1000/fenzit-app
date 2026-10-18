@@ -35,6 +35,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import { ConfirmDialog, DatePickerField, InlineNotice, Sheet } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
+import { formatLongDate } from '../../../utils';
 import type {
   ApiError,
   IsoWeekday,
@@ -51,6 +52,7 @@ import {
   isWeeklyOffDirty,
   isValidIsoDate,
   SUNDAY,
+  weeklyOffSaveHint,
 } from './weeklyOffModel';
 
 export type WeeklyOffOverrideSheetProps = {
@@ -231,6 +233,14 @@ export default function WeeklyOffOverrideSheet({
           isEdit={isEdit}
           isSaving={isSaving}
           saveDisabled={saveDisabled}
+          saveHint={weeklyOffSaveHint({
+            saveDisabled,
+            isSaving,
+            workingDays,
+            dateValid,
+            needsEmployee: !employeeId,
+            isAdd: !isEdit,
+          })}
           saveError={saveError}
           onSave={onSave}
           onRemove={onRemove}
@@ -279,11 +289,11 @@ export default function WeeklyOffOverrideSheet({
             setHasTouched(true);
             setEffectiveFrom(v);
           }}
-          placeholder={today}
+          placeholder={formatLongDate(today)}
           helper={
             effectiveFrom
-              ? `Starting ${effectiveFrom}`
-              : `Starting today (${today}) if you leave it blank`
+              ? `Starting ${formatLongDate(effectiveFrom)}`
+              : `Starting today (${formatLongDate(today)}) if you leave it blank`
           }
         />
       </ScrollView>

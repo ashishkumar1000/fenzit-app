@@ -115,6 +115,35 @@ export function isWeeklyOffSaveDisabled({
 }
 
 /**
+ * Why Save is disabled, in plain words — null when it is enabled, saving, or
+ * the reason is already on screen (the "full week off" notice). Shown under
+ * Save so a greyed-out button is never a silent dead end (UX finding 18).
+ */
+export function weeklyOffSaveHint({
+  saveDisabled,
+  isSaving,
+  workingDays,
+  dateValid,
+  needsEmployee = false,
+  isAdd = false,
+}: {
+  saveDisabled: boolean;
+  isSaving: boolean;
+  workingDays: IsoWeekday[];
+  dateValid: boolean;
+  needsEmployee?: boolean;
+  isAdd?: boolean;
+}): string | null {
+  if (!saveDisabled || isSaving) return null;
+  if (needsEmployee) return 'Choose an employee to save.';
+  if (workingDays.length === 7) return null;
+  if (!dateValid) return 'Pick a valid start date to save.';
+  return isAdd
+    ? 'Change the days off to enable Save.'
+    : 'Change a day or the start date to enable Save.';
+}
+
+/**
  * Save gating for the PER-EMPLOYEE OVERRIDE sheet — split by mode (the
  * 15-8 fix for the add-mode dead end reported on device 2026-09-28):
  *

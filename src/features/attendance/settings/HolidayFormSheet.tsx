@@ -41,6 +41,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { ConfirmDialog, DatePickerField, Input, Sheet } from '../../../components/ui';
 import { colors, typography } from '../../../theme';
+import { formatLongDate } from './holidayDates';
 import type {
   ApiError,
   CreateHolidayRequest,
@@ -109,6 +110,10 @@ export default function HolidayFormSheet({
   const [form, setForm] = useState<HolidayFormState>(() =>
     holiday ? formFromHoliday(holiday) : emptyHolidayForm(today),
   );
+  // "Name is required." waits until the owner has touched the field — a
+  // fresh Add sheet must not open already shouting (UX finding 10). Save
+  // stays disabled while the name is invalid either way.
+  const [nameTouched, setNameTouched] = useState(false);
   // The date the currently-tracked 409 was raised for, or null for none.
   const [conflictDate, setConflictDate] = useState<string | null>(null);
   // The saveError object already processed — each error object is keyed to a
@@ -137,6 +142,7 @@ export default function HolidayFormSheet({
     if (!visible) return;
     setForm(holiday ? formFromHoliday(holiday) : emptyHolidayForm(today));
     setConflictDate(null);
+    setNameTouched(false);
     seenConflictRef.current = null;
     attemptedDateRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -238,11 +244,11 @@ export default function HolidayFormSheet({
       {isEdit ? (
         <Input
           label="Date"
-          value={form.date}
+          value={form.date ? formatLongDate(form.date) : ''}
           editable={false}
-          placeholder={today}
+          placeholder={formatLongDate(today)}
           error={allErrors.date}
-          helper="Date is immutable after creation."
+          helper="The date can't be changed. To use another date, delete this holiday and add a new one."
         />
       ) : (
         <DatePickerField
@@ -261,10 +267,14 @@ export default function HolidayFormSheet({
       <Input
         label="Name"
         value={form.name}
-        onChangeText={(v) => setForm((f) => ({ ...f, name: v }))}
+        onChangeText={(v) => {
+          setNameTouched(true);
+          setForm((f) => ({ ...f, name: v }));
+        }}
+        onBlur={() => setNameTouched(true)}
         placeholder="e.g. Diwali"
         autoCapitalize="words"
-        error={allErrors.name}
+        error={nameTouched ? allErrors.name : undefined}
         // Raw length, matching what maxLength caps — trim() here would make
         // the counter disagree with the cap for names with trailing spaces.
         helper={`${form.name.length}/${HOLIDAY_NAME_MAX}`}
@@ -286,7 +296,7 @@ export default function HolidayFormSheet({
       <ConfirmDialog
         visible={deleteConfirmOpen && holiday != null}
         title="Delete holiday"
-        message={`${holiday?.name ?? ''} (${holiday?.date ?? ''}) will be removed. Future dates notify tracked employees.`}
+        message={`${holiday?.name ?? ''} (${holiday?.date ? formatLongDate(holiday.date) : ''}) will be removed. Employees will no longer see it as a holiday.`}
         confirmLabel="Delete"
         confirmVariant="danger"
         cancelLabel="Cancel"

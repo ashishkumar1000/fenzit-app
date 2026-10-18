@@ -2,7 +2,7 @@
  * OfficesScreen — the owner's attendance offices (Story 15-4, reshaped to
  * the user-approved sample design 2026-09-28): a segmented All/Active/
  * Archived filter with counts, sample cards (OfficeListRow), and a
- * full-width primary "Add new office" CTA (top of the list — user request
+ * full-width primary "Add office" CTA (top of the list — user request
  * 2026-09-28: it now leads the screen, above the segment tabs).
  *
  * Behaviour unchanged from the reviewed 15-4 screen: full list fetch (no
@@ -21,13 +21,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { ChevronDown, ChevronUp, MapPin, Plus, Search } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Search } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../../../navigation/types';
 import {
   Button,
-  EmptyState,
   IconButton,
   InlineError,
   Input,
@@ -35,7 +34,9 @@ import {
 } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { useOffices } from './useOffices';
+import AddOfficeBanner from './AddOfficeBanner';
 import OfficeListRow from './OfficeListRow';
+import OfficesEmptyState from './OfficesEmptyState';
 import ScreenHeader from './ScreenHeader';
 
 /** The name filter appears only past this many ACTIVE rows. */
@@ -89,7 +90,7 @@ export default function OfficesScreen({ navigation }: Props) {
   }, [refresh, refreshing]);
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <ScreenHeader title="Offices" onBack={() => navigation.goBack()} />
 
       {/* A background refetch failure must not read as success — the last
@@ -113,16 +114,7 @@ export default function OfficesScreen({ navigation }: Props) {
           </Button>
         </View>
       ) : activeOffices.length === 0 && archivedOffices.length === 0 ? (
-        <View style={styles.content}>
-          <EmptyState
-            icon={<MapPin size={24} color={colors.primary} strokeWidth={1.5} />}
-            title="No offices yet"
-            description="Add your first office to start tracking attendance. You'll place its pin on a map."
-            ctaLabel="Add office"
-            ctaIcon={<Plus size={16} color={colors.onPrimary} strokeWidth={2} />}
-            onPressCta={() => openForm()}
-          />
-        </View>
+        <OfficesEmptyState onAddOffice={() => openForm()} />
       ) : (
         <FlatList
           contentContainerStyle={styles.content}
@@ -147,26 +139,19 @@ export default function OfficesScreen({ navigation }: Props) {
               <Text style={styles.emptyFilter}>
                 No {segment === 'archived' ? 'archived ' : ''}offices match "{query.trim()}"
               </Text>
+            ) : segment === 'archived' ? (
+              <Text style={styles.emptyFilter}>No archived offices</Text>
             ) : (
-              <></>
+              // Only archived offices exist (the full empty state needs none
+              // at all) — say so, instead of leaving a blank list.
+              <Text style={styles.emptyFilter}>
+                No active offices. Add an office to start tracking attendance.
+              </Text>
             )
           }
           ListHeaderComponent={
             <View style={styles.listHeader}>
-              {/* The sample's full-width primary CTA. */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Add new office"
-                onPress={() => openForm()}
-                style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
-                <View style={styles.ctaIcon}>
-                  <Plus size={20} color={colors.primary} strokeWidth={2.2} />
-                </View>
-                <View style={styles.ctaTexts}>
-                  <Text style={styles.ctaTitle}>Add new office</Text>
-                  <Text style={styles.ctaSubtitle}>Set the check-in area &amp; shift hours</Text>
-                </View>
-              </Pressable>
+              <AddOfficeBanner onPress={() => openForm()} />
               <OfficeSegmentTabs
                 segment={segment}
                 activeCount={activeOffices.length}
@@ -260,39 +245,5 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textMuted,
     flex: 1,
-  },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.s3,
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    padding: spacing.s4,
-    marginTop: spacing.s2,
-  },
-  ctaPressed: {
-    opacity: 0.9,
-  },
-  ctaIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctaTexts: {
-    flex: 1,
-    minWidth: 0,
-    gap: 1,
-  },
-  ctaTitle: {
-    ...typography.heading,
-    color: colors.onPrimary,
-  },
-  ctaSubtitle: {
-    ...typography.caption,
-    color: colors.onPrimary,
-    opacity: 0.8,
   },
 });

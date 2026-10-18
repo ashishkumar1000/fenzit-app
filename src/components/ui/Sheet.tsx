@@ -28,7 +28,7 @@
  * Content stays mounted while the sheet is closed, matching the old Modal
  * behaviour; children must tolerate being mounted while hidden.
  */
-import React, { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { TrueSheet, type TrueSheetProps } from '@lodev09/react-native-true-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,6 +95,14 @@ export function Sheet({
   // required app-level provider — without it the context consumer THROWS;
   // there is nothing to fall back to, so this is a plain hook call.
   const insets = useSafeAreaInsets();
+  // The native footer FLOATS over the content (it is not part of the
+  // content's height), so on a content-sized sheet it covered the last
+  // field or note (UX finding 10). Measure it and reserve that much room at
+  // the foot of the content. Scrollable sheets keep padding their own
+  // contentContainerStyle (see the `footer` prop doc) — no double padding.
+  const [footerHeight, setFooterHeight] = useState(0);
+  // A footer that goes away must not leave its clearance behind.
+  const footerPadding = footer ? footerHeight : 0;
 
   useEffect(() => {
     if (visible) {
@@ -161,6 +169,7 @@ export function Sheet({
       footer={
         footer ? (
           <View
+            onLayout={e => setFooterHeight(e.nativeEvent.layout.height)}
             style={[
               styles.footerSlot,
               { paddingBottom: Math.max(insets.bottom, spacing.s2) },
@@ -171,7 +180,7 @@ export function Sheet({
           footer
         )
       }>
-      <View style={styles.content}>
+      <View style={[styles.content, footer && !scrollable ? { paddingBottom: spacing.s4 + footerPadding } : null]}>
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.title}>{title}</Text>

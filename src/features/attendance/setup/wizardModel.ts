@@ -30,11 +30,16 @@ import type { Office, OfficeRule } from '../../../types/office';
 
 export type { SetupStep } from '../../../services';
 
-/** The fixed walking order (UX-DR6). Never reorder shipped wizards — a
- *  resumed `currentStep` from the server is an index into THIS list. */
+/** The fixed walking order (UX-DR6) — FOUR steps. The old second step,
+ *  "timings", was folded into "offices" (UX finding 12: it repeated the same
+ *  office list): an office card now opens straight to its hours. The server
+ *  still accepts `'timings'` (its DB CHECK vocabulary is unchanged and the
+ *  PATCH only validates the name), so the wizard simply never writes it —
+ *  and a progress marker an owner saved there earlier resumes on "offices"
+ *  (`resumeStep`). Never reorder shipped wizards — a resumed `currentStep`
+ *  from the server is an index into THIS list. */
 export const SETUP_STEPS: readonly SetupStep[] = [
   'offices',
-  'timings',
   'weekly_off',
   'holidays',
   'employees',
@@ -42,8 +47,8 @@ export const SETUP_STEPS: readonly SetupStep[] = [
 
 /** Plain-business-English titles, in `SETUP_STEPS` order. */
 export const STEP_TITLES: Record<SetupStep, string> = {
-  offices: 'Offices',
-  timings: 'Timings & hours',
+  offices: 'Offices & hours',
+  timings: 'Offices & hours', // legacy marker — resumes on the offices step
   weekly_off: 'Weekly off',
   holidays: 'Holidays',
   employees: 'Employees',
@@ -51,12 +56,20 @@ export const STEP_TITLES: Record<SetupStep, string> = {
 
 /** The one-line "what this step is for" under each title. */
 export const STEP_DESCRIPTIONS: Record<SetupStep, string> = {
-  offices: 'Add the places your team works from.',
-  timings: 'Review each office\u2019s working hours and rules.',
+  offices: 'Add each place your team works from, with its location and working hours.',
+  timings: 'Add each place your team works from, with its location and working hours.',
   weekly_off: 'Pick the days your team is off each week.',
   holidays: 'Add one-off holidays on top of the weekly off.',
   employees: 'Choose who tracks attendance and where.',
 };
+
+/** The step the wizard shows for a server-saved marker: the retired
+ *  `'timings'` marker lands on the merged "offices" step; an unknown value
+ *  falls back to the first step. */
+export function resumeStep(saved: SetupStep | null): SetupStep {
+  if (saved === 'timings') return 'offices';
+  return saved !== null && SETUP_STEPS.includes(saved) ? saved : 'offices';
+}
 
 /** 0-based position of a step in the walking order. */
 export function stepIndex(step: SetupStep): number {
@@ -106,9 +119,25 @@ import { enrolmentCoversToday } from '../enrolments/enrolmentsModel';
 
 export { enrolmentCoversToday };
 
-/** One-line rule summary for a step-2 row — "09:00–18:00 · late after 15 min · 8 h full day". */
+/** One-line rule summary for an office row — "09:00–18:00 · late after 15 min · 8 h full day". */
 export function describeOfficeRule(rule: OfficeRule): string {
   return `${rule.startTime}\u2013${rule.endTime} \u00B7 late after ${rule.lateCutoffMinutes} min \u00B7 ${rule.fullDayHours} h full day`;
+}
+
+/**
+ * The office card's location line — says whether the pin is set and how wide
+ * the check-in zone is, so the owner can tell at a glance that the office is
+ * placed ("Pin set · 150 m radius"). `set: false` is the drift guard for a row
+ * without usable coordinates (the BE requires them, so this should not occur).
+ */
+export function describeOfficeLocation(
+  office: Pick<Office, 'latitude' | 'longitude' | 'radiusM'>,
+): { set: boolean; label: string } {
+  const placed =
+    Number.isFinite(office.latitude) && Number.isFinite(office.longitude);
+  return placed
+    ? { set: true, label: `Pin set \u00B7 ${office.radiusM} m radius` }
+    : { set: false, label: 'No pin set' };
 }
 
 /** What the per-step Continue gate reads — computed once by the screen
@@ -141,11 +170,6 @@ export function continueGateReason(
   snapshot: StepGateSnapshot,
 ): string | null {
   if (step === 'offices') {
-    return snapshot.liveOfficeCount > 0
-      ? null
-      : 'Add at least one office to continue.';
-  }
-  if (step === 'timings') {
     if (snapshot.liveOfficeCount === 0) {
       return 'Add at least one office to continue.';
     }

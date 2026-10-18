@@ -12,7 +12,7 @@ import { Button, DatePickerField, Eyebrow, InlineError, InlineNotice } from '../
 import { colors, radius, spacing, typography } from '../../../theme';
 import type { ApiError, IsoWeekday, WeeklyOffView } from '../../../services';
 import { WeeklyOffDayPicker } from './WeeklyOffDayPicker';
-import { describeDays, formatLongDate } from './weeklyOffModel';
+import { describeDays, formatLongDate, weeklyOffSaveHint } from './weeklyOffModel';
 
 export type WeeklyOffDefaultSectionProps = {
   /** No default row exists yet (first open) — swaps the helper copy. */
@@ -50,6 +50,13 @@ export function WeeklyOffDefaultSection({
   onSave,
   upcoming,
 }: WeeklyOffDefaultSectionProps) {
+  // The picker only produces valid dates, so the date is never the blocker.
+  const saveHint = weeklyOffSaveHint({
+    saveDisabled,
+    isSaving,
+    workingDays: selectedDays,
+    dateValid: true,
+  });
   return (
     <>
       <Eyebrow>For everyone</Eyebrow>
@@ -89,11 +96,11 @@ export function WeeklyOffDefaultSection({
         today={today}
         minDate={today}
         onChange={onEffectiveFromChange}
-        placeholder={today}
+        placeholder={formatLongDate(today)}
         helper={
           effectiveFrom
-            ? `Starting ${effectiveFrom}`
-            : `Starting today (${today}) if you leave it blank`
+            ? `Starting ${formatLongDate(effectiveFrom)}`
+            : `Starting today (${formatLongDate(today)}) if you leave it blank`
         }
       />
 
@@ -111,6 +118,7 @@ export function WeeklyOffDefaultSection({
         fullWidth>
         Save
       </Button>
+      {saveHint ? <Text style={styles.helper}>{saveHint}</Text> : null}
 
       {upcoming.length > 0 ? <UpcomingChangesPanel rows={upcoming} /> : null}
     </>

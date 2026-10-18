@@ -191,10 +191,11 @@ export type RootStackParamList = {
   } | undefined;
   /**
    * Story 15-6 — Attendance Home shim (the owner entry into all
-   * attendance settings). Two tiles (Offices + Settings); future stories
+   * attendance settings). Offices, Settings and Team attendance entry tiles; future stories
    * replace this with a real dashboard.
    */
-  AttendanceHome: undefined;
+  /** `justEnabled` — set by the setup wizard after "Enable attendance" so the hub confirms it once. */
+  AttendanceHome: { justEnabled?: boolean } | undefined;
   /**
    * Story 19-4 — the FR-24 owner dashboard (Today snapshot: five KPI
    * tiles, flag strips, office filter). Owner-only by the BE route;

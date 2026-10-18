@@ -1,13 +1,18 @@
 /**
- * OfficeLocationCard — the form's location summary row (Story 15-4).
- * Shows the picked pin (coordinates — the office stores coordinates only,
- * no address persistence) and opens the full-screen map picker. Shows the
- * field error inline when no pin has been placed.
+ * OfficeLocationCard — the form's Location section (Story 15-4, reshaped to
+ * the user's two-state design). No pin yet: a dashed "No location selected"
+ * panel, a "Not set" chip and "Set location on map". Pin placed: the map
+ * preview with radius and coordinates, a status chip ("GPS Verified" when
+ * the pin is the device's own fix) and "Adjust pin location on map". The
+ * office stores coordinates only (no address), so coordinates are what the
+ * preview shows. The field error shows inline when saving without a pin.
  */
 import { StyleSheet, Text, View } from 'react-native';
-import { Compass, MapPin, MapPinned } from 'lucide-react-native';
-import { Badge, Button, Card } from '../../../components/ui';
+import { MapPin, Pencil, Plus } from 'lucide-react-native';
+import { Button, Card } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
+import LocationMapPreview from './LocationMapPreview';
+import MapIllustration from './MapIllustration';
 import type { OfficeFormErrors, OfficeFormState } from './officeFormModel';
 
 type Props = {
@@ -15,47 +20,75 @@ type Props = {
   errors: OfficeFormErrors;
   /** True while the pin is the device's own fix — shows "GPS Verified". */
   gpsVerified: boolean;
+  /** Street address of the picked pin, when known — else coordinates show. */
+  address?: string | null;
   /** Opens MapPinPicker (mode `office`) with the current pin + radius. */
   onOpenPicker: () => void;
 };
 
-export default function OfficeLocationCard({ form, errors, gpsVerified, onOpenPicker }: Props) {
-  const hasPin = form.latitude !== null && form.longitude !== null;
+export default function OfficeLocationCard({ form, errors, gpsVerified, address, onOpenPicker }: Props) {
+  const { latitude, longitude } = form;
+  const hasPin = latitude !== null && longitude !== null;
+  const verified = hasPin && gpsVerified;
+  const statusLabel = verified ? 'GPS Verified' : hasPin ? 'Pin set' : 'Not set';
+
   return (
-    <Card>
+    // No pin yet: the whole card is one big "set location" target, not just
+    // the button. With a pin, only "Adjust" opens the picker (the preview
+    // is not a control).
+    <Card
+      interactive={!hasPin}
+      onPress={onOpenPicker}
+      accessibilityRole={hasPin ? undefined : 'button'}
+      accessibilityLabel={hasPin ? undefined : 'Set location on map'}>
       <View style={styles.stack}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>Location</Text>
-          {/* Not a job state — the DS 'done' green is its positive/verified
-              colour; the job-state 'progress' variant is a different token. */}
-          {gpsVerified && hasPin ? <Badge status="done" size="sm">GPS Verified</Badge> : null}
-        </View>
-
-        <View style={styles.coordsPanel}>
-          <View style={styles.pinChip}>
-            <MapPin size={16} color={colors.textOnColor} strokeWidth={2} />
+          <View style={styles.titleGroup}>
+            <Text style={styles.title}>Location</Text>
+            <Text style={styles.subtitle}>(Geofenced)</Text>
           </View>
-          <View style={styles.coordsText}>
-            <Text style={styles.coordsEyebrow}>Pin position</Text>
-            <Text
-              style={[styles.coordsValue, !hasPin && styles.coordsPlaceholder]}
-              numberOfLines={1}>
-              {hasPin
-                ? `${form.latitude?.toFixed(5)}, ${form.longitude?.toFixed(5)}`
-                : 'No pin placed yet'}
+          {/* A status chip, not a job state — green only for a verified fix. */}
+          <View style={[styles.status, verified && styles.statusVerified]}>
+            <View style={[styles.statusDot, verified && styles.statusDotVerified]} />
+            <Text style={[styles.statusText, verified && styles.statusTextVerified]}>
+              {statusLabel}
             </Text>
           </View>
-          <Compass size={16} color={colors.textMuted} strokeWidth={2} />
         </View>
+
+        {hasPin ? (
+          <LocationMapPreview latitude={latitude} longitude={longitude} radiusM={form.radiusM}
+            address={address}
+          />
+        ) : (
+          <View style={[styles.empty, errors.location ? styles.emptyError : null]}>
+            <View style={styles.emptyBackdrop}>
+              <MapIllustration faint />
+            </View>
+            <View style={styles.emptyIcon}>
+              <MapPin size={22} color={colors.textMuted} strokeWidth={1.75} />
+            </View>
+            <Text style={styles.emptyTitle}>No location selected</Text>
+            <Text style={styles.emptyBody}>
+              Search for an address or drop a pin to set where staff can check in.
+            </Text>
+          </View>
+        )}
 
         {errors.location ? <Text style={styles.fieldError}>{errors.location}</Text> : null}
 
         <Button
           variant="secondary"
           fullWidth
-          leadingIcon={<MapPinned size={16} color={colors.primary} strokeWidth={2} />}
+          leadingIcon={
+            hasPin ? (
+              <Pencil size={16} color={colors.primary} strokeWidth={2} />
+            ) : (
+              <Plus size={16} color={colors.primary} strokeWidth={2} />
+            )
+          }
           onPress={onOpenPicker}>
-          {hasPin ? 'Adjust pin on map' : 'Place pin on map'}
+          {hasPin ? 'Adjust pin location on map' : 'Set location on map'}
         </Button>
       </View>
     </Card>
@@ -70,43 +103,94 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.s2,
+  },
+  titleGroup: {
+    flexShrink: 1,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.s2,
   },
   title: {
     ...typography.heading,
     color: colors.textStrong,
   },
-  coordsPanel: {
+  subtitle: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  status: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.s3,
-    padding: spacing.s3,
-    borderRadius: radius.sm + 4, // inset panel between control (md) and card (lg)
+    gap: spacing.s2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
     backgroundColor: colors.surfaceSunken,
+    paddingHorizontal: spacing.s3,
+    paddingVertical: spacing.s1,
   },
-  pinChip: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.md,
+  statusVerified: {
+    borderColor: colors.status.done.bg,
+    backgroundColor: colors.status.done.bg,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textMuted,
+  },
+  statusDotVerified: {
+    backgroundColor: colors.success,
+  },
+  statusText: {
+    ...typography.labelStrong,
+    color: colors.textMuted,
+  },
+  statusTextVerified: {
+    color: colors.status.done.fg,
+  },
+  empty: {
+    alignItems: 'center',
+    gap: spacing.s1,
+    paddingVertical: spacing.s6,
+    paddingHorizontal: spacing.s4,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.surfaceSunken,
+    overflow: 'hidden',
+  },
+  emptyBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  emptyError: {
+    borderColor: colors.danger,
+  },
+  emptyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    marginBottom: spacing.s2,
   },
-  coordsText: {
-    flex: 1,
-    gap: 2,
-  },
-  coordsEyebrow: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
-  coordsValue: {
-    ...typography.body,
-    fontWeight: '600',
+  emptyTitle: {
+    ...typography.labelStrong,
     color: colors.textStrong,
   },
-  coordsPlaceholder: {
+  emptyBody: {
+    ...typography.bodySm,
     color: colors.textMuted,
-    fontWeight: '400',
+    textAlign: 'center',
   },
   fieldError: {
     ...typography.bodySm,
