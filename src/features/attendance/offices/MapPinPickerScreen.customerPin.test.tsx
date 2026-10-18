@@ -37,6 +37,7 @@ jest.mock('../../addressPicker/AddressPickerSheet', () => {
 
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
+import { Text } from 'react-native';
 import { Button } from '../../../components/ui';
 import { placesService } from '../../../services';
 import type { ResolvedPlace } from '../../../services';
@@ -240,5 +241,25 @@ describe('MapPinPickerScreen office mode (unchanged)', () => {
       },
       { merge: true },
     );
+  });
+
+  it('the stepper renders BETWEEN the address area and Confirm (frozen sheet order, ux-map-pin-picker-2026-10-18)', async () => {
+    reverseMock.mockResolvedValue(REVERSE_HIT);
+    const { root } = renderPicker({ mode: 'office', radiusM: 250 });
+    await flush();
+
+    // One document-order traversal; the stepper must sit after the pinned
+    // address area and before the Confirm button.
+    const order = root.findAll(() => true);
+    const pinnedIdx = order.findIndex(
+      n => n.type === Text && n.props.children === 'LOCATION SET',
+    );
+    const stepperIdx = order.findIndex(n => n.type === RadiusStepper);
+    const confirmIdx = order.findIndex(
+      n => n.type === Button && n.props.children === 'Confirm location',
+    );
+    expect(pinnedIdx).toBeGreaterThan(-1);
+    expect(stepperIdx).toBeGreaterThan(pinnedIdx);
+    expect(confirmIdx).toBeGreaterThan(stepperIdx);
   });
 });

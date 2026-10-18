@@ -32,9 +32,11 @@
  *   reverse geocode still in flight at Confirm contributes nothing rather
  *   than blocking; the form keeps the coordinates either way.
  *
- * Reverse geocoding (the "Pinned near:" row) fires ON SETTLE only — one
- * call per settled centre, latest-wins abort — never per frame while
- * panning. On failure or "no address here" the row falls back to the raw
+ * Reverse geocoding fires ON SETTLE only — one call per settled centre,
+ * latest-wins abort — never per frame while panning — and runs regardless
+ * of the services state, so a manually dragged pin keeps its Nearby area
+ * label while services are off (manual placement is first-class). On
+ * failure or "no address here" the label falls back to the raw
  * coordinates; it never blocks Confirm.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -149,6 +151,10 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     refreshServices,
   } = useLocateMe();
 
+  // ONE services-off flag drives BOTH surfaces (the map's pin style + state
+  // chip and the sheet's layout), so they can never disagree.
+  const servicesOff = errorKind === 'servicesOff';
+
   // Services probe on mount and every foreground return (the useCheckInOut
   // probe idiom): a user coming back from the OS location panel must never
   // stay stuck on the services-off state. AppState 'active' is the return
@@ -204,7 +210,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
       .reverse(settled.latitude, settled.longitude, ctrl.signal)
       .then(place => {
         const label =
-          place.formattedAddress ??
+          place.formattedAddress ||
           `${settled.latitude.toFixed(5)}, ${settled.longitude.toFixed(5)}`;
         setAddressText(label);
         setReverseResult({ centre: settled, place });
@@ -271,6 +277,14 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     programmaticTargetRef.current = loc;
     mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
   }, []);
+
+  // The Nearby-area "Change" hint (services off): a gentle re-centre pulse
+  // that shows the user which pin to drag. Deliberately NOT marked as a
+  // programmatic move — if the pulse settles it counts like any pan, which
+  // is honest (no GPS fix happened). Dismisses nothing.
+  const handleFocusMap = useCallback(() => {
+    mapRef.current?.animateToRegion({ ...pin, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
+  }, [pin]);
 
   const handleConfirm = useCallback(() => {
     // While a pan is in flight `settled` still holds the PREVIOUS centre —
@@ -359,11 +373,11 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     [navigation],
   );
 
-  const addressRow = addressLoading
-    ? 'Reading address…'
-    : addressText
-      ? `Pinned near: ${addressText}`
-      : `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`;
+  // The card shows a spinner while a reverse geocode is in flight; before
+  // the first answer arrives (or if none ever does) the raw coordinates are
+  // the label — never an error state.
+  const addressLabel =
+    addressText || `${pin.latitude.toFixed(5)}, ${pin.longitude.toFixed(5)}`;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -379,6 +393,7 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
         isPanning={isPanning}
         mapFailed={mapFailed}
         locating={locating}
+        servicesOff={servicesOff}
         onRegionChange={onRegionChange}
         onRegionChangeComplete={onRegionChangeComplete}
         onMapLoaded={() => setMapLoaded(true)}
@@ -388,14 +403,15 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
       />
 
       <PickerBottomCard
-        addressRow={addressRow}
+        addressText={addressLabel}
         addressLoading={addressLoading}
         locateError={locateError}
         canOpenSettings={canOpenSettings}
         onOpenSettings={openSettings}
-        servicesOff={errorKind === 'servicesOff'}
+        servicesOff={servicesOff}
         onEnableServices={() => void handleEnableServices()}
         onOpenSearch={() => setSearchVisible(true)}
+        onFocusMap={handleFocusMap}
         radiusM={isCustomer ? undefined : radiusM}
         onRadiusChange={isCustomer ? undefined : setRadiusM}
         onConfirm={handleConfirm}

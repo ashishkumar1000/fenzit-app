@@ -1,16 +1,28 @@
 /**
- * PickerMapArea — the map picker's map layer (Story 15-4): the MapView
- * (light Google style) or the "Map unavailable" fallback (with a Retry that
- * re-mounts the map and restarts its load deadline), the centre-pin
- * overlay (static React view, never a native Marker), and the floating
- * search / locate-me buttons. Locate-me and search stay functional when
- * the map fails — the fallback panel renders behind them.
+ * PickerMapArea — the map picker's map layer (Story 15-4; redesigned per
+ * ux-map-pin-picker-2026-10-18): the MapView (light Google style) or the
+ * "Map unavailable" fallback (with a Retry that re-mounts the map and
+ * restarts its load deadline), the centre pin + state chip overlay
+ * (PickerCentrePin), the top search bar (opens the address sheet — it
+ * replaces the old floating "Search address" pill), and the floating
+ * locate-me pill (bottom-right, above the sheet; healthy state only).
+ * Search stays functional when the map fails — the fallback panel renders
+ * behind it.
  */
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import MapView, { Circle, type LatLng, type Region } from 'react-native-maps';
 import { Crosshair, MapPin, Search } from 'lucide-react-native';
 import { Button } from '../../../components/ui';
-import { colors, spacing, typography, LIGHT_MAP_STYLE } from '../../../theme';
+import PickerCentrePin from './PickerCentrePin';
+import {
+  colors,
+  radius,
+  shadow,
+  spacing,
+  touch,
+  typography,
+  LIGHT_MAP_STYLE,
+} from '../../../theme';
 
 type Props = {
   mapRef: React.RefObject<MapView | null>;
@@ -21,6 +33,10 @@ type Props = {
   isPanning: boolean;
   mapFailed: boolean;
   locating: boolean;
+  /** Device location services are off — the centre pin becomes the
+   *  crosshair "drag-to-set" puck and the locate pill hides. The same flag
+   *  the bottom card receives. */
+  servicesOff: boolean;
   onRegionChange: (region: Region) => void;
   onRegionChangeComplete: (region: Region) => void;
   onMapLoaded: () => void;
@@ -38,6 +54,7 @@ export default function PickerMapArea({
   isPanning,
   mapFailed,
   locating,
+  servicesOff,
   onRegionChange,
   onRegionChangeComplete,
   onMapLoaded,
@@ -84,33 +101,44 @@ export default function PickerMapArea({
         </MapView>
       )}
 
-      {/* Centre pin — static overlay, never a native Marker. */}
-      <View style={styles.pinLayer} pointerEvents="none">
-        <View style={[styles.pin, isPanning && styles.pinLifted]}>
-          <MapPin size={38} color={colors.primary} fill={colors.primary} strokeWidth={2} />
-        </View>
-      </View>
+      <PickerCentrePin servicesOff={servicesOff} isPanning={isPanning} mapFailed={mapFailed} />
 
-      {/* Floating controls: search on top, locate-me above the bottom card. */}
+      {/* Floating controls: search bar on top, locate-me pill bottom-right. */}
       <View style={styles.searchWrap}>
-        <Button
-          variant="secondary"
-          leadingIcon={<Search size={16} color={colors.primary} strokeWidth={2} />}
-          onPress={onOpenSearch}>
-          Search address
-        </Button>
+        <Pressable
+          accessibilityRole="search"
+          accessibilityLabel="Search address, street, landmark"
+          onPress={onOpenSearch}
+          style={styles.searchBar}>
+          <Search size={16} color={colors.textMuted} strokeWidth={2} />
+          <Text style={styles.searchPlaceholder} numberOfLines={1}>
+            Search address, street, landmark…
+          </Text>
+          <View style={styles.searchChip}>
+            <Text style={styles.searchChipText}>Search</Text>
+          </View>
+        </Pressable>
       </View>
-      <View style={styles.locateWrap}>
-        <Button
-          variant="secondary"
-          loading={locating}
-          leadingIcon={
-            locating ? undefined : <Crosshair size={16} color={colors.primary} strokeWidth={2} />
-          }
-          onPress={onLocate}>
-          Use my current location
-        </Button>
-      </View>
+      {/* Locate-me pill: healthy state only. With services off it cannot
+          produce a fix, so it must not invite a dead tap (user decision
+          2026-10-18) — the red card owns that state's actions. */}
+      {!servicesOff ? (
+        <View style={styles.locateWrap}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Use my current location"
+            accessibilityState={{ busy: locating }}
+            onPress={locating ? undefined : onLocate}
+            style={styles.locatePill}>
+            {locating ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <Crosshair size={16} color={colors.primary} strokeWidth={2} />
+            )}
+            <Text style={styles.locateText}>Use my current location</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -139,32 +167,60 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     textAlign: 'center',
   },
-  pinLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Half-height nudge puts the glyph's tip on the map centre (spike value).
-  pin: {
-    transform: [{ translateY: -22 }],
-  },
-  pinLifted: {
-    transform: [{ translateY: -34 }],
-  },
   searchWrap: {
     position: 'absolute',
     top: spacing.s3,
     left: spacing.s4,
     right: spacing.s4,
   },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
+    minHeight: touch.min,
+    paddingHorizontal: spacing.s4,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    ...shadow.sm,
+  },
+  searchPlaceholder: {
+    ...typography.body,
+    color: colors.textMuted,
+    flex: 1,
+  },
+  searchChip: {
+    height: 32,
+    paddingHorizontal: spacing.s3,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchChipText: {
+    ...typography.labelStrong,
+    color: colors.primary,
+  },
   locateWrap: {
     position: 'absolute',
-    bottom: spacing.s3,
-    left: spacing.s4,
+    bottom: spacing.s4,
     right: spacing.s4,
+  },
+  locatePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
+    minHeight: touch.min,
+    paddingHorizontal: spacing.s4,
+    borderRadius: touch.min / 2,
+    backgroundColor: colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    ...shadow.sm,
+  },
+  locateText: {
+    ...typography.labelStrong,
+    color: colors.textStrong,
   },
 });
