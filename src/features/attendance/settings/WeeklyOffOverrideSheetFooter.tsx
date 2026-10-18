@@ -20,6 +20,7 @@ import { Trash2 } from 'lucide-react-native';
 import { Button, InlineError } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
 import type { ApiError } from '../../../services';
+import { saveFailureMessage } from './weeklyOffModel';
 
 export type WeeklyOffOverrideSheetFooterProps = {
   isEdit: boolean;
@@ -47,9 +48,7 @@ export default function WeeklyOffOverrideSheetFooter({
   return (
     <View style={styles.footer} onLayout={(e) => onHeight(e.nativeEvent.layout.height)}>
       {saveError && !isSaving ? (
-        <InlineError
-          message={saveError.message ?? "Couldn't save. Try again."}
-        />
+        <InlineError message={saveFailureMessage(saveError)} />
       ) : null}
       <Button
         variant="primary"

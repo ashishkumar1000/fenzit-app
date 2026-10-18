@@ -78,6 +78,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Large system fonts: the badge drops to its own line, not off-screen.
+    flexWrap: 'wrap',
+    gap: spacing.s1,
   },
   pendingPill: {
     paddingVertical: spacing.s1,

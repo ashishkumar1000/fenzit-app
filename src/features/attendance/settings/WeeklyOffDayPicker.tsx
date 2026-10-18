@@ -127,6 +127,7 @@ export function WeeklyOffDayPicker({
               pressed && !disabled && styles.pillPressed,
             ]}>
             <Text
+              maxFontSizeMultiplier={PILL_FONT_CAP}
               style={[
                 styles.pillLabel,
                 isSelected && styles.pillLabelSelected,
@@ -134,6 +135,10 @@ export function WeeklyOffDayPicker({
               {WEEKLY_OFF_DAY_LETTERS[day]}
             </Text>
             <Text
+              maxFontSizeMultiplier={PILL_FONT_CAP}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
               style={[
                 styles.pillSubLabel,
                 isSelected && styles.pillLabelSelected,
@@ -152,6 +157,10 @@ export function WeeklyOffDayPicker({
 // under the 44px floor — the height keeps the touch target generous, the
 // same stated exception as the calendar cells.
 const PILL_SIZE = 56;
+// The pills are ~39dp wide, so their tiny labels cannot follow the system
+// font all the way up (200% wrapped `Work` to `Wor`/`k`). Capped, not
+// disabled: they still grow to 130%; the sub-label also shrinks to fit.
+const PILL_FONT_CAP = 1.3;
 
 const styles = StyleSheet.create({
   row: {
@@ -162,7 +171,7 @@ const styles = StyleSheet.create({
   },
   pill: {
     flex: 1,
-    height: PILL_SIZE,
+    minHeight: PILL_SIZE,
     minWidth: 0,
     borderRadius: radius.md,
     borderWidth: 1,

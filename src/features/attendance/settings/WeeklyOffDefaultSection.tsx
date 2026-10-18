@@ -32,6 +32,7 @@ import { WeeklyOffUpcomingPanel } from './WeeklyOffUpcomingPanel';
 import {
   describeDaysOff,
   formatLongDate,
+  saveFailureMessage,
   weeklyOffSaveHint,
 } from './weeklyOffModel';
 
@@ -152,11 +153,7 @@ export function WeeklyOffDefaultSection({
 
           <View style={styles.group}>
             {saveError && !isSaving ? (
-              <InlineError
-                message={
-                  (saveError as ApiError).message ?? "Couldn't save. Try again."
-                }
-              />
+              <InlineError message={saveFailureMessage(saveError)} />
             ) : null}
             <Button
               variant="primary"

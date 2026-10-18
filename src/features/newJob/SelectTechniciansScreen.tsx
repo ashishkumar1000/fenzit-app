@@ -41,7 +41,11 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Avatar, Button, Input } from '../../components/ui';
 import { colors, radius, spacing, touch, typography } from '../../theme';
 import type { ProfileTechnician } from '../../services';
-import { filterTechnicians, technicianPhone } from '../technicians';
+import {
+  filterTechnicians,
+  sortTechniciansByName,
+  technicianPhone,
+} from '../technicians';
 import { useMyProfile } from '../profile';
 import type { RootStackParamList } from '../../navigation/types';
 
@@ -67,11 +71,15 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
   // `activeOnly` (15-6 review iteration 1): the override flow filters the
   // roster to status === 'active' BEFORE search — an invited employee must
   // not even be offerable, because the caller cannot resolve their pick.
+  // Alphabetical by name for both flows (R-23) — the roster arrives in
+  // creation order, which put skilled technicians above everyone else.
   const technicians = useMemo(
     () =>
-      activeOnly
-        ? (profile?.technicians ?? []).filter((t) => t.status === 'active')
-        : (profile?.technicians ?? []),
+      sortTechniciansByName(
+        activeOnly
+          ? (profile?.technicians ?? []).filter((t) => t.status === 'active')
+          : (profile?.technicians ?? []),
+      ),
     [activeOnly, profile?.technicians],
   );
 

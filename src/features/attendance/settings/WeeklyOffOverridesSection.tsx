@@ -173,6 +173,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    // Large system fonts: the Set Off button drops below the title instead
+    // of running off the card.
+    flexWrap: 'wrap',
+    gap: spacing.s2,
   },
   skeleton: {
     paddingVertical: spacing.s8,

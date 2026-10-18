@@ -195,3 +195,17 @@ export function isOverrideSaveDisabled({
   if (workingDays.length === 7 || !dateValid || isSaving) return true;
   return isEdit ? !dirty : !hasTouched;
 }
+
+/** Approved copy when a weekly-off save or remove could not reach the server. */
+export const SAVE_FAILED_MESSAGE = "Couldn't save. Try again.";
+
+/**
+ * The banner text for a failed weekly-off save/remove. A server reply (422,
+ * 409, ...) keeps its own message; a failure with no reply (no network or a
+ * timeout, status 0) shows the approved save-failure copy instead of the
+ * app-wide network wording.
+ */
+export function saveFailureMessage(err: { status?: number; message?: string }): string {
+  if (err.status === 0 || !err.message) return SAVE_FAILED_MESSAGE;
+  return err.message;
+}

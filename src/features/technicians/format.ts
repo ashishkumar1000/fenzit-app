@@ -15,6 +15,20 @@ export function technicianPhone(
 }
 
 /**
+ * A pick list reads alphabetically by name, whatever order the roster was
+ * created in (R-23). Locale-aware and case/accent-insensitive at the base
+ * level (numbers by value, "Tech 2" before "Tech 10"), so "bala" sits between "Asha" and "Chitra" and "Éla" before "Zoya".
+ * Returns a new array; equal names keep their roster order (stable sort).
+ */
+export function sortTechniciansByName(
+  technicians: ProfileTechnician[],
+): ProfileTechnician[] {
+  return [...technicians].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }),
+  );
+}
+
+/**
  * Client-side search over the profile roster. Small list, so client-side is
  * free — but the semantics mirror `filterCustomers` (name OR phone digits)
  * so a later server-side switch is invisible to the user.
