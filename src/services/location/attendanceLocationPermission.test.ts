@@ -3,6 +3,7 @@ import {
   checkPermission,
   getAccuracyAuthorization,
   getProviderStatus,
+  hasServicesEnabled,
   requestPermission,
 } from 'react-native-nitro-geolocation';
 import {
@@ -24,6 +25,7 @@ const mockAccuracy = getAccuracyAuthorization as jest.Mock;
 const mockProviderStatus = getProviderStatus as jest.Mock;
 const mockRequestPermission = requestPermission as jest.Mock;
 const mockOpenSettings = Linking.openSettings as jest.Mock;
+const mockHasServices = hasServicesEnabled as jest.Mock;
 
 /** Platform.OS is consumed at call time — flipping it per test keeps one
  *  import graph. Saved/restored so the suite never leaks an OS. */
@@ -138,6 +140,39 @@ describe('resolveAttendanceLocationState — iOS matrix', () => {
     mockCheck.mockResolvedValue('undetermined');
 
     await expect(resolveAttendanceLocationState()).resolves.toBe('denied');
+  });
+
+  // The services-off gate (location-services-off feature, 2026-10-17):
+  // with the master switch off, CoreLocation reports kCLErrorDenied for
+  // everything — the permission read alone mislabels a services-off
+  // employee as 'denied' and routes them into the app-settings dead end.
+  describe('iOS services gate (services BEFORE permission, 2026-10-17)', () => {
+    it('master switch OFF → serviceOff even though the permission read would say denied', async () => {
+      useOs('ios');
+      mockHasServices.mockResolvedValue(false);
+      mockCheck.mockResolvedValue('denied');
+
+      await expect(resolveAttendanceLocationState()).resolves.toBe('serviceOff');
+      // The gate runs FIRST — the (doomed) permission read is never reached.
+      expect(mockCheck).not.toHaveBeenCalled();
+    });
+
+    it('services probe THROWS → fail-open: falls through to the permission answer', async () => {
+      useOs('ios');
+      mockHasServices.mockRejectedValue(new Error('bridge dead'));
+      mockCheck.mockResolvedValue('granted');
+      mockAccuracy.mockResolvedValue('full');
+
+      await expect(resolveAttendanceLocationState()).resolves.toBe('granted');
+    });
+
+    it('an UNDEFINED services answer (wiped mock / native hiccup) is NOT serviceOff', async () => {
+      useOs('ios');
+      mockHasServices.mockResolvedValue(undefined);
+      mockCheck.mockResolvedValue('denied');
+
+      await expect(resolveAttendanceLocationState()).resolves.toBe('denied');
+    });
   });
 });
 

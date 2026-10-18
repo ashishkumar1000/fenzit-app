@@ -77,6 +77,17 @@ describe('InlineNotice', () => {
     expect(style.borderColor).toBe(colors.status.scheduled.border);
   });
 
+  // The services-off recovery block renders through `warning` — a
+  // device-toggle state is a recoverable warning, never danger red. It
+  // shares the scheduled amber triad (no separate warning tokens exist).
+  it('warning tone uses the scheduled (amber) palette — not the danger red', () => {
+    const renderer = renderNotice({ message: 'w', tone: 'warning' });
+    const style = flatStyle(alertContainer(renderer)) as Record<string, string>;
+    expect(style.backgroundColor).toBe(colors.status.scheduled.bg);
+    expect(style.borderColor).toBe(colors.status.scheduled.border);
+    expect(style.backgroundColor).not.toBe(colors.status.cancelled.bg);
+  });
+
   it('success tone uses the done (green) palette', () => {
     const renderer = renderNotice({ message: 's', tone: 'success' });
     const style = flatStyle(alertContainer(renderer)) as Record<string, string>;

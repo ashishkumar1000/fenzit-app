@@ -118,21 +118,34 @@ function classification(err: unknown): 'permission' | 'unavailable' | 'timeout' 
 }
 
 /** Errors are rethrown as plain Errors with stable messages — consumers
- *  branch on the message text, never the raw native shape. */
+ *  branch on the message text, never the raw native shape. The numeric
+ *  `.code` rides along additively (services-off feature, 2026-10-17): the
+ *  message contract is unchanged, but typed consumers can now classify
+ *  without string matching (deviceLocation.classifyCaptureFailure). */
 function toConsumerError(err: unknown): Error {
-  switch (classification(err)) {
-    case 'permission':
-      return new Error('Location permission denied');
-    case 'unavailable':
-      return new Error('Location services unavailable');
-    case 'timeout':
-      return new Error('Location request timed out');
-    default: {
-      const message =
-        (err as { message?: string } | null)?.message ?? String(err);
-      return new Error('Failed to get location: ' + message);
+  const error = ((): Error => {
+    switch (classification(err)) {
+      case 'permission':
+        return new Error('Location permission denied');
+      case 'unavailable':
+        return new Error('Location services unavailable');
+      case 'timeout':
+        return new Error('Location request timed out');
+      default: {
+        const message =
+          (err as { message?: string } | null)?.message ?? String(err);
+        return new Error('Failed to get location: ' + message);
+      }
     }
+  })();
+  // Preserve the ORIGINAL native code (2/4/5 stay distinct so the
+  // downstream re-probe can separate services-off from transient); a
+  // codeless source error stays codeless.
+  const code = errorCode(err);
+  if (code !== null) {
+    (error as Error & { code?: number }).code = code;
   }
+  return error;
 }
 
 async function capture(options: {

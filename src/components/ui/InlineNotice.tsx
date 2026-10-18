@@ -1,6 +1,6 @@
 /**
  * InlineNotice — a non-error banner for things the screen wants the user to
- * read *while* usable content stays on screen. Three tones:
+ * read *while* usable content stays on screen. Four tones:
  *
  *   - `info`    — informational. The holidays impact-warning banner uses
  *                 this (amber; the BE-returned affected employees are
@@ -11,6 +11,9 @@
  *                 pattern auto-hides after ~1500 ms).
  *   - `neutral` — soft, muted copy for helpful-but-not-important context
  *                 (e.g. "Effective from {date}"). No accent colour.
+ *   - `warning` — amber recoverable-state banner (device-level causes the
+ *                 app cannot fix itself, e.g. location services off) — a
+ *                 warning, not an app failure, so never the danger red.
  *
  * Why this exists instead of reusing `InlineError`: `InlineError` is
  * hard-coded to `colors.status.cancelled.*` (red). The impact banner is
@@ -21,16 +24,17 @@
  * Purely presentational: pass the message and optional dismiss handler.
  */
 import { StyleSheet, Text, View } from 'react-native';
-import { CheckCircle2, Info, X } from 'lucide-react-native';
+import { CheckCircle2, Info, TriangleAlert, X } from 'lucide-react-native';
 import { IconButton } from './IconButton';
 import { colors, radius, spacing, touch, typography } from '../../theme';
 
-export type InlineNoticeTone = 'info' | 'success' | 'neutral';
+export type InlineNoticeTone = 'info' | 'success' | 'neutral' | 'warning';
 
 export type InlineNoticeProps = {
   /** Message to show. Plain text — callers compose. */
   message: string;
-  /** `info` (amber), `success` (green), or `neutral` (gray). Default `info`. */
+  /** `info` (amber), `success` (green), `neutral` (gray), or `warning`
+   *  (amber). Default `info`. */
   tone?: InlineNoticeTone;
   /** Optional dismiss button. Omit for non-dismissible banners. */
   onDismiss?: () => void;
@@ -58,6 +62,14 @@ const tonePalette = {
     bg: colors.surfaceSunken,
     border: colors.borderSubtle,
     defaultIcon: Info,
+  },
+  // The scheduled amber triad — the palette's "Pending / Scheduled /
+  // Warning" family; no separate warning tokens exist and none are invented.
+  warning: {
+    fg: colors.status.scheduled.fg,
+    bg: colors.status.scheduled.bg,
+    border: colors.status.scheduled.border,
+    defaultIcon: TriangleAlert,
   },
 } as const;
 

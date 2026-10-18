@@ -20,6 +20,7 @@ import {
   checkPermission,
   getAccuracyAuthorization,
   getProviderStatus,
+  hasServicesEnabled,
   requestPermission,
 } from 'react-native-nitro-geolocation';
 
@@ -57,6 +58,20 @@ async function androidState(): Promise<AttendanceLocationState> {
 }
 
 async function iosState(): Promise<AttendanceLocationState> {
+  // Services first (the Android branch's rule, now on iOS too): with the
+  // master switch off, CoreLocation reports kCLErrorDenied for everything,
+  // so a permission read alone mislabels a services-off employee as
+  // 'denied' and routes them into the app-settings dead end. `=== false` —
+  // an undefined answer (a wiped mock, a native hiccup) must not read as
+  // off; the same fail-open rule as the Android provider-status check.
+  try {
+    if ((await hasServicesEnabled()) === false) {
+      return 'serviceOff';
+    }
+  } catch (err) {
+    // A services-probe failure must not block the permission answer.
+    console.error('[attendanceLocationPermission] services probe failed:', err);
+  }
   const status = (await checkPermission()) as PermissionStatus;
   if (status === 'denied' || status === 'restricted') return 'denied';
   if (status === 'undetermined') return 'denied';

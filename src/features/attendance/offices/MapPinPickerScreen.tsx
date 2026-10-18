@@ -38,7 +38,12 @@
  * coordinates; it never blocks Confirm.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PermissionsAndroid, Platform, StyleSheet } from 'react-native';
+import {
+  AppState,
+  PermissionsAndroid,
+  Platform,
+  StyleSheet,
+} from 'react-native';
 import MapView, { type LatLng, type Region } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -136,10 +141,29 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     locate,
     locating,
     errorMessage: locateError,
+    errorKind,
     canOpenSettings,
     clearError,
     openSettings,
+    enableServices,
+    refreshServices,
   } = useLocateMe();
+
+  // Services probe on mount and every foreground return (the useCheckInOut
+  // probe idiom): a user coming back from the OS location panel must never
+  // stay stuck on the services-off state. AppState 'active' is the return
+  // signal — focus events don't fire for OS-level app switches. The probe
+  // never prompts; with services healthy it changes nothing on screen.
+  useEffect(() => {
+    void refreshServices();
+    const sub = AppState.addEventListener('change', appState => {
+      if (appState === 'active') void refreshServices();
+    });
+    return () => {
+      // Some environments (jest's RN preset) return no subscription.
+      sub?.remove();
+    };
+  }, [refreshServices]);
 
   // Silent initial fix — NO prompt: the map opens on the India default and
   // only owners who already granted location get centred on their area
@@ -228,6 +252,14 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
     programmaticTargetRef.current = loc;
     mapRef.current?.animateToRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 }, 400);
   }, [locate, clearError]);
+
+  // [Turn on location]: the Android dialog success auto re-locates without
+  // a second tap (one-tap recovery); the settings rungs rely on the
+  // foreground re-probe above — Confirm/hand-pan stay available meanwhile.
+  const handleEnableServices = useCallback(async () => {
+    const enabled = await enableServices();
+    if (enabled) await handleLocate();
+  }, [enableServices, handleLocate]);
 
   const handleResolvedPlace = useCallback((place: ResolvedPlace) => {
     const loc = { latitude: place.latitude, longitude: place.longitude };
@@ -361,6 +393,9 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
         locateError={locateError}
         canOpenSettings={canOpenSettings}
         onOpenSettings={openSettings}
+        servicesOff={errorKind === 'servicesOff'}
+        onEnableServices={() => void handleEnableServices()}
+        onOpenSearch={() => setSearchVisible(true)}
         radiusM={isCustomer ? undefined : radiusM}
         onRadiusChange={isCustomer ? undefined : setRadiusM}
         onConfirm={handleConfirm}
