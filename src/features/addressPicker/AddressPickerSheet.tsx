@@ -42,6 +42,7 @@ import type { ResolvedPlace } from '../../services';
 import { useAddressAutosuggest } from './useAddressAutosuggest';
 import { ManualAddressForm, type ManualAddressEntry } from './ManualAddressForm';
 import { SearchPhaseBody } from './SearchPhaseBody';
+import { LocationOffBanner } from './LocationOffBanner';
 
 type Props = {
   visible: boolean;
@@ -59,6 +60,11 @@ type Props = {
    *  (a hand-typed customer address is acceptable) and omits it in office
    *  mode. */
   onManualAddress?: (entry: ManualAddressEntry) => void;
+  /** The phone's location is off — shows the amber banner with a [Turn on]
+   *  pill. Optional: hosts that don't care (no location use) omit both. */
+  locationOff?: boolean;
+  /** Runs the host's enable-location ladder from the banner's [Turn on]. */
+  onTurnOnLocation?: () => void;
 };
 
 export default function AddressPickerSheet({
@@ -66,6 +72,8 @@ export default function AddressPickerSheet({
   onClose,
   onResolved,
   onManualAddress,
+  locationOff = false,
+  onTurnOnLocation,
 }: Props) {
   const {
     query,
@@ -154,6 +162,7 @@ export default function AddressPickerSheet({
       detents={[0.9]}
       dismissible={isInteractive}
       onDidPresent={() => inputRef.current?.focus()}>
+      {locationOff && onTurnOnLocation ? <LocationOffBanner onTurnOn={onTurnOnLocation} /> : null}
       <Input
         ref={inputRef}
         value={query}

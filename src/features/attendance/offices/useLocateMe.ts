@@ -1,5 +1,5 @@
 /**
- * useLocateMe — "Use my current location" for the Office map picker
+ * useLocateMe — "Use current location" for the Office map picker
  * (Story 15-4), behind the permission patterns from Stories 7-5/7-6.
  *
  * Requests a FRESH high-accuracy fix (never a cached one) — the owner is

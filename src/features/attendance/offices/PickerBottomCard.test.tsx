@@ -4,16 +4,15 @@
  *
  *  - Services OFF → the red card with the EXACT shipped copy (title names
  *    the device toggle, body never says "permission"; cancelled-red
- *    tokens), the Nearby area row whose Change link focuses the map and
+ *    tokens), the read-only Nearby area row and
  *    the [Turn on location] remediation (no in-sheet search button — the
  *    top search bar owns that) — and Confirm stays
  *    available (a device-toggle state must not lock the owner out of
  *    manual placement). The card is STATE-driven, not error-driven: it
  *    renders from `servicesOff` alone, and the generic error row never
  *    appears in this state.
- *  - Services healthy → the "LOCATION SET" chip, the "Move map to
- *    refine" hint and the address card (bold first comma segment, muted
- *    rest) whose Change link opens the address sheet.
+ *  - Services healthy → the address card (bold first comma segment, muted
+ *    rest) whose Change link opens the address sheet; no status chip.
  *  - The GENERIC error row is unchanged: message text, and the ghost
  *    [Open settings] only after a second denial (canOpenSettings).
  *  - No error → neither block renders.
@@ -21,7 +20,7 @@
 import type ReactTestRenderer from 'react-test-renderer';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { act, create } from 'react-test-renderer';
-import { Badge, Button } from '../../../components/ui';
+import { Button } from '../../../components/ui';
 import { colors } from '../../../theme';
 import PickerBottomCard from './PickerBottomCard';
 
@@ -39,7 +38,6 @@ const BASE = {
   canOpenSettings: false,
   onOpenSettings: jest.fn(),
   onOpenSearch: jest.fn(),
-  onFocusMap: jest.fn(),
   onConfirm: jest.fn(),
 };
 
@@ -151,16 +149,6 @@ describe('the services-off layout (red card)', () => {
     expect(onOpenSearch).not.toHaveBeenCalled();
   });
 
-  it('the Nearby area row Change link focuses the map (the manual-drag hint), not the sheet', () => {
-    const onFocusMap = jest.fn();
-    const renderer = renderCard({ onFocusMap, ...offProps });
-
-    pressByLabel(renderer, 'Change area');
-
-    expect(onFocusMap).toHaveBeenCalledTimes(1);
-    expect(BASE.onOpenSearch).not.toHaveBeenCalled();
-  });
-
   it('NEVER offers the generic [Open settings] ghost while services-off (even after two denials)', () => {
     const renderer = renderCard({
       ...offProps,
@@ -212,16 +200,11 @@ describe('the services-off layout (red card)', () => {
 });
 
 describe('the pinned layout (services healthy)', () => {
-  it('renders the LOCATION SET chip, the adjust hint and the address card (bold name + muted rest)', () => {
+  it('renders the address card (bold name + muted rest) and NO status chip or adjust hint', () => {
     const renderer = renderCard({});
 
-    expect(hasText(renderer, 'LOCATION SET')).toBe(true);
-    expect(hasText(renderer, 'Move map to adjust')).toBe(true);
-
-    const badge = renderer.root.findByType(Badge);
-    expect(badge.props.status).toBe('done');
-    const badgeStyle = flatStyle(badge.findByType(View));
-    expect(badgeStyle?.backgroundColor).toBe(colors.status.done.bg);
+    expect(hasText(renderer, 'LOCATION SET')).toBe(false);
+    expect(hasText(renderer, 'Move map to adjust')).toBe(false);
 
     // The bold first line is the first comma segment; the rest is muted.
     expect(hasText(renderer, 'Shop 4')).toBe(true);

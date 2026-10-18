@@ -13,10 +13,9 @@
  *    in the map's top search bar, not here. No generic error row in this
  *    state, and Confirm stays available — a device toggle never locks the
  *    owner out of manual placement.
- *  - Pinned / healthy → the green "✓ LOCATION SET" status chip + muted
- *    "Move map to adjust" hint, the address card (bold place name = first
- *    comma segment of the reverse geocode, remaining lines muted, a Change
- *    link that opens the address sheet), and Confirm.
+ *  - Pinned / healthy → the address card (bold place name = first comma
+ *    segment of the reverse geocode, remaining lines muted, a Change link
+ *    that opens the address sheet), and Confirm.
  *
  * Shared across both layouts: the generic locate error row (plain error
  * text + ghost [Open settings] after a second denial — visually distinct
@@ -26,8 +25,8 @@
  * action that returns the FINAL pin to the calling form.
  */
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Building2, Check, Crosshair, MapPin } from 'lucide-react-native';
-import { Badge, Button } from '../../../components/ui';
+import { Building2, Crosshair, MapPin } from 'lucide-react-native';
+import { Button } from '../../../components/ui';
 import { colors, radius, shadow, spacing, touch, typography } from '../../../theme';
 import RadiusStepper from './RadiusStepper';
 import ServicesOffCard from './ServicesOffCard';
@@ -48,9 +47,6 @@ type Props = {
   onEnableServices?: () => void;
   /** Opens the address-search sheet — the pinned card's Change link. */
   onOpenSearch: () => void;
-  /** Nearby-area Change hint: re-centres the map on the pin so the user
-   *  sees what to drag (a hint action — dismisses nothing). */
-  onFocusMap: () => void;
   /** Geofence radius in metres. Omit for non-geofenced pickers (customer
    *  mode) — the stepper does not render. */
   radiusM?: number;
@@ -67,7 +63,6 @@ export default function PickerBottomCard({
   servicesOff = false,
   onEnableServices,
   onOpenSearch,
-  onFocusMap,
   radiusM,
   onRadiusChange,
   onConfirm,
@@ -97,30 +92,13 @@ export default function PickerBottomCard({
             ) : (
               <MapPin size={16} color={colors.textMuted} strokeWidth={1.5} />
             )}
-            <Text style={styles.approxText} numberOfLines={2}>
+            <Text style={styles.approxText} numberOfLines={3}>
               {approxLabel}
             </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Change area"
-              onPress={onFocusMap}
-              style={styles.changeTarget}>
-              <Text style={styles.changeText}>Change</Text>
-            </Pressable>
           </View>
         </>
       ) : (
         <>
-          <View style={styles.statusRow}>
-            <Badge
-              status="done"
-              size="sm"
-              icon={<Check size={12} color={colors.status.done.fg} strokeWidth={3} />}>
-              LOCATION SET
-            </Badge>
-            <Text style={styles.refineHint}>Move map to adjust</Text>
-          </View>
-
           <View style={styles.addressCard} testID="picker-address-card">
             <View style={styles.addressIconChip}>
               <Building2 size={16} color={colors.textMuted} strokeWidth={1.5} />
@@ -134,7 +112,7 @@ export default function PickerBottomCard({
                     {placeName}
                   </Text>
                   {placeRest ? (
-                    <Text style={styles.addressRest} numberOfLines={2}>
+                    <Text style={styles.addressRest} numberOfLines={3}>
                       {placeRest}
                     </Text>
                   ) : null}
@@ -223,15 +201,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   // --- Pinned layout ---
-  statusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  refineHint: {
-    ...typography.caption,
-    color: colors.textMuted,
-  },
   addressCard: {
     flexDirection: 'row',
     alignItems: 'center',

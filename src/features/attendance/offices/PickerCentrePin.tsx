@@ -1,20 +1,16 @@
 /**
  * PickerCentrePin — the map picker's centre overlay (static React view,
- * never a native Marker): services healthy = the teardrop pin with the
- * "Exact location" chip; services off = the crosshair drag-to-set puck
- * (beacon ripple) with the "Move the map to set the pin" chip. A 150 ms
- * opacity swap driven by the SAME `servicesOff` flag the bottom card
+ * never a native Marker): ONE pin in every state — the pulsing dot (beacon
+ * ripple + ring + solid dot + ground shadow) — with a state chip above it:
+ * "Drag map to set pin" in both states (the dot is green with
+ * services on, amber with services off). Driven by the SAME `servicesOff` flag the bottom card
  * receives (lifted to the screen) so map and sheet can never disagree. The
  * chip hides while dragging and returns on settle, and while the map
  * itself is unavailable.
  */
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
-import { MapPin, TriangleAlert } from 'lucide-react-native';
+import { AccessibilityInfo, Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '../../../theme';
-
-// The pin-swap cross-fade duration (DESIGN.md map-surface spec).
-const PIN_SWAP_MS = 150;
 
 type Props = {
   servicesOff: boolean;
@@ -22,43 +18,88 @@ type Props = {
   mapFailed: boolean;
 };
 
-export default function PickerCentrePin({ servicesOff, isPanning, mapFailed }: Props) {
-  // 1 = teardrop (services healthy), 0 = crosshair puck — cross-faded on
-  // every servicesOff swap so the pin never hard-cuts between states.
-  const pinFade = useRef(new Animated.Value(1)).current;
+/**
+ * The state chip. A single soft settle-bounce plays each time it appears
+ * (mount, return after a drag, or a services flip) to draw the eye once —
+ * not a loop (the puck ripple already runs one), and skipped entirely when
+ * the OS reduce-motion setting is on.
+ */
+function StateChip({ servicesOff }: { servicesOff: boolean }) {
+  const bounce = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(pinFade, {
-      toValue: servicesOff ? 0 : 1,
-      duration: PIN_SWAP_MS,
-      useNativeDriver: true,
-    }).start();
-  }, [servicesOff, pinFade]);
-  const puckFade = pinFade.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0],
-  });
+    let cancelled = false;
+    void Promise.resolve(AccessibilityInfo.isReduceMotionEnabled?.())
+      .catch(() => false)
+      .then(reduce => {
+      if (cancelled || reduce) {
+        bounce.setValue(1);
+        return;
+      }
+      bounce.setValue(0);
+      Animated.spring(bounce, {
+        toValue: 1,
+        friction: 6,
+        tension: 55,
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bounce]);
 
-  // Beacon/ripple on the current-location dot (services off only): two
-  // staggered rings expanding + fading behind the puck dot — the "this spot
-  // is live" radar read. The loop stops on unmount/state flip so nothing
-  // leaks into tests or the healthy state.
+  return (
+    <Animated.View
+      style={{
+        opacity: bounce.interpolate({
+          inputRange: [0, 0.4],
+          outputRange: [0, 1],
+          extrapolate: 'clamp',
+        }),
+        transform: [
+          { translateY: bounce.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
+        ],
+      }}>
+      <View style={styles.mapChip}>
+        <View style={servicesOff ? styles.mapChipDotOff : styles.mapChipDot} />
+        <Text style={styles.mapChipText}>Drag map to set pin</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+export default function PickerCentrePin({ servicesOff, isPanning, mapFailed }: Props) {
+  // Beacon/ripple on the pin dot: a ring expanding + fading behind the dot
+  // — the "this spot is live" radar read. Looping for the lifetime of the
+  // overlay (stops on unmount); with the OS reduce-motion setting on, the
+  // ring stays still and invisible.
   const ripple = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!servicesOff) {
-      ripple.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.timing(ripple, {
-        toValue: 1,
-        duration: 2000,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [servicesOff, ripple]);
+    let cancelled = false;
+    let loop: Animated.CompositeAnimation | null = null;
+    void Promise.resolve(AccessibilityInfo.isReduceMotionEnabled?.())
+      .catch(() => false)
+      .then(reduce => {
+      if (cancelled) return;
+      if (reduce) {
+        ripple.setValue(1);
+        return;
+      }
+      loop = Animated.loop(
+        Animated.timing(ripple, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      );
+      loop.start();
+    });
+    return () => {
+      cancelled = true;
+      loop?.stop();
+    };
+  }, [ripple]);
   const rippleScale = ripple.interpolate({
     inputRange: [0, 1],
     outputRange: [1, 2.4],
@@ -70,19 +111,9 @@ export default function PickerCentrePin({ servicesOff, isPanning, mapFailed }: P
 
   return (
     <View style={styles.pinLayer} pointerEvents="none">
-      <Animated.View
-        style={[
-          styles.centreLayer,
-          styles.pinNudge,
-          { opacity: pinFade },
-          isPanning && styles.pinLifted,
-        ]}>
-        <MapPin size={38} color={colors.primary} fill={colors.primary} strokeWidth={2} />
-      </Animated.View>
-      <Animated.View style={[styles.centreLayer, { opacity: puckFade }]}>
-        {/* Crosshair "you-are-here" puck: beacon ripple rings + translucent
-            ring + solid dot + ground shadow — drag-to-set semantics for
-            services off. */}
+      <View style={styles.centreLayer}>
+        {/* The pin: beacon ripple ring + translucent ring + solid dot +
+            ground shadow. */}
         <View style={styles.puck}>
           <Animated.View
             style={[
@@ -95,22 +126,11 @@ export default function PickerCentrePin({ servicesOff, isPanning, mapFailed }: P
           </View>
           <View style={styles.puckGround} />
         </View>
-      </Animated.View>
+      </View>
       {!isPanning && !mapFailed ? (
         <View style={styles.centreLayer}>
-          <View style={styles.mapChip}>
-            {servicesOff ? (
-              <>
-                <TriangleAlert size={12} color={colors.status.cancelled.solid} strokeWidth={2} />
-                <Text style={styles.mapChipText}>Move the map to set the pin</Text>
-              </>
-            ) : (
-              <>
-                <View style={styles.mapChipDot} />
-                <Text style={styles.mapChipText}>Exact location</Text>
-              </>
-            )}
-          </View>
+          {/* Keyed so the settle-bounce replays when the state flips. */}
+          <StateChip key={servicesOff ? 'off' : 'on'} servicesOff={servicesOff} />
         </View>
       ) : null}
     </View>
@@ -125,7 +145,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  // One absolute-fill centred layer per overlay (teardrop / puck / chip) so
+  // One absolute-fill centred layer per overlay (pin / chip) so
   // they stack on the same centre point instead of flowing as a column.
   centreLayer: {
     position: 'absolute',
@@ -135,13 +155,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // Half-height nudge puts the glyph's tip on the map centre (spike value).
-  pinNudge: {
-    transform: [{ translateY: -22 }],
-  },
-  pinLifted: {
-    transform: [{ translateY: -34 }],
   },
   puck: {
     alignItems: 'center',
@@ -206,5 +219,11 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.status.done.solid,
+  },
+  mapChipDotOff: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.status.scheduled.solid,
   },
 });

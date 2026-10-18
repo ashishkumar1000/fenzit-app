@@ -252,7 +252,7 @@ describe('MapPinPickerScreen office mode (unchanged)', () => {
     // address area and before the Confirm button.
     const order = root.findAll(() => true);
     const pinnedIdx = order.findIndex(
-      n => n.type === Text && n.props.children === 'LOCATION SET',
+      n => n.props?.testID === 'picker-address-card',
     );
     const stepperIdx = order.findIndex(n => n.type === RadiusStepper);
     const confirmIdx = order.findIndex(

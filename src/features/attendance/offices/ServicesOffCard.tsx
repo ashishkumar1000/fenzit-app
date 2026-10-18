@@ -30,7 +30,6 @@ export default function ServicesOffCard() {
         <MapPinOff size={20} color={colors.textOnColor} strokeWidth={2.2} />
       </View>
       <View style={styles.offCopy}>
-        <Text style={styles.offBadge}>ACTION NEEDED</Text>
         <Text style={styles.offTitle}>{SERVICES_OFF_TITLE}</Text>
         <Text style={styles.offBody}>{SERVICES_OFF_BODY}</Text>
       </View>
@@ -64,11 +63,6 @@ const styles = StyleSheet.create({
   offCopy: {
     flex: 1,
     gap: spacing.s1,
-  },
-  // The urgency micro-badge (the one allowed caps style — the eyebrow).
-  offBadge: {
-    ...typography.eyebrow,
-    color: colors.status.cancelled.fg,
   },
   offTitle: {
     ...typography.bodyStrong,

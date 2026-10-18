@@ -28,6 +28,7 @@ import { touch } from '../../theme';
 import { useAddressAutosuggest } from './useAddressAutosuggest';
 import AddressPickerSheet from './AddressPickerSheet';
 import { ManualAddressForm } from './ManualAddressForm';
+import { LOCATION_OFF_BANNER_MESSAGE } from './LocationOffBanner';
 
 const useAddressAutosuggestMock = useAddressAutosuggest as jest.Mock;
 
@@ -426,5 +427,35 @@ describe('without onManualAddress (the office map picker)', () => {
     const { root } = renderSheet();
 
     expect(root.findByType(EmptyState).props.ctaLabel).toBe('Enter manually');
+  });
+});
+
+describe('the location-off banner', () => {
+  const hasMessage = (root: ReactTestRenderer.ReactTestInstance) =>
+    root
+      .findAllByType(Text)
+      .some(t => t.props.children === LOCATION_OFF_BANNER_MESSAGE);
+
+  it('shows the short message and a [Turn on] pill that fires the host action — search stays usable', () => {
+    mockHook();
+    const onTurnOnLocation = jest.fn();
+    const { root } = renderSheet({ locationOff: true, onTurnOnLocation });
+
+    expect(hasMessage(root)).toBe(true);
+    expect(LOCATION_OFF_BANNER_MESSAGE).not.toMatch(/permission/i);
+    expect(root.findAllByType(Input).length).toBeGreaterThan(0);
+
+    const pill = root
+      .findAllByProps({ accessibilityLabel: 'Turn on location' })
+      .find(n => n.props.onPress);
+    act(() => pill!.props.onPress());
+    expect(onTurnOnLocation).toHaveBeenCalledTimes(1);
+  });
+
+  it('is absent when location is on, and absent when the host gives no action (nothing to tap)', () => {
+    mockHook();
+    expect(hasMessage(renderSheet({ locationOff: false, onTurnOnLocation: jest.fn() }).root)).toBe(false);
+    expect(hasMessage(renderSheet({ locationOff: true }).root)).toBe(false);
+    expect(hasMessage(renderSheet().root)).toBe(false);
   });
 });

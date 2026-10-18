@@ -34,7 +34,7 @@ type Props = {
   mapFailed: boolean;
   locating: boolean;
   /** Device location services are off — the centre pin becomes the
-   *  crosshair "drag-to-set" puck and the locate pill hides. The same flag
+   *  locate pill hides and the chip dot turns amber. The same flag
    *  the bottom card receives. */
   servicesOff: boolean;
   onRegionChange: (region: Region) => void;
@@ -126,7 +126,7 @@ export default function PickerMapArea({
         <View style={styles.locateWrap}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Use my current location"
+            accessibilityLabel="Use current location"
             accessibilityState={{ busy: locating }}
             onPress={locating ? undefined : onLocate}
             style={styles.locatePill}>
@@ -135,7 +135,7 @@ export default function PickerMapArea({
             ) : (
               <Crosshair size={16} color={colors.primary} strokeWidth={2} />
             )}
-            <Text style={styles.locateText}>Use my current location</Text>
+            <Text style={styles.locateText}>Use current location</Text>
           </Pressable>
         </View>
       ) : null}

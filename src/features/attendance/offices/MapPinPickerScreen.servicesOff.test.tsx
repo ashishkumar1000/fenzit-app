@@ -4,7 +4,7 @@
  * ux-map-pin-picker-2026-10-18) — the screen-level half of the picker
  * matrix rows:
  *
- *  - Tapping "Use my current location" with the master switch off shows the
+ *  - Tapping "Use current location" with the master switch off shows the
  *    services-off red card (shipped plain-English title + body) with
  *    [Turn on location] (no separate manual-search button — the top
  *    search bar owns that) and
@@ -30,25 +30,6 @@ jest.mock('../../../services', () => ({
     reverse: jest.fn(),
   },
 }));
-
-// Override the global maps mock so the map ref exposes a spy — the
-// Nearby-area "Change" link re-centres through it.
-const mockAnimateToRegion = jest.fn();
-jest.mock('react-native-maps', () => {
-  const ReactLib = require('react');
-  const { View } = require('react-native');
-  const MockComponent = (props: Record<string, unknown>) =>
-    ReactLib.createElement(View, props);
-  const MockMapView = ReactLib.forwardRef(
-    (props: Record<string, unknown>, ref: unknown) => {
-      ReactLib.useImperativeHandle(ref, () => ({
-        animateToRegion: (...args: unknown[]) => mockAnimateToRegion(...args),
-      }));
-      return ReactLib.createElement(View, props);
-    },
-  );
-  return { __esModule: true, default: MockMapView, Circle: MockComponent };
-});
 
 jest.mock('../../addressPicker/AddressPickerSheet', () => {
   const ReactLib = require('react');
@@ -145,6 +126,10 @@ function hasText(root: ReactTestRenderer.ReactTestInstance, text: string) {
   return root.findAllByType(Text).some(t => t.props.children === text);
 }
 
+function hasAddressCard(root: ReactTestRenderer.ReactTestInstance) {
+  return root.findAllByProps({ testID: 'picker-address-card' }).length > 0;
+}
+
 async function settle(ticks = 10) {
   await act(async () => {
     for (let i = 0; i < ticks; i++) await Promise.resolve();
@@ -221,7 +206,7 @@ describe('MapPinPickerScreen — locate with services OFF (matrix row: named cau
     // The mount probe surfaces the card — no locate tap needed. And the
     // locate pill is HIDDEN while services are off (user decision: it cannot
     // produce a fix, so it must not invite a dead tap).
-    expect(root.findAllByProps({ accessibilityLabel: 'Use my current location' })).toHaveLength(0);
+    expect(root.findAllByProps({ accessibilityLabel: 'Use current location' })).toHaveLength(0);
 
     expect(hasText(root, SERVICES_OFF_TITLE)).toBe(true);
     expect(hasText(root, SERVICES_OFF_BODY)).toBe(true);
@@ -234,7 +219,7 @@ describe('MapPinPickerScreen — locate with services OFF (matrix row: named cau
     expect(
       root.findAllByProps({ accessibilityLabel: 'Search address, street, landmark' }).length,
     ).toBeGreaterThan(0);
-    expect(hasText(root, 'LOCATION SET')).toBe(false); // the two sheet states are exclusive
+    expect(hasAddressCard(root)).toBe(false); // the two sheet states are exclusive
     expect(permissionMock).not.toHaveBeenCalled();
     expect(fixMock).not.toHaveBeenCalled();
   });
@@ -259,7 +244,7 @@ describe('MapPinPickerScreen — locate with services OFF (matrix row: named cau
     expect(permissionMock).toHaveBeenCalledTimes(1);
     expect(hasText(root, SERVICES_OFF_BODY)).toBe(false);
     expect(button(root, 'Turn on location')).toBeUndefined();
-    expect(hasText(root, 'LOCATION SET')).toBe(true);
+    expect(hasAddressCard(root)).toBe(true);
   });
 
   it('a DISMISSED dialog leaves the red card up (no capture, settings ladder owns the rest)', async () => {
@@ -302,12 +287,12 @@ describe('the mount/AppState services re-probe (the settings-rung recovery)', ()
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
     expect(hasText(root, SERVICES_OFF_BODY)).toBe(false);
-    expect(hasText(root, 'LOCATION SET')).toBe(true);
+    expect(hasAddressCard(root)).toBe(true);
     // And the locate pill returns with the healthy state (hidden while off).
     // findAllByProps matches host nodes that forward the prop too — presence
     // is the assertion.
     expect(
-      root.findAllByProps({ accessibilityLabel: 'Use my current location' }).length,
+      root.findAllByProps({ accessibilityLabel: 'Use current location' }).length,
     ).toBeGreaterThan(0);
     expect(fixMock).not.toHaveBeenCalled(); // a re-probe never captures
   });
@@ -347,11 +332,11 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     expect(hasText(root, GENERIC_FAILED_COPY)).toBe(false);
   });
 
-  it('the map state chip switches with the services state (drag-to-set ↔ exact pin)', async () => {
+  it('the map chip says the same thing in both states ("Drag map to set pin") — services off and healthy', async () => {
     servicesMock.mockResolvedValue(false);
     const { root } = renderPicker();
     await settle();
-    expect(hasText(root, 'Move the map to set the pin')).toBe(true);
+    expect(hasText(root, 'Drag map to set pin')).toBe(true);
     expect(hasText(root, 'Exact location')).toBe(false);
 
     servicesMock.mockResolvedValue(true);
@@ -359,8 +344,8 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
       appStateListener!('active');
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
-    expect(hasText(root, 'Exact location')).toBe(true);
-    expect(hasText(root, 'Move the map to set the pin')).toBe(false);
+    expect(hasText(root, 'Drag map to set pin')).toBe(true);
+    expect(hasText(root, 'Exact location')).toBe(false);
   });
 
   it('the top search bar opens the address sheet', async () => {
@@ -374,26 +359,11 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     expect(sheet.props.visible).toBe(true);
   });
 
-  it('the Nearby area "Change" link re-centres the map on the CURRENT pin (screen wiring, not just the card callback)', async () => {
-    servicesMock.mockResolvedValue(false);
-    const { root } = renderPicker();
-    await settle();
-    mockAnimateToRegion.mockClear();
-
-    await pressByLabel(root, 'Change area');
-
-    expect(mockAnimateToRegion).toHaveBeenCalledTimes(1);
-    expect(mockAnimateToRegion.mock.calls[0][0]).toMatchObject({
-      latitude: 12.9716,
-      longitude: 77.5946,
-    });
-  });
-
   it('the state chip hides while the map is being dragged and returns on settle', async () => {
     servicesMock.mockResolvedValue(false);
     const { root } = renderPicker();
     await settle();
-    expect(hasText(root, 'Move the map to set the pin')).toBe(true);
+    expect(hasText(root, 'Drag map to set pin')).toBe(true);
 
     const map = () =>
       root.findAll(n => typeof n.props?.onRegionChange === 'function')[0];
@@ -401,13 +371,13 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     await act(async () => {
       map().props.onRegionChange(region);
     });
-    expect(hasText(root, 'Move the map to set the pin')).toBe(false);
+    expect(hasText(root, 'Drag map to set pin')).toBe(false);
 
     await act(async () => {
       map().props.onRegionChangeComplete(region);
       for (let i = 0; i < 10; i++) await Promise.resolve();
     });
-    expect(hasText(root, 'Move the map to set the pin')).toBe(true);
+    expect(hasText(root, 'Drag map to set pin')).toBe(true);
   });
 
   it('an EMPTY reverse-geocode address falls back to the raw coordinates, not a blank row', async () => {
@@ -426,12 +396,173 @@ describe('the redesigned presentation (ux-map-pin-picker-2026-10-18)', () => {
     const { root } = renderPicker();
     await settle();
 
-    await pressByLabel(root, 'Use my current location');
+    await pressByLabel(root, 'Use current location');
 
     const pill = root
-      .findAllByProps({ accessibilityLabel: 'Use my current location' })
+      .findAllByProps({ accessibilityLabel: 'Use current location' })
       .find(n => n.props.onPress);
     expect(pill).toBeUndefined();
     expect(fixMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('search sheet gets the [Turn on] banner while services are off; Turn on with dialog success keeps the sheet OPEN, hides the banner, and moves the pin only when the sheet closes', async () => {
+    servicesMock.mockResolvedValue(false);
+    const { root, navigation } = renderPicker();
+    await settle();
+    await pressByLabel(root, 'Search address, street, landmark');
+
+    const sheet = () => root.findByProps({ testID: 'address-picker-sheet' });
+    expect(sheet().props.visible).toBe(true);
+    expect(sheet().props.locationOff).toBe(true);
+
+    servicesMock.mockResolvedValue(true);
+    permissionMock.mockResolvedValue({ status: 'granted' });
+    fixMock.mockResolvedValueOnce({ latitude: 19.07, longitude: 72.87, accuracy: 10 });
+    reverseMock.mockClear();
+    await act(async () => {
+      sheet().props.onTurnOnLocation();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(dialogMock).toHaveBeenCalledTimes(1);
+    expect(fixMock).toHaveBeenCalledTimes(1);
+    expect(sheet().props.visible).toBe(true); // still searching
+    expect(sheet().props.locationOff).toBe(false); // banner gone
+    expect(reverseMock).not.toHaveBeenCalled(); // pin has not moved yet
+
+    await act(async () => {
+      sheet().props.onClose();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(sheet().props.visible).toBe(false);
+    expect(reverseMock).toHaveBeenCalledWith(19.07, 72.87, expect.anything());
+    await press(root, 'Confirm location');
+    expect(navigation.popTo).toHaveBeenCalledWith(
+      'OfficeForm',
+      expect.objectContaining({
+        pickedLocation: expect.objectContaining({ latitude: 19.07, longitude: 72.87 }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('an address picked in the search sheet AFTER Turn on always wins over the quietly captured fix', async () => {
+    servicesMock.mockResolvedValue(false);
+    const { root, navigation } = renderPicker();
+    await settle();
+    await pressByLabel(root, 'Search address, street, landmark');
+    const sheet = () => root.findByProps({ testID: 'address-picker-sheet' });
+
+    servicesMock.mockResolvedValue(true);
+    permissionMock.mockResolvedValue({ status: 'granted' });
+    fixMock.mockResolvedValueOnce({ latitude: 19.07, longitude: 72.87, accuracy: 10 });
+    await act(async () => {
+      sheet().props.onTurnOnLocation();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    await act(async () => {
+      sheet().props.onResolved({
+        latitude: 28.61,
+        longitude: 77.2,
+        formattedAddress: 'Connaught Place, Delhi',
+      });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    await press(root, 'Confirm location');
+    expect(navigation.popTo).toHaveBeenCalledWith(
+      'OfficeForm',
+      expect.objectContaining({
+        pickedLocation: expect.objectContaining({ latitude: 28.61, longitude: 77.2 }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('a DISMISSED dialog from the search banner leaves the sheet open', async () => {
+    servicesMock.mockResolvedValue(false);
+    dialogMock.mockResolvedValue({ locationServicesEnabled: false });
+    const { root } = renderPicker();
+    await settle();
+    await pressByLabel(root, 'Search address, street, landmark');
+
+    const sheet = () => root.findByProps({ testID: 'address-picker-sheet' });
+    await act(async () => {
+      sheet().props.onTurnOnLocation();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    expect(fixMock).not.toHaveBeenCalled();
+    expect(sheet().props.visible).toBe(true);
+  });
+
+  it('a slow fix that lands AFTER an address was picked never moves the pin (address wins the race)', async () => {
+    servicesMock.mockResolvedValue(false);
+    const { root, navigation } = renderPicker();
+    await settle();
+    await pressByLabel(root, 'Search address, street, landmark');
+    const sheet = () => root.findByProps({ testID: 'address-picker-sheet' });
+
+    servicesMock.mockResolvedValue(true);
+    permissionMock.mockResolvedValue({ status: 'granted' });
+    let landFix!: (v: unknown) => void;
+    fixMock.mockReturnValueOnce(new Promise(r => (landFix = r)));
+    await act(async () => {
+      sheet().props.onTurnOnLocation();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    await act(async () => {
+      sheet().props.onResolved({ latitude: 28.61, longitude: 77.2, formattedAddress: 'Delhi' });
+    });
+    await act(async () => {
+      landFix({ latitude: 19.07, longitude: 72.87, accuracy: 10 });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    await act(async () => {
+      sheet().props.onClose();
+    });
+
+    await press(root, 'Confirm location');
+    expect(navigation.popTo).toHaveBeenCalledWith(
+      'OfficeForm',
+      expect.objectContaining({
+        pickedLocation: expect.objectContaining({ latitude: 28.61, longitude: 77.2 }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('a fix that lands after the sheet was already closed moves the pin straight away', async () => {
+    servicesMock.mockResolvedValue(false);
+    const { root, navigation } = renderPicker();
+    await settle();
+    await pressByLabel(root, 'Search address, street, landmark');
+    const sheet = () => root.findByProps({ testID: 'address-picker-sheet' });
+
+    servicesMock.mockResolvedValue(true);
+    permissionMock.mockResolvedValue({ status: 'granted' });
+    let landFix!: (v: unknown) => void;
+    fixMock.mockReturnValueOnce(new Promise(r => (landFix = r)));
+    await act(async () => {
+      sheet().props.onTurnOnLocation();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    await act(async () => {
+      sheet().props.onClose();
+    });
+    await act(async () => {
+      landFix({ latitude: 19.07, longitude: 72.87, accuracy: 10 });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+
+    await press(root, 'Confirm location');
+    expect(navigation.popTo).toHaveBeenCalledWith(
+      'OfficeForm',
+      expect.objectContaining({
+        pickedLocation: expect.objectContaining({ latitude: 19.07, longitude: 72.87 }),
+      }),
+      expect.anything(),
+    );
   });
 });
