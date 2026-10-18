@@ -71,6 +71,8 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
   // `activeOnly` (15-6 review iteration 1): the override flow filters the
   // roster to status === 'active' BEFORE search — an invited employee must
   // not even be offerable, because the caller cannot resolve their pick.
+  // `activeOnly` is the weekly-off employee picker (R-18): it gets its own
+  // title and copy; the job-assignment wording stays for New Job.
   // Alphabetical by name for both flows (R-23) — the roster arrives in
   // creation order, which put skilled technicians above everyone else.
   const technicians = useMemo(
@@ -220,7 +222,9 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
           style={styles.backButton}>
           <ArrowLeft size={24} color={colors.textStrong} strokeWidth={2} />
         </Pressable>
-        <Text style={styles.title}>Select technicians</Text>
+        <Text style={styles.title}>
+          {activeOnly ? 'Pick an employee' : 'Select technicians'}
+        </Text>
       </View>
 
       <View style={styles.subHeader}>
@@ -241,14 +245,20 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
           </Text>
         </Pressable>
       </View>
-      <Text style={styles.subtitle}>Choose who will do the job.</Text>
+      <Text style={styles.subtitle}>
+        {activeOnly
+          ? 'Choose who this weekly off is for.'
+          : 'Choose who will do the job.'}
+      </Text>
 
       <View style={styles.searchWrap}>
         <Input
           value={query}
           onChangeText={setQuery}
-          placeholder="Search technicians"
-          accessibilityLabel="Search technicians"
+          placeholder={activeOnly ? 'Search employees' : 'Search technicians'}
+          accessibilityLabel={
+            activeOnly ? 'Search employees' : 'Search technicians'
+          }
           leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
         />
       </View>
