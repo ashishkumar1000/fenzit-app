@@ -119,16 +119,30 @@ export default function WeeklyOffOverrideSheet({
     footerHeight > 0 ? footerHeight + spacing.s32 : spacing.s32;
   const submitLatchRef = useRef(false);
 
-  // Reset on every open, mode change AND picked-employee change (15-6
-  // review iteration 1): the add sheet stays mounted while the owner swaps
-  // the employee via "Change", and without the id in the deps the days
-  // toggled for employee A would silently save against employee B.
+  // Reset on every open and mode change, and when the picked employee is
+  // SWAPPED for another (15-6 review iteration 1): the add sheet stays
+  // mounted while the owner swaps the employee via "Change", and without the
+  // id the days toggled for employee A would silently save against employee
+  // B. Choosing the FIRST employee is not a swap — nothing was tied to
+  // anyone yet, so the pills and date the owner already set stay (R-19).
+  const pickedId = pickedEmployee?.id;
+  const prevPickedIdRef = useRef(pickedId);
   useEffect(() => {
     if (!visible) return;
     setSelectedDays(baselineDays);
     setEffectiveFrom(override?.next?.validFrom ?? '');
     setHasTouched(false);
-  }, [visible, baselineDays, override, pickedEmployee?.id]);
+  }, [visible, baselineDays, override]);
+  useEffect(() => {
+    const previous = prevPickedIdRef.current;
+    prevPickedIdRef.current = pickedId;
+    if (previous === undefined || previous === pickedId) return;
+    setSelectedDays(baselineDays);
+    setEffectiveFrom(override?.next?.validFrom ?? '');
+    setHasTouched(false);
+    // Only a change of the picked employee may reset (see above).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedId]);
 
   const workingDays = useMemo(
     () => [...selectedDays].sort((a, b) => a - b),
