@@ -21,6 +21,7 @@ export interface UseWeeklyOffsResult {
   defaultView: WeeklyOffDefaultResponse['default'];
   nextView: WeeklyOffDefaultResponse['next'];
   history: WeeklyOffDefaultResponse['history'];
+  configured: WeeklyOffDefaultResponse['configured'];
   /**
    * Skeleton contract (15-6 review docblock pass): `isLoading && !hasLoaded`
    * is the FIRST load only — the screen renders its full-screen spinner for
@@ -140,6 +141,7 @@ export function useWeeklyOffs(): UseWeeklyOffsResult {
     defaultView: data.default,
     nextView: data.next,
     history: data.history,
+    configured: data.configured,
     isLoading,
     hasLoaded,
     error,

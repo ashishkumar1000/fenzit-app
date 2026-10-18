@@ -44,7 +44,10 @@ jest.mock('../../../services', () => ({
   },
 }));
 
-jest.mock('../../profile/useMyProfile', () => ({ useMyProfile: jest.fn() }));
+jest.mock('../../profile/useMyProfile', () => ({
+  useMyProfile: jest.fn(),
+  loadMyProfile: jest.fn(),
+}));
 
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';

@@ -10,13 +10,14 @@
  * Extracted so `WeeklyOffScreen.tsx` stays under the ~300-line file limit.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type {
   ProfileTechnician,
   WeeklyOffOverrideResponse,
 } from '../../../services';
 import type { RootStackParamList } from '../../../navigation/types';
-import { useMyProfile } from '../../profile/useMyProfile';
+import { loadMyProfile, useMyProfile } from '../../profile/useMyProfile';
 
 type ScreenProps = NativeStackScreenProps<
   RootStackParamList,
@@ -63,6 +64,17 @@ export function useOverrideSheet({
   const closeSheet = useCallback(() => setOpenSheetFor(null), []);
 
   const { profile, isLoading: isProfileLoading } = useMyProfile();
+  // R-24: the shared profile store only refreshes on focus behind a TTL
+  // throttle, so an employee who became active after the cache was filled
+  // never reached the picker until a cold start. This roster must be fresh
+  // whenever the owner is about to pick from it, so force past the throttle
+  // on screen focus. Scoped to this screen — other `useMyProfile` consumers
+  // keep the throttled behaviour. Failures keep the stale roster (store rule).
+  useFocusEffect(
+    useCallback(() => {
+      void loadMyProfile({ force: true });
+    }, []),
+  );
   // Active technicians only (15-6 review): `status` flips from 'invited' to
   // 'active' at first login, and an override for someone who never activated
   // is a rule for an employee who cannot be tracked. `ProfileTechnician.status`
@@ -112,6 +124,10 @@ export function useOverrideSheet({
   // clear the param after reading so it doesn't re-trigger on later
   // focuses.
   const onPickEmployee = useCallback(() => {
+    // Also refresh as the picker opens: the screen may have stayed focused
+    // while an employee activated (R-24). The picker reads the same store,
+    // so the list updates live if the response lands after it mounts.
+    void loadMyProfile({ force: true });
     navigation.navigate('SelectTechnicians', {
       returnTo: 'AttendanceWeeklyOff',
       activeOnly: true,

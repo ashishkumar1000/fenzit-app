@@ -47,6 +47,12 @@ export interface WeeklyOffView {
  * not just the past.
  */
 export interface WeeklyOffDefaultResponse {
+  /**
+   * True once the owner has saved the everyone rule at least once, even "no
+   * day off" (which leaves no row). Absent from an older backend — callers
+   * then fall back to inferring it from `default`/`next`/`history` (R-11).
+   */
+  configured?: boolean;
   default: WeeklyOffView | null;
   next: WeeklyOffView | null;
   history: WeeklyOffView[];
@@ -79,6 +85,10 @@ async function getDefault(): Promise<WeeklyOffDefaultResponse> {
     '/attendance/weekly-offs',
   );
   return {
+    configured:
+      typeof res.data?.configured === 'boolean'
+        ? res.data.configured
+        : undefined,
     default: res.data?.default ?? null,
     next: res.data?.next ?? null,
     history: Array.isArray(res.data?.history) ? res.data!.history : [],
@@ -94,6 +104,10 @@ async function setDefault(
     input,
   );
   return {
+    configured:
+      typeof res.data?.configured === 'boolean'
+        ? res.data.configured
+        : undefined,
     default: res.data?.default ?? null,
     next: res.data?.next ?? null,
     history: Array.isArray(res.data?.history) ? res.data!.history : [],

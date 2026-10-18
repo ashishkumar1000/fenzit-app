@@ -45,6 +45,8 @@ export interface UseWeeklyOffDefaultFormOptions {
   nextView: WeeklyOffDefaultResponse['next'];
   /** The full ascending range list — the strictly-future rows feed the panel. */
   history: WeeklyOffView[];
+  /** BE flag: owner has saved the everyone rule before (R-11). */
+  configured: boolean | undefined;
   hasLoaded: boolean;
   isSaving: boolean;
   today: string;
@@ -59,6 +61,7 @@ export function useWeeklyOffDefaultForm({
   defaultView,
   nextView,
   history,
+  configured,
   hasLoaded,
   isSaving,
   today,
@@ -77,42 +80,87 @@ export function useWeeklyOffDefaultForm({
   // "Never configured" is `canonical.length === 0` AFTER the first load
   // — before the load we can't know yet, so we default to false and let
   // the helper copy show the configured copy until the data arrives.
-  const neverConfigured = hasLoaded && canonicalDays.length === 0;
+  // R-11: the BE returns `default: null` both for a company that never
+  // configured a rule AND for one whose rule was cleared ("everyone works
+  // all 7 days"). The BE `configured` flag tells them apart; an older BE
+  // without it falls back to inferring from `history`, and `hasSaved`
+  // covers the current session regardless.
+  const [hasSaved, setHasSaved] = useState(false);
+  const neverConfigured =
+    hasLoaded &&
+    !hasSaved &&
+    (configured !== undefined
+      ? !configured
+      : canonicalDays.length === 0 &&
+        nextView === null &&
+        history.length === 0);
+  // The form's target = what the owner is working towards: the queued
+  // change when there is one (R-07), else the current rule. Same source
+  // for the seed AND the dirty baseline, so undo returns to a clean form.
+  const targetDays = useMemo<IsoWeekday[]>(
+    () => (nextView ? nextView.days : canonicalDays),
+    [nextView, canonicalDays],
+  );
 
-  // Seed the working copy once when the data first arrives. Subsequent
-  // re-fetches (e.g. after Save) MUST NOT clobber what the user has
-  // working on — `hasLoadedRef` flips on the false→true edge so we only
-  // seed on the initial load. Each remount (push/pop) re-runs this, so
-  // we seed from the canonical here too: open the screen, see the saved
-  // date and days reflected immediately.
-  const hasLoadedRef = useRef(false);
+  // Seed the working copy when the data first arrives, and RE-seed when the
+  // server rule (the seed target: queued change else current rule, plus the
+  // queued date) changes underneath us — pull-to-refresh or a focus refetch
+  // after another device edited it (R-22). Unsaved edits are never
+  // overwritten: while the working copy differs from what we last seeded the
+  // owner is mid-edit, so we wait; once they undo back to the seed (or save)
+  // the new server rule is applied. Each remount (push/pop) also re-seeds.
+  // `seededRef` holds what the form was last set to (null = never seeded).
+  const seededRef = useRef<{ days: string; from: string } | null>(null);
   useEffect(() => {
     if (!hasLoaded) return;
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
-    if (canonicalDays.length > 0) {
-      setSelectedDays(canonicalDays);
-    } else {
-      setSelectedDays([SUNDAY]);
+    const nextFrom = nextView?.validFrom ?? '';
+    // Sunday is suggested (visual only) ONLY when never configured; a
+    // cleared rule shows no day off (R-11).
+    const seedDays =
+      targetDays.length > 0 ? targetDays : neverConfigured ? [SUNDAY] : [];
+    // The key is built from what is actually SEEDED (not the raw target), so
+    // the never-configured Sunday suggestion matches `seededRef` and the
+    // effect settles instead of re-seeding on every render.
+    const key = {
+      days: [...seedDays].sort((a, b) => a - b).join(','),
+      from: nextFrom,
+    };
+    const seeded = seededRef.current;
+    if (seeded !== null) {
+      if (seeded.days === key.days && seeded.from === key.from) return;
+      const edited =
+        hasTouched &&
+        (seeded.days !== [...selectedDays].sort((a, b) => a - b).join(',') ||
+          seeded.from !== effectiveFrom);
+      if (edited) return;
     }
-    // Initialise the effective date from the canonical when present.
+    seededRef.current = key;
+    setSelectedDays(seedDays);
     // Seed ONLY from the scheduled future edit (`nextView.validFrom`) —
     // never from the active default's own start (15-6 review P3), which
     // is typically in the past and would make the very first Save a
     // reschedule to that past date (silently clamped per AD-8). Empty
     // stays as "use today" for the save call — the BE treats absence as
     // today (AD-8).
-    setEffectiveFrom(nextView?.validFrom ?? '');
+    setEffectiveFrom(nextFrom);
     setHasTouched(false);
-  }, [hasLoaded, canonicalDays, nextView]);
+  }, [
+    hasLoaded,
+    targetDays,
+    neverConfigured,
+    nextView,
+    hasTouched,
+    selectedDays,
+    effectiveFrom,
+  ]);
 
   const workingDays = useMemo(
     () => [...selectedDays].sort((a, b) => a - b),
     [selectedDays],
   );
   const canonicalSorted = useMemo(
-    () => [...canonicalDays].sort((a, b) => a - b),
-    [canonicalDays],
+    () => [...targetDays].sort((a, b) => a - b),
+    [targetDays],
   );
 
   const sevenSelected = workingDays.length === 7;
@@ -121,8 +169,7 @@ export function useWeeklyOffDefaultForm({
   // only emit a real `YYYY-MM-DD`, never hand-typed text (Spec Change Log 1
   // replaced the original text input). The calendar check still guards the
   // wire: "2026-02-31" matches the shape but is not a date (review P11).
-  const dateValid =
-    effectiveFrom === '' || isValidIsoDate(effectiveFrom);
+  const dateValid = effectiveFrom === '' || isValidIsoDate(effectiveFrom);
 
   // Dirty iff the user touched something AND the working copy diverges
   // from the canonical — see `isWeeklyOffDirty`. `effectiveCanonicalFrom`
@@ -130,14 +177,20 @@ export function useWeeklyOffDefaultForm({
   // save-with-future-effectiveFrom doesn't spuriously light up Save.
   const effectiveCanonicalFrom = nextView?.validFrom ?? null;
   const effectiveDateChanged =
-    effectiveCanonicalFrom !== null &&
-    effectiveFrom !== effectiveCanonicalFrom;
-  const dirty = isWeeklyOffDirty({
-    hasTouched,
-    effectiveDateChanged,
-    workingDays,
-    canonicalDays: canonicalSorted,
-  });
+    effectiveCanonicalFrom !== null && effectiveFrom !== effectiveCanonicalFrom;
+  // Never configured (R-01): nothing is saved, so BOTH "no day" and the
+  // Sunday suggestion are the clean starting state — toggling back to
+  // either leaves Save disabled.
+  const dirty = neverConfigured
+    ? hasTouched &&
+      workingDays.length > 0 &&
+      !(workingDays.length === 1 && workingDays[0] === SUNDAY)
+    : isWeeklyOffDirty({
+        hasTouched,
+        effectiveDateChanged,
+        workingDays,
+        canonicalDays: canonicalSorted,
+      });
 
   const saveDisabled = isWeeklyOffSaveDisabled({
     dirty,
@@ -181,9 +234,17 @@ export function useWeeklyOffDefaultForm({
       // second tap re-PUT the same change. Resetting `hasTouched` alone
       // is not enough when the server merged/normalised the range —
       // re-seed so the form shows the server's truth.
+      // Seed from the same target rule as the first load: the queued
+      // change if any (R-07), else the current rule; an empty saved rule
+      // stays empty (R-11 — `hasSaved` stops the Sunday suggestion).
+      setHasSaved(true);
       setHasTouched(false);
-      const freshDays = viewDays(fresh.default);
-      setSelectedDays(freshDays.length > 0 ? freshDays : [SUNDAY]);
+      const freshDays = fresh.next ? fresh.next.days : viewDays(fresh.default);
+      seededRef.current = {
+        days: [...freshDays].sort((a, b) => a - b).join(','),
+        from: fresh.next?.validFrom ?? '',
+      };
+      setSelectedDays(freshDays);
       setEffectiveFrom(fresh.next?.validFrom ?? '');
     } catch {
       // saveError is surfaced in the banner area; form stays populated so

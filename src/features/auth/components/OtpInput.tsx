@@ -10,6 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -49,6 +50,21 @@ export function OtpInput({
   const firedFor = useRef<string | null>(null);
 
   const focus = () => inputRef.current?.focus();
+
+  // R-09: when sign-in succeeds the auth screens unmount while this input is
+  // still focused; on Android the keyboard can outlive it and cover the home
+  // tab bar. Blur + dismiss on unmount so it never leaks past this screen.
+  useEffect(() => {
+    const input = inputRef.current;
+    return () => {
+      // Only when THIS input still holds focus, so we never hide the
+      // keyboard of a field the next screen has just focused.
+      if (input?.isFocused()) {
+        input.blur();
+        Keyboard.dismiss();
+      }
+    };
+  }, []);
 
   // Fire onFilled exactly once per completed code, not on every render where
   // the callback identity happens to change.
