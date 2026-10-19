@@ -43,6 +43,10 @@ const ICONS: Record<string, LucideIcon> = {
   Profile: User,
 };
 
+// Small labels sit in a four-up row: cap system font scaling, then shrink a
+// little if a long label still does not fit, rather than truncating it.
+const LABEL_FONT_CAP = 1.3;
+
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   return (
     <SafeAreaView edges={['bottom']} style={styles.safeArea}>
@@ -76,7 +80,12 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               onPress={onPress}
               style={styles.tab}>
               <Icon size={24} color={color} strokeWidth={focused ? 2.25 : 1.75} />
-              <Text style={[styles.label, { color }]} numberOfLines={1}>
+              <Text
+                style={[styles.label, { color }]}
+                numberOfLines={1}
+                maxFontSizeMultiplier={LABEL_FONT_CAP}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}>
                 {label}
               </Text>
             </Pressable>
@@ -104,6 +113,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
     paddingVertical: spacing.s1,
+    paddingHorizontal: spacing.s1,
   },
   label: {
     fontSize: fontSize['2xs'],

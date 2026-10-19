@@ -28,6 +28,11 @@ export function formatPulseDate(ymd: string): string {
   return `${WEEKDAYS[date.getDay()]}, ${MONTHS[m - 1]} ${d}`;
 }
 
+// Four chips share one row, so label scaling is capped (like the weekly-off
+// pills) and the label may wrap to a second line instead of truncating.
+const LABEL_FONT_CAP = 1.3;
+const VALUE_FONT_CAP = 1.5;
+
 type Ready = Extract<TodayPulse, { status: 'ready' }>;
 
 type Props = { pulse: Ready; onPress: () => void };
@@ -60,10 +65,10 @@ export function TodayPulseCard({ pulse, onPress }: Props) {
       <View style={styles.chips}>
         {chips.map(chip => (
           <View key={chip.label} style={styles.chip}>
-            <Text style={styles.value}>{chip.value}</Text>
+            <Text style={styles.value} maxFontSizeMultiplier={VALUE_FONT_CAP}>{chip.value}</Text>
             <View style={styles.labelRow}>
               <View style={[styles.dot, { backgroundColor: chip.dot }]} />
-              <Text style={styles.label} numberOfLines={1}>
+              <Text style={styles.label} numberOfLines={2} maxFontSizeMultiplier={LABEL_FONT_CAP}>
                 {chip.label}
               </Text>
             </View>
@@ -118,6 +123,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.s1,
     paddingVertical: spacing.s3,
+    paddingHorizontal: spacing.s1,
     borderRadius: radius.lg,
     backgroundColor: colors.onPrimarySoft,
   },
@@ -127,15 +133,19 @@ const styles = StyleSheet.create({
   },
   labelRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // A wrapped label keeps its dot beside the FIRST line, not mid-block.
+    alignItems: 'flex-start',
     gap: spacing.s1,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    marginTop: (typography.caption.lineHeight - 6) / 2,
   },
   label: {
+    flexShrink: 1,
+    textAlign: 'center',
     ...typography.caption,
     color: colors.onPrimaryFaint,
   },

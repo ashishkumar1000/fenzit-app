@@ -16,6 +16,7 @@ import { Trash2 } from 'lucide-react-native';
 import { Button, InlineError } from '../../../components/ui';
 import { colors, spacing } from '../../../theme';
 import type { ApiError } from '../../../services';
+import { saveFailureMessage } from './weeklyOffModel';
 
 export type HolidayFormSheetFooterProps = {
   isEdit: boolean;
@@ -37,9 +38,7 @@ export default function HolidayFormSheetFooter({
   return (
     <View style={styles.footer}>
       {saveError && !isSaving ? (
-        <InlineError
-          message={saveError.message || "Couldn't save. Try again."}
-        />
+        <InlineError message={saveFailureMessage(saveError)} />
       ) : null}
       <Button
         variant="primary"

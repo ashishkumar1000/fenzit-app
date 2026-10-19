@@ -14,6 +14,11 @@ export function technicianPhone(
   return `${technician.countryCode} ${technician.phoneNumber}`;
 }
 
+/** Name as a string even if a malformed row slips through (null/undefined). */
+function safeName(t: Pick<ProfileTechnician, 'name'>): string {
+  return typeof t.name === 'string' ? t.name : '';
+}
+
 /**
  * A pick list reads alphabetically by name, whatever order the roster was
  * created in (R-23). Locale-aware and case/accent-insensitive at the base
@@ -23,9 +28,15 @@ export function technicianPhone(
 export function sortTechniciansByName(
   technicians: ProfileTechnician[],
 ): ProfileTechnician[] {
-  return [...technicians].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }),
-  );
+  return [...technicians].sort((a, b) => {
+    // Defensive: a malformed row with no name must not throw; it sorts last.
+    const an = safeName(a);
+    const bn = safeName(b);
+    if (!an && !bn) return 0;
+    if (!an) return 1;
+    if (!bn) return -1;
+    return an.localeCompare(bn, undefined, { sensitivity: 'base', numeric: true });
+  });
 }
 
 /**
@@ -48,9 +59,9 @@ export function filterTechnicians(
   const digits = q.replace(/\D/g, '');
   return technicians.filter(
     t =>
-      t.name.toLowerCase().includes(q) ||
+      safeName(t).toLowerCase().includes(q) ||
       (digits.length > 0 &&
-        (t.phoneNumber.includes(digits) ||
+        ((t.phoneNumber ?? '').includes(digits) ||
           (t.employeeCode ?? '').toLowerCase().includes(digits))),
   );
 }

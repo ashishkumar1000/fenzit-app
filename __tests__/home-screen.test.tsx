@@ -36,6 +36,11 @@ jest.mock('../src/features/profile', () => ({
 
 jest.mock('../src/features/home', () => ({
   QuickActions: jest.fn(() => null),
+  // Today's Pulse is its own request and only shows while attendance is
+  // enabled — not what these tests pin, so the card and its hook are stubs.
+  useTodayPulse: jest.fn(() => ({ status: 'loading' })),
+  TodayPulseCard: jest.fn(() => null),
+  NoJobsCard: jest.requireActual('../src/features/home').NoJobsCard,
   hasAnyJobCount: jest.requireActual('../src/features/home').hasAnyJobCount,
   // Real implementation — Story 1.7's filtering/strip/empty-state behaviour
   // is exactly what these tests pin.

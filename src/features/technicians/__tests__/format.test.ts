@@ -6,7 +6,7 @@
  * "EMP-104" and "emp104" all find the same row, while a digits-free query
  * ("emp") never matches codes (it would match every technician at once).
  */
-import { filterTechnicians } from '../format';
+import { filterTechnicians, sortTechniciansByName } from '../format';
 import type { ProfileTechnician } from '../../../services';
 
 const make = (overrides: Partial<ProfileTechnician>): ProfileTechnician => ({
@@ -61,5 +61,23 @@ describe('filterTechnicians', () => {
   it('keeps technicians without a code searchable by name/phone', () => {
     expect(filterTechnicians(ROSTER, 'menon').map(t => t.id)).toEqual(['t-3']);
     expect(filterTechnicians(ROSTER, '9000000003').map(t => t.id)).toEqual(['t-3']);
+  });
+});
+
+describe('null-name tolerance', () => {
+  const nameless = make({ id: 't-x', name: null as unknown as string });
+
+  it('sorts a technician with no name last without throwing', () => {
+    const out = sortTechniciansByName([
+      nameless,
+      make({ id: 't-b', name: 'Bala' }),
+      make({ id: 't-a', name: 'Asha' }),
+    ]);
+    expect(out.map(t => t.id)).toEqual(['t-a', 't-b', 't-x']);
+  });
+
+  it('filters without throwing and never matches the nameless row by name', () => {
+    const roster = [nameless, make({ id: 't-a', name: 'Asha' })];
+    expect(filterTechnicians(roster, 'asha').map(t => t.id)).toEqual(['t-a']);
   });
 });
