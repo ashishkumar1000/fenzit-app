@@ -1,6 +1,6 @@
 /**
  * TodayPulseCard — the owner Home's attendance card: today's date, the
- * checked-in share, and four count chips (Present, Not in yet, On Leave,
+ * checked-in share, and four count chips (Present, Not in yet, On leave,
  * Late). Replaces the plain Attendance tile while the numbers load OK;
  * tapping it opens the Attendance hub. Same numbers as the Today screen
  * (`GET /attendance/dashboard`), so the two never disagree: Present =
@@ -8,8 +8,7 @@
  *
  * Blue card with a diagonal gradient (SVG LinearGradient behind the content
  * — react-native-svg is already a dependency) and translucent chips (the
- * dashboard's on-primary tints). Chip dots use the status hues, which stay
- * legible on blue.
+ * dashboard's on-primary tints).
  */
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GradientSurface } from '../../../components/ui';
@@ -42,22 +41,22 @@ export function TodayPulseCard({ pulse, onPress }: Props) {
   // Nobody tracked → no share to compute; the card still shows 0%.
   const pct = checkedInPct(counts) ?? 0;
   const chips = [
-    { label: 'Present', value: counts.checkedIn, dot: colors.success },
-    { label: 'Not in yet', value: counts.notCheckedIn, dot: colors.onPrimaryFaint },
-    { label: 'On Leave', value: counts.onLeave, dot: colors.warning },
-    { label: 'Late', value: counts.late, dot: colors.danger },
+    { label: 'Present', value: counts.checkedIn },
+    { label: 'Not in yet', value: counts.notCheckedIn },
+    { label: 'On leave', value: counts.onLeave },
+    { label: 'Late', value: counts.late },
   ];
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Today's Pulse. ${chips.map(c => `${c.label} ${c.value}`).join(', ')}. Open attendance`}
+      accessibilityLabel={`Attendance today. ${chips.map(c => `${c.label} ${c.value}`).join(', ')}. Tap to open attendance`}
       onPress={onPress}
       style={({ pressed }) => pressed && styles.pressed}>
       <GradientSurface style={styles.card}>
       <View style={styles.top}>
         <View style={styles.titles}>
           <Text style={styles.date}>{formatPulseDate(date)}</Text>
-          <Text style={styles.title}>Today's Pulse</Text>
+          <Text style={styles.title}>Attendance today</Text>
         </View>
         <Text style={styles.pct}>{`${pct}%`}</Text>
       </View>
@@ -66,12 +65,9 @@ export function TodayPulseCard({ pulse, onPress }: Props) {
         {chips.map(chip => (
           <View key={chip.label} style={styles.chip}>
             <Text style={styles.value} maxFontSizeMultiplier={VALUE_FONT_CAP}>{chip.value}</Text>
-            <View style={styles.labelRow}>
-              <View style={[styles.dot, { backgroundColor: chip.dot }]} />
-              <Text style={styles.label} numberOfLines={2} maxFontSizeMultiplier={LABEL_FONT_CAP}>
-                {chip.label}
-              </Text>
-            </View>
+            <Text style={styles.label} numberOfLines={2} maxFontSizeMultiplier={LABEL_FONT_CAP}>
+              {chip.label}
+            </Text>
           </View>
         ))}
       </View>
@@ -130,18 +126,6 @@ const styles = StyleSheet.create({
   value: {
     ...typography.title,
     color: colors.onPrimary,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    // A wrapped label keeps its dot beside the FIRST line, not mid-block.
-    alignItems: 'flex-start',
-    gap: spacing.s1,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginTop: (typography.caption.lineHeight - 6) / 2,
   },
   label: {
     flexShrink: 1,

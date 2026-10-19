@@ -34,7 +34,7 @@ const find = (root: ReactTestRenderer.ReactTestInstance, label: string) =>
   root.findAllByType(Text).find((t) => textOf(t) === label)!;
 
 describe('TodayPulseCard font caps', () => {
-  const LABELS = ['Present', 'Not in yet', 'On Leave', 'Late'];
+  const LABELS = ['Present', 'Not in yet', 'On leave', 'Late'];
 
   it.each(LABELS)('label "%s" caps at 1.3x and allows 2 lines (no 1-line truncation)', (label) => {
     const node = find(mount(pulse()), label);

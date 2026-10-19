@@ -207,13 +207,13 @@ describe('HomeScreen — the Attendance entry tile', () => {
     };
     const root = renderScreen();
 
-    expect(texts(root)).toContain("Today's Pulse");
+    expect(texts(root)).toContain("Attendance today");
     expect(texts(root)).toContain('Saturday, Oct 24');
     expect(texts(root)).toContain('84%');
     expect(texts(root)).not.toContain("Who's in, leave, offices & team");
     const card = root.findAll(
       (node: ReactTestRenderer.ReactTestInstance) =>
-        String(node.props?.accessibilityLabel ?? '').startsWith("Today's Pulse") &&
+        String(node.props?.accessibilityLabel ?? '').startsWith("Attendance today") &&
         typeof node.props.onPress === 'function',
     );
     expect(card).toHaveLength(1);
@@ -234,7 +234,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
           n.props?.accessibilityLabel === "Loading today's attendance",
       ).length,
     ).toBeGreaterThan(0);
-    expect(texts(root)).not.toContain("Today's Pulse");
+    expect(texts(root)).not.toContain("Attendance today");
     expect(texts(root)).not.toContain('Attendance');
   });
 

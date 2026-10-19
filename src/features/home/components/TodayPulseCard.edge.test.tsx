@@ -82,7 +82,7 @@ describe("TodayPulseCard edges", () => {
       (n) => typeof n.props.accessibilityLabel === "string"
     )[0];
     expect(card.props.accessibilityLabel).toBe(
-      "Today's Pulse. Present 4, Not in yet 3, On Leave 2, Late 1. Open attendance"
+      "Attendance today. Present 4, Not in yet 3, On leave 2, Late 1. Tap to open attendance"
     );
   });
 });
