@@ -281,21 +281,13 @@ it('a failed mutation surfaces its own banner (the list itself looks normal)', a
 
 // --- Empty state ----------------------------------------------------------------
 
-it('the empty state renders and its CTA navigates to the Jobs tab (not goBack)', async () => {
+it('the owner empty state has no action button (notifications come in many types, no single destination)', async () => {
   const renderer = await mountScreen();
 
-  const cta = renderer.root
-    .findAllByType(Button)
-    .find(b => b.props.children === 'Go to jobs');
-  expect(cta).toBeDefined();
-
-  await act(async () => {
-    cta?.props.onPress();
-  });
-  // The spec's "CTA back to jobs": the Jobs TAB, never a plain goBack (from
-  // the Home bell that would land on Home — the CTA would lie).
-  expect(mockNavigation.navigate).toHaveBeenCalledWith('Jobs', { scope: 'today' });
-  expect(mockNavigation.goBack).not.toHaveBeenCalled();
+  expect(
+    renderer.root.findAllByType(Button).some(b => b.props.children === 'Go to jobs'),
+  ).toBe(false);
+  expect(mockNavigation.navigate).not.toHaveBeenCalled();
 });
 
 // --- Focus behaviour ------------------------------------------------------------

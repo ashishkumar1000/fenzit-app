@@ -35,9 +35,10 @@ jest.mock('../features/home/useTodayPulse', () => ({
   useTodayPulse: (enabled: boolean) => mockUseTodayPulse(enabled),
 }));
 
+const mockNotifications: { unreadCount: number | null } = { unreadCount: null };
 jest.mock('../features/notifications', () => ({
   useNotifications: () => ({
-    unreadCount: null,
+    unreadCount: mockNotifications.unreadCount,
     loadUnreadCount: jest.fn().mockResolvedValue(undefined),
   }),
 }));
@@ -248,5 +249,55 @@ describe('HomeScreen — the Attendance entry tile', () => {
     mockProfileState.profile = enabledProfile();
     renderScreen();
     expect(mockUseTodayPulse).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('HomeScreen — the bell on the first-run Home', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPulse.value = { status: 'error' };
+    mockNotifications.unreadCount = null;
+  });
+
+  it('shows the bell on the first-run Home, with no unread dot yet', () => {
+    mockProfileState.profile = ownerProfile();
+    const root = renderScreen();
+
+    const bell = root.findAll(
+      (node: ReactTestRenderer.ReactTestInstance) =>
+        node.props?.accessibilityLabel === 'Notifications' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(bell).toHaveLength(1);
+  });
+
+  it('treats zero unread as read: plain label, no count', () => {
+    mockNotifications.unreadCount = 0;
+    mockProfileState.profile = ownerProfile();
+    const root = renderScreen();
+
+    const bell = root.findAll(
+      (node: ReactTestRenderer.ReactTestInstance) =>
+        node.props?.accessibilityLabel === 'Notifications' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(bell).toHaveLength(1);
+  });
+
+  it('labels the bell with the unread count and opens Notifications on tap', () => {
+    mockNotifications.unreadCount = 3;
+    mockProfileState.profile = ownerProfile();
+    const root = renderScreen();
+
+    const bell = root.findAll(
+      (node: ReactTestRenderer.ReactTestInstance) =>
+        node.props?.accessibilityLabel === 'Notifications, 3 unread' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(bell).toHaveLength(1);
+    act(() => {
+      bell[0].props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('Notifications');
   });
 });

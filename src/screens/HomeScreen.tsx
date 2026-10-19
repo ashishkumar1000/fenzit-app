@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 import type { JobScope } from '../services';
 import HomeHeader from '../components/HomeHeader';
+import NotificationBell from '../components/NotificationBell';
 import { EmptyState, InlineError, Skeleton } from '../components/ui';
 import { Tile } from '../components/Tile';
 import { colors, radius, spacing, typography } from '../theme';
@@ -238,12 +239,21 @@ export default function HomeScreen({ navigation }: Props) {
     return (
       <SafeAreaView style={styles.newUserRoot} edges={['top']}>
         <View style={styles.greetingHeader}>
-          <Text style={styles.greeting}>
-            {ownerFirstName
-              ? `${greetingForNow()}, ${ownerFirstName}`
-              : greetingForNow()}
-          </Text>
-          <Text style={styles.business}>{businessName}</Text>
+          <View style={styles.greetingRow}>
+            <View style={styles.greetingText}>
+              <Text style={styles.greeting}>
+                {ownerFirstName
+                  ? `${greetingForNow()}, ${ownerFirstName}`
+                  : greetingForNow()}
+              </Text>
+              <Text style={styles.business}>{businessName}</Text>
+            </View>
+            <NotificationBell
+              unreadCount={unreadCount}
+              onPress={handleOpenNotifications}
+              variant="onPage"
+            />
+          </View>
         </View>
 
         <ScrollView
@@ -315,6 +325,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.s4,
     paddingTop: spacing.s2,
     paddingBottom: spacing.s4,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
+  },
+  greetingText: {
+    flex: 1,
   },
   greeting: {
     ...typography.title,

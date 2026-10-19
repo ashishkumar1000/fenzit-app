@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, Pressable, StatusBar, useWindowDimensions } from 'react-native';
-import { Bell, Calendar, CalendarClock } from 'lucide-react-native';
+import { Calendar, CalendarClock } from 'lucide-react-native';
 import { Card } from './ui';
+import NotificationBell from './NotificationBell';
 import { colors, palette, radius, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
 import type { JobCounts, JobScope } from '../services';
@@ -109,29 +110,13 @@ export default function HomeHeader({
               <Text style={styles.serviceText}>{businessName}</Text>
             </View>
 
-            {/* Story 3.4 wired this previously-dead bell (empty onPress,
-                hardcoded dot) to the Notifications screen, and the dot to
-                the real unread count from `GET /notifications/unread-count`
-                — a tappable control that does nothing beside a live one is
-                worse than no bell at all. */}
-            <Pressable
-              style={styles.notificationButton}
-              accessibilityRole="button"
-              // The label carries the unread state (the dot is visual only) —
-              // the same discipline as the Jobs bell's count pill.
-              accessibilityLabel={
-                unreadCount !== null && unreadCount > 0
-                  ? `Notifications, ${unreadCount} unread`
-                  : 'Notifications'
-              }
-              onPress={onBellPress}>
-              <View style={styles.notificationBadge}>
-                <Bell color={colors.surfaceCard} size={24} strokeWidth={1.5} />
-                {unreadCount !== null && unreadCount > 0 ? (
-                  <View style={styles.notificationDot} />
-                ) : null}
-              </View>
-            </Pressable>
+            {/* Story 3.4: the bell opens the Notifications screen and its dot
+                is the real unread count. Shared with the first-run Home. */}
+            <NotificationBell
+              unreadCount={unreadCount}
+              onPress={onBellPress}
+              variant="onBrand"
+            />
           </View>
         </View>
 
@@ -195,26 +180,6 @@ const styles = StyleSheet.create({
   serviceText: {
     ...typography.body,
     color: palette.blue200,
-  },
-  notificationButton: {
-    padding: spacing.s2,
-  },
-  notificationBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  notificationDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: palette.red500,
   },
   statsGrid: {
     gap: spacing.s4,

@@ -25,7 +25,8 @@
  * anything this build doesn't know yet → the inert generic card. A tap's
  * deep link routes per role: job cards open JobDetail for the owner and
  * TechJobDetail for the technician; report cards are owner-only; generic
- * cards are not tappable. The empty state's "Go to jobs" CTA is owner-only.
+ * cards are not tappable. The empty state has no action button: notifications
+ * can be of many types, so no single destination fits.
  *
  * Tapping a card is NAVIGATE-FIRST: the deep link to that event's screen is
  * the user's intent; the optimistic mark-read of the card's unread events is
@@ -472,17 +473,6 @@ export default function NotificationsScreen({ navigation }: Props) {
                       ? 'Updates for you will show up here.'
                       : 'Updates from your technicians — job arrivals, progress, completions and report updates — will show up here.'
                   }
-                  // Owner-only: the CTA leads to the owner's Jobs TAB; a
-                  // technician has no Jobs tab, so the CTA is simply absent.
-                  {...(role === 'owner'
-                    ? {
-                        ctaLabel: 'Go to jobs',
-                        // The spec's "CTA back to jobs": navigate to the Jobs
-                        // TAB, never `goBack` — from the Home bell that would
-                        // land on Home (the CTA would lie about where it goes).
-                        onPressCta: () => navigation.navigate('Jobs', { scope: 'today' }),
-                      }
-                    : {})}
                 />
               )
             }
