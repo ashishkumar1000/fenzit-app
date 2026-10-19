@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Bell } from 'lucide-react-native';
-import { colors, palette, spacing } from '../theme';
+import { colors, palette, radius, spacing } from '../theme';
 
 export interface NotificationBellProps {
   /**
@@ -34,6 +34,7 @@ export default function NotificationBell({
       style={styles.button}
       accessibilityRole="button"
       accessibilityLabel={hasUnread ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+      accessibilityHint="Opens your notifications"
       onPress={onPress}>
       <View style={[styles.badge, onPage ? styles.badgeOnPage : styles.badgeOnBrand]}>
         <Bell
@@ -41,7 +42,7 @@ export default function NotificationBell({
           size={24}
           strokeWidth={1.5}
         />
-        {hasUnread ? <View style={styles.dot} /> : null}
+        {hasUnread ? <View style={styles.dot} importantForAccessibility="no" /> : null}
       </View>
     </Pressable>
   );
@@ -54,12 +55,12 @@ const styles = StyleSheet.create({
   badge: {
     width: 56,
     height: 56,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     justifyContent: 'center',
     alignItems: 'center',
   },
   badgeOnBrand: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: colors.onPrimarySoft,
   },
   badgeOnPage: {
     backgroundColor: colors.surfaceCard,
