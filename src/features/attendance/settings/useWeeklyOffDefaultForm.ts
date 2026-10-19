@@ -107,8 +107,8 @@ export function useWeeklyOffDefaultForm({
   // change when there is one (R-07), else the current rule. Same source
   // for the seed AND the dirty baseline, so undo returns to a clean form.
   const targetDays = useMemo<IsoWeekday[]>(
-    () => (nextView ? nextView.days : canonicalDays),
-    [nextView, canonicalDays],
+    () => (nextView && futureFrom(nextView) ? nextView.days : canonicalDays),
+    [nextView, canonicalDays, futureFrom],
   );
 
   // Seed the working copy when the data first arrives, and RE-seed when the
@@ -249,7 +249,9 @@ export function useWeeklyOffDefaultForm({
       // stays empty (R-11 — `hasSaved` stops the Sunday suggestion).
       setHasSaved(true);
       setHasTouched(false);
-      const freshDays = fresh.next ? fresh.next.days : viewDays(fresh.default);
+      const freshDays = futureFrom(fresh.next)
+        ? fresh.next!.days
+        : viewDays(fresh.default);
       seededRef.current = {
         days: [...freshDays].sort((a, b) => a - b).join(','),
         from: futureFrom(fresh.next),

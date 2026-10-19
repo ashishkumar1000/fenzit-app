@@ -66,6 +66,13 @@ describe("effective date seeding", () => {
   });
 });
 
+describe("stale past queued change", () => {
+  it("seeds the days from the current rule, not the stale queued one", () => {
+    mount({ nextView: view([1], "2026-10-01") });
+    expect(probe.selectedDays).toEqual([6, 7]);
+  });
+});
+
 describe("after a successful save", () => {
   const savedWith = async (fresh: {
     next: WeeklyOffView | null;
