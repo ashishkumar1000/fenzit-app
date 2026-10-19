@@ -205,7 +205,10 @@ export const SAVE_FAILED_MESSAGE = "Couldn't save. Try again.";
  * timeout, status 0) shows the approved save-failure copy instead of the
  * app-wide network wording.
  */
-export function saveFailureMessage(err: { status?: number; message?: string }): string {
-  if (err.status === 0 || !err.message) return SAVE_FAILED_MESSAGE;
-  return err.message;
+export function saveFailureMessage(err: { status?: number; message?: string } | null | undefined): string {
+  const message: unknown = err?.message;
+  if (err?.status === 0 || typeof message !== 'string' || message.trim() === '') {
+    return SAVE_FAILED_MESSAGE;
+  }
+  return message;
 }

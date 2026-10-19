@@ -72,6 +72,14 @@ export function useWeeklyOffDefaultForm({
   const [effectiveFrom, setEffectiveFrom] = useState<string>('');
   const [hasTouched, setHasTouched] = useState(false);
   const submitLatchRef = useRef(false);
+  // A queued date already in the past is stale data, never a date to seed:
+  // the picker's floor would block it and a Save would reschedule into the
+  // past. Treated as "no queued date" for the seed AND the dirty baseline.
+  const futureFrom = useCallback(
+    (v: WeeklyOffView | null): string =>
+      v && v.validFrom >= today ? v.validFrom : '',
+    [today],
+  );
 
   const canonicalDays = useMemo<IsoWeekday[]>(
     () => viewDays(defaultView),
@@ -89,6 +97,7 @@ export function useWeeklyOffDefaultForm({
   const neverConfigured =
     hasLoaded &&
     !hasSaved &&
+    nextView === null && // a queued change means a rule was set, whatever the flag says
     (configured !== undefined
       ? !configured
       : canonicalDays.length === 0 &&
@@ -113,7 +122,7 @@ export function useWeeklyOffDefaultForm({
   const seededRef = useRef<{ days: string; from: string } | null>(null);
   useEffect(() => {
     if (!hasLoaded) return;
-    const nextFrom = nextView?.validFrom ?? '';
+    const nextFrom = futureFrom(nextView);
     // Sunday is suggested (visual only) ONLY when never configured; a
     // cleared rule shows no day off (R-11).
     const seedDays =
@@ -149,6 +158,7 @@ export function useWeeklyOffDefaultForm({
     targetDays,
     neverConfigured,
     nextView,
+    futureFrom,
     hasTouched,
     selectedDays,
     effectiveFrom,
@@ -175,7 +185,7 @@ export function useWeeklyOffDefaultForm({
   // from the canonical — see `isWeeklyOffDirty`. `effectiveCanonicalFrom`
   // mirrors the seed's `nextView`-only rule, so a fresh mount after a
   // save-with-future-effectiveFrom doesn't spuriously light up Save.
-  const effectiveCanonicalFrom = nextView?.validFrom ?? null;
+  const effectiveCanonicalFrom = futureFrom(nextView) || null;
   const effectiveDateChanged =
     effectiveCanonicalFrom !== null && effectiveFrom !== effectiveCanonicalFrom;
   // Never configured (R-01): nothing is saved, so BOTH "no day" and the
@@ -242,17 +252,17 @@ export function useWeeklyOffDefaultForm({
       const freshDays = fresh.next ? fresh.next.days : viewDays(fresh.default);
       seededRef.current = {
         days: [...freshDays].sort((a, b) => a - b).join(','),
-        from: fresh.next?.validFrom ?? '',
+        from: futureFrom(fresh.next),
       };
       setSelectedDays(freshDays);
-      setEffectiveFrom(fresh.next?.validFrom ?? '');
+      setEffectiveFrom(futureFrom(fresh.next));
     } catch {
       // saveError is surfaced in the banner area; form stays populated so
       // the user can retry without re-entering.
     } finally {
       submitLatchRef.current = false;
     }
-  }, [saveDisabled, saveDefault, workingDays, effectiveFrom, onSaved]);
+  }, [saveDisabled, saveDefault, workingDays, effectiveFrom, onSaved, futureFrom]);
 
   return {
     neverConfigured,

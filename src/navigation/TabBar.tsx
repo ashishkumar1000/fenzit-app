@@ -69,6 +69,12 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             }
           };
 
+          // Standard tab-bar contract: let navigator listeners react to a
+          // long press (e.g. tabLongPress options); it never switches tab.
+          const onLongPress = () => {
+            navigation.emit({ type: 'tabLongPress', target: route.key });
+          };
+
           const color = focused ? colors.primary : colors.textMuted;
 
           return (
@@ -78,6 +84,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               accessibilityState={focused ? { selected: true } : {}}
               accessibilityLabel={label}
               onPress={onPress}
+              onLongPress={onLongPress}
               style={styles.tab}>
               <Icon size={24} color={color} strokeWidth={focused ? 2.25 : 1.75} />
               <Text

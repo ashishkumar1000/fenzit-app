@@ -51,7 +51,9 @@ function initialsOf(name: string): string {
     .toUpperCase();
 }
 
-export function Avatar({ name = '', uri = null, size = 'md', variant = 'tint', style }: AvatarProps) {
+export function Avatar({ name: rawName, uri = null, size = 'md', variant = 'tint', style }: AvatarProps) {
+  // A record can arrive without a name (null from the server); show blank initials, never crash.
+  const name = typeof rawName === 'string' ? rawName : '';
   const dim = dims[size];
   const [bg, fg] = tints[hashName(name) % tints.length];
   const onColor = variant === 'onColor';

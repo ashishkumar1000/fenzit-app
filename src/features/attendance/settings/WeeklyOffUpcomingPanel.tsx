@@ -26,6 +26,8 @@ export function WeeklyOffUpcomingPanel({
   rows,
   currentDays,
 }: WeeklyOffUpcomingPanelProps) {
+  // Nothing queued: no panel (never a "0 changes coming up" header).
+  if (rows.length === 0) return null;
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
