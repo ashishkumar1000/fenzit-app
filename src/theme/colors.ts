@@ -114,7 +114,7 @@ export const colors = {
   // Text
   textStrong: palette.gray900,
   textBody: palette.gray700,
-  textMuted: palette.gray500,
+  textMuted: palette.gray600,
   textDisabled: palette.gray400,
   textOnColor: palette.gray0,
   textLink: palette.blue600,
