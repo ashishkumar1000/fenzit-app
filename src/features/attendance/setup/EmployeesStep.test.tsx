@@ -137,6 +137,44 @@ describe('EmployeesStep — invited employees cannot be tracked yet', () => {
     officeName: 'HQ',
   });
 
+  it('an invited row that is already tracked can be switched OFF, through the confirm dialog first', async () => {
+    const onDisable = jest.fn(async () => true);
+    const tracked = row({
+      employeeId: 'e6',
+      employeeName: 'Suresh',
+      memberStatus: 'invited',
+      attendanceStartDate: TODAY,
+      officeId: 'o1',
+      officeName: 'HQ',
+    });
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <EmployeesStep
+          {...baseProps()}
+          roster={[tracked]}
+          onDisable={onDisable}
+        />,
+      );
+    });
+    const sw = renderer.root.find((n) => n.props?.label === 'Track attendance for Suresh');
+    expect(sw.props.disabled).toBe(false);
+
+    await act(async () => {
+      sw.props.onValueChange(false);
+    });
+    const dialog = renderer.root
+      .findAllByType(ConfirmDialog)
+      .find((d) => d.props.visible === true);
+    expect(dialog).toBeDefined();
+    expect(onDisable).not.toHaveBeenCalled();
+
+    act(() => {
+      dialog!.props.onConfirm();
+    });
+    expect(onDisable).toHaveBeenCalledWith('e6');
+  });
+
   it('an invited row shows the not-signed-in hint and a DISABLED switch; a forced toggle enables nothing', async () => {
     const onEnable = jest.fn();
     let renderer!: ReturnType<typeof create>;

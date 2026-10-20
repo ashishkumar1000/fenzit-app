@@ -187,10 +187,12 @@ export function EmployeesStep({
                     ? `Starts ${upcomingStart} \u00B7 tracking begins then — adjust from Team attendance`
                     : `Track attendance for ${row.employeeName}`
                 }
+                // An invited person can be switched OFF (a covered row); only
+                // switching them ON is refused.
                 disabled={
                   isRowPending(row.employeeId) ||
                   upcomingStart !== null ||
-                  notSignedIn
+                  (notSignedIn && !coversToday)
                 }
               />
               {rowErr ? (
