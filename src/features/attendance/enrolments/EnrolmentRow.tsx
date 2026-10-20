@@ -82,10 +82,14 @@ export function EnrolmentRow({
   const state = rowState(row, today);
   const covering = enrolmentCoversToday(row, today);
   const upcoming = upcomingStart(row, today);
-  const pill = PILLS[state];
   // Invited people have not signed in yet: the server refuses to track them, so
   // the switch cannot turn them ON. A switch that is already on can still be off.
   const notSignedIn = row.memberStatus === 'invited';
+  // A tracked person who has not signed in is not "Active" yet.
+  const pill =
+    notSignedIn && state === 'covering'
+      ? { label: 'Not signed in', status: 'progress' as const }
+      : PILLS[state];
   const blockedOn = notSignedIn && !covering;
   const secondary = secondaryLine(row);
 

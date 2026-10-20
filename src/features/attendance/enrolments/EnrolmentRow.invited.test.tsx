@@ -76,6 +76,24 @@ describe('EnrolmentRow — invited employee', () => {
     expect(texts).toContain("Hasn't signed in yet. They can be tracked after their first sign-in.");
   });
 
+  it('a tracked invited person is labelled "Not signed in", not "Active"', () => {
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <EnrolmentRow
+          {...props({
+            row: row({ attendanceAccess: 'active', attendanceStartDate: TODAY, officeId: 'o1', officeName: 'HQ' }),
+          })}
+        />,
+      );
+    });
+    const texts = renderer.root
+      .findAll((n) => typeof n.props.children === 'string')
+      .map((n) => n.props.children as string);
+    expect(texts).toContain('Not signed in');
+    expect(texts).not.toContain('Active');
+  });
+
   it('a switch that is already on can still be turned off', async () => {
     const p = props({
       row: row({ attendanceAccess: 'active', attendanceStartDate: TODAY, officeId: 'o1', officeName: 'HQ' }),
