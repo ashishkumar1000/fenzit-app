@@ -31,6 +31,15 @@ jest.mock('../../../services', () => ({
   },
 }));
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../../auth/useRole', () => ({
+  ...jest.requireActual('../../auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
 import { AccessibilityInfo, AppState, FlatList, Text } from 'react-native';
@@ -908,5 +917,48 @@ describe('revoke — the owner stage inside the detail sheet (17-7 spec D3)', ()
     expect(textsInOrder(root)).toContain('7 Oct 2026');
     const data = root.findByType(FlatList).props.data as LeaveRequestRow[];
     expect(data[0].dates[2].state).toBe('cancelled');
+  });
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('a viewer (read-only)', () => {
+  it('sees one plain "View-only access" explanation and no leave list', async () => {
+    mockCanWrite = false;
+    const { root } = await renderScreen();
+
+    expect(textsInOrder(root).join(' ')).toContain('View-only access');
+    expect(root.findAllByType(LeaveRequestRowView)).toHaveLength(0);
+    expect(root.findAllByType(SegmentedControl)).toHaveLength(0);
+  });
+
+  it('never asks the backend for leave requests (they can carry medical reasons)', async () => {
+    mockCanWrite = false;
+    await renderScreen();
+
+    expect(listOwnerLeave).not.toHaveBeenCalled();
+    expect(approveLeave).not.toHaveBeenCalled();
+    expect(rejectLeave).not.toHaveBeenCalled();
+  });
+
+  it('has no "Apply on behalf" entry', async () => {
+    mockCanWrite = false;
+    const { root } = await renderScreen();
+
+    expect(findButtons(root, 'Apply on behalf')).toHaveLength(0);
+  });
+
+  it('can still go back', async () => {
+    mockCanWrite = false;
+    const { root, navigation } = await renderScreen();
+    const back = root.findAll(n => n.props.accessibilityLabel === 'Go back' && typeof n.props.onPress === 'function');
+
+    expect(back.length).toBeGreaterThan(0);
+    act(() => {
+      back[0].props.onPress();
+    });
+    expect(navigation.goBack).toHaveBeenCalled();
   });
 });

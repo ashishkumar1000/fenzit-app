@@ -17,7 +17,7 @@ import type { MainTabParamList, RootStackParamList } from '../navigation/types';
 import type { JobScope } from '../services';
 import HomeHeader from '../components/HomeHeader';
 import NotificationBell from '../components/NotificationBell';
-import { EmptyState, InlineError, Skeleton } from '../components/ui';
+import { EmptyState, InlineError, InlineNotice, Skeleton } from '../components/ui';
 import { Tile } from '../components/Tile';
 import { colors, radius, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
@@ -31,6 +31,7 @@ import {
   useTodayPulse,
 } from '../features/home';
 import { useNotifications } from '../features/notifications';
+import { VIEW_ONLY_REASON, isAdminRole, useCanWrite, useSessionRole } from '../features/auth';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
@@ -54,6 +55,10 @@ export default function HomeScreen({ navigation }: Props) {
   // Optional-chained because `quickActions` is built before the loading and
   // error early returns — during those renders profile is still null.
   const hasTechnicians = (profile?.technicianCount ?? 0) > 0;
+  // A viewer sees the dashboard but never the create/add tiles; the leave
+  // review strip is admin-only (a viewer cannot read leave requests).
+  const canWrite = useCanWrite();
+  const isAdmin = isAdminRole(useSessionRole());
 
   // Every tab focus asks for fresh counts so the tiles are never a snapshot
   // from login. The store's 15s throttle makes rapid tab switching cheap:
@@ -102,7 +107,9 @@ export default function HomeScreen({ navigation }: Props) {
     navigation.navigate('OwnerLeave', { tab: 'pending' });
   }, [navigation]);
 
-  const quickActions = (
+  const quickActions = !canWrite ? (
+    <InlineNotice tone="neutral" message={VIEW_ONLY_REASON} />
+  ) : (
     <QuickActions
       onNewJob={handleNewJob}
       // A job must be assigned to someone — with no technicians yet the New
@@ -188,7 +195,7 @@ export default function HomeScreen({ navigation }: Props) {
   // ENROLLED attendance tenant shows it, and count > 0 gates the render
   // (the 15-6 fail-HIDDEN idiom; an older backend answers 0 → absent).
   const pendingLeaveRequests =
-    profile.attendance?.attendanceEnabled === true
+    isAdmin && profile.attendance?.attendanceEnabled === true
       ? (profile.attendance.pendingLeaveRequests ?? 0)
       : 0;
 
@@ -265,7 +272,7 @@ export default function HomeScreen({ navigation }: Props) {
 
           <View style={styles.jobsSection}>
             <Text style={styles.sectionTitle}>Today's jobs</Text>
-            <NoJobsCard hasTechnicians={hasTechnicians} />
+            <NoJobsCard hasTechnicians={hasTechnicians} canWrite={canWrite} />
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -300,7 +307,7 @@ export default function HomeScreen({ navigation }: Props) {
           onPressLeaveStrip={handlePressLeaveStrip}
           onPressJob={handlePressJob}
           onPressStrip={() => handleTilePress('overdue')}
-          onPressCreate={handleNewJob}
+          onPressCreate={canWrite ? handleNewJob : undefined}
         />
       </ScrollView>
     </>

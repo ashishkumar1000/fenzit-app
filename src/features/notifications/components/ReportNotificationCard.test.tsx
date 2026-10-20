@@ -43,7 +43,7 @@ function makeReportNotification(
 }
 
 function makeCard(n: ApiNotification): ReportNotificationCardData {
-  return buildReportCards([n], 'owner')[0];
+  return buildReportCards([n], 'company_admin')[0];
 }
 
 function mountCard(card: ReportNotificationCardData) {

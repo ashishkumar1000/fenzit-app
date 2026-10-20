@@ -14,6 +14,15 @@ jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: { customerId: mockCustomerId } }),
 }));
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../../auth/useRole', () => ({
+  ...jest.requireActual('../../auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
@@ -113,4 +122,18 @@ it('refetches on focus — the return path that makes an edit visible (the edit 
   });
 
   expect(getByIdSpy).toHaveBeenCalledTimes(2);
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+it('a viewer sees the customer but has no edit affordance', async () => {
+  mockCanWrite = false;
+  getByIdSpy.mockResolvedValue(DETAIL);
+  const root = await renderScreen();
+
+  expect(editButton(root)).toBeUndefined();
+  const texts = root.findAllByType(Text).map(t => t.props.children);
+  expect(texts).toContain('Priya Sharma');
 });

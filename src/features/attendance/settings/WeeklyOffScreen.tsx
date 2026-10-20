@@ -78,6 +78,17 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
 
   const success = useFlashMessage();
 
+  // Opened from the setup wizard: after a confirmed save, go back to the
+  // wizard (the flow it came from). Opened directly, the owner stays here.
+  const returnToSetup = route.params?.returnToSetup === true;
+  const onDefaultSaved = useCallback(
+    (message: string) => {
+      success.flash(message);
+      if (returnToSetup) navigation.goBack();
+    },
+    [success.flash, returnToSetup, navigation],
+  );
+
   const defaultForm = useWeeklyOffDefaultForm({
     defaultView,
     nextView,
@@ -87,7 +98,7 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
     isSaving,
     today,
     saveDefault,
-    onSaved: success.flash,
+    onSaved: onDefaultSaved,
   });
 
   // Pull-to-refresh (15-6 review iteration 1, user decision) — the spinner

@@ -75,11 +75,11 @@ function setState(next: Partial<MyProfileState>) {
  * (`hydrateTechnicianRoster`). The roster rides along on every profile
  * payload, so this costs no extra request — and it is what makes invites
  * survive a reinstall or logout, since the technicians store's own copy is
- * device-local MMKV. Technician-role profiles carry no roster (the field is
- * owner-only on the backend), so non-owners are skipped.
+ * device-local MMKV. Employee profiles carry no roster (the field is
+ * company-wide only on the backend), so employees are skipped.
  */
 function syncTechnicianRoster(profile: MyProfile): void {
-  if (profile.role === 'owner' && Array.isArray(profile.technicians)) {
+  if (profile.role !== 'employee' && Array.isArray(profile.technicians)) {
     hydrateTechnicianRoster(profile.technicians);
   }
 }

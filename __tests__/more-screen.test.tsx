@@ -19,6 +19,7 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../src/features/auth', () => ({
   useAuth: () => ({ reset: jest.fn() }),
+  useCanWrite: () => true,
 }));
 
 jest.mock('../src/features/customers', () => ({
@@ -42,7 +43,7 @@ jest.mock('../src/features/jobs', () => ({
 jest.mock('../src/features/profile', () => ({
   useMyProfile: jest.fn(),
   formatPhone: jest.fn(() => '+91 90000 00000'),
-  formatRole: jest.fn(() => 'Owner'),
+  formatRole: jest.fn(() => 'Admin'),
   EditNameSheet: jest.fn(() => null),
 }));
 
@@ -61,7 +62,7 @@ function makeProfile(overrides: Partial<MyProfile> = {}): MyProfile {
     countryCode: '+91',
     phoneNumber: '9000000000',
     status: 'active',
-    role: 'owner',
+    role: 'company_admin',
     tenant: {
       id: 't-1',
       companyName: 'Fenzit Services',

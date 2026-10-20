@@ -85,7 +85,7 @@ describe('buildReportCards', () => {
       makeReportNotification('r2', { eventType: 'report_failed', createdAt: '2026-09-09T12:20:00Z' }),
       makeReportNotification('n2', { eventType: 'completed', jobId: 'job-2' }),
       makeReportNotification('r3', { createdAt: '2026-09-09T12:10:00Z' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards.map(c => c.key)).toEqual(['r1', 'r2', 'r3']);
     expect(cards.every(c => c.kind === 'report')).toBe(true);
   });
@@ -96,7 +96,7 @@ describe('buildReportCards', () => {
     const cards = buildReportCards([
       makeReportNotification('r1'),
       makeReportNotification('r2', {}, { reportId: 'report-1' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards.map(c => c.key)).toEqual(['r1', 'r2']);
   });
 });
@@ -105,7 +105,7 @@ describe('buildReportCard (via buildReportCards) — ready event', () => {
   it('maps a ready row to its full card shape', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', { createdAt: '2026-09-09T12:00:00Z' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0]).toEqual({
       kind: 'report',
       key: 'r1',
@@ -125,13 +125,13 @@ describe('buildReportCard (via buildReportCards) — ready event', () => {
   it('a read row is not unread: unreadIds empty, isUnread false', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', { readAt: '2026-09-09T12:05:00Z' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].isUnread).toBe(false);
     expect(cards[0].unreadIds).toEqual([]);
   });
 
   it('a missing label falls back to the generic ready copy', () => {
-    const cards = buildReportCards([makeReportNotification('r1', {}, { reportLabel: undefined })], 'owner');
+    const cards = buildReportCards([makeReportNotification('r1', {}, { reportLabel: undefined })], 'company_admin');
     expect(cards[0].message).toBe('Your report is ready to view.');
     expect(cards[0].reportLabel).toBeNull();
   });
@@ -144,7 +144,7 @@ describe('buildReportCard — failed event', () => {
         eventType: REPORT_FAILED_EVENT,
         createdAt: '2026-09-09T12:00:00Z',
       }, { status: 'failed', errorCode: 'REPORT_RANGE_TOO_LARGE' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0]).toEqual({
       kind: 'report',
       key: 'r1',
@@ -164,21 +164,21 @@ describe('buildReportCard — failed event', () => {
   it('a known error code renders its own copy', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', { eventType: REPORT_FAILED_EVENT }, { errorCode: 'REPORT_TOO_LARGE' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].message).toBe('Too many jobs in range. Narrow the date range.');
   });
 
   it('an unknown error code surfaces honestly with its code', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', { eventType: REPORT_FAILED_EVENT }, { errorCode: 'SOMETHING_NEW' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].message).toBe('Error (code: SOMETHING_NEW)');
   });
 
   it('a missing error code uses the generic fallback', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', { eventType: REPORT_FAILED_EVENT }, { errorCode: null }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].message).toBe('This report failed. Try again.');
   });
 });
@@ -189,7 +189,7 @@ describe('buildReportCard — payload drift', () => {
       makeReportNotification('r1', {
         payload: undefined as unknown as ApiNotification['payload'],
       }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0]).toEqual({
       kind: 'report',
       key: 'r1',
@@ -212,7 +212,7 @@ describe('buildReportCard — payload drift', () => {
         eventType: REPORT_FAILED_EVENT,
         payload: null as unknown as ApiNotification['payload'],
       }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].reportId).toBeNull();
     expect(cards[0].reportLabel).toBeNull();
     expect(cards[0].message).toBe('This report failed. Try again.');
@@ -227,7 +227,7 @@ describe('buildReportCard — payload drift', () => {
         reportLabel: { label: 'x' },
         errorCode: true,
       }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].reportId).toBeNull();
     expect(cards[0].reportLabel).toBeNull();
     expect(cards[0].message).toBe('This report failed. Try again.');
@@ -240,7 +240,7 @@ describe('buildReportCard — payload drift', () => {
   it('empty and whitespace-only strings count as missing', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', {}, { reportId: '', reportLabel: '   ' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].reportId).toBeNull();
     expect(cards[0].reportLabel).toBeNull();
     expect(cards[0].message).toBe('Your report is ready to view.');
@@ -253,7 +253,7 @@ describe('buildReportCard — event type is authoritative over payload.status', 
     // drifted payload.status must never flip the card’s family.
     const cards = buildReportCards([
       makeReportNotification('r1', {}, { status: 'failed', errorCode: 'REPORT_GENERATION_FAILED' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].title).toBe('Report ready');
     expect(cards[0].statusKey).toBe('done');
     expect(cards[0].statusLabel).toBe('Ready');
@@ -265,7 +265,7 @@ describe('buildReportCard — event type is authoritative over payload.status', 
   it('a report_failed row whose payload.status says ready still renders Failed', () => {
     const cards = buildReportCards([
       makeReportNotification('r1', { eventType: REPORT_FAILED_EVENT }, { status: 'ready' }),
-    ], 'owner');
+    ], 'company_admin');
     expect(cards[0].title).toBe('Report failed');
     expect(cards[0].statusKey).toBe('cancelled');
     expect(cards[0].statusLabel).toBe('Failed');
@@ -281,8 +281,8 @@ describe('mergeNotificationCards', () => {
         makeJobCard('job-2', '2026-09-09T11:00:00Z'),
       ],
       [
-        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T11:30:00Z' })], 'owner')[0],
-        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T10:00:00Z' })], 'owner')[0],
+        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T11:30:00Z' })], 'company_admin')[0],
+        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T10:00:00Z' })], 'company_admin')[0],
       ],
     );
     expect(merged.map(c => `${c.kind}:${c.key}`)).toEqual([
@@ -297,9 +297,9 @@ describe('mergeNotificationCards', () => {
     const merged = mergeNotificationCards(
       [makeJobCard('job-1', '2026-09-09T11:45:00Z')],
       [
-        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T12:30:00Z' })], 'owner')[0],
-        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T11:00:00Z' })], 'owner')[0],
-        buildReportCards([makeReportNotification('r3', { createdAt: '2026-09-09T10:30:00Z' })], 'owner')[0],
+        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T12:30:00Z' })], 'company_admin')[0],
+        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T11:00:00Z' })], 'company_admin')[0],
+        buildReportCards([makeReportNotification('r3', { createdAt: '2026-09-09T10:30:00Z' })], 'company_admin')[0],
       ],
     );
     expect(merged.map(c => c.key)).toEqual(['r1', 'job-1', 'r2', 'r3']);
@@ -311,8 +311,8 @@ describe('mergeNotificationCards', () => {
     const merged = mergeNotificationCards(
       [makeJobCard('job-1', '2026-09-09T12:00:00Z'), makeJobCard('job-2', '2026-09-09T11:00:00Z')],
       [
-        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T12:00:00Z' })], 'owner')[0],
-        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T11:00:00Z' })], 'owner')[0],
+        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T12:00:00Z' })], 'company_admin')[0],
+        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T11:00:00Z' })], 'company_admin')[0],
       ],
     );
     expect(merged.map(c => `${c.kind}:${c.key}`)).toEqual([
@@ -327,10 +327,21 @@ describe('mergeNotificationCards', () => {
     const merged = mergeNotificationCards(
       [makeJobCard('job-1', '2026-09-09T12:00:00Z'), makeJobCard('job-2', '2026-09-09T12:00:00Z')],
       [
-        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T12:30:00Z' })], 'owner')[0],
-        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T12:30:00Z' })], 'owner')[0],
+        buildReportCards([makeReportNotification('r1', { createdAt: '2026-09-09T12:30:00Z' })], 'company_admin')[0],
+        buildReportCards([makeReportNotification('r2', { createdAt: '2026-09-09T12:30:00Z' })], 'company_admin')[0],
       ],
     );
     expect(merged.map(c => c.key)).toEqual(['r1', 'r2', 'job-1', 'job-2']);
+  });
+});
+
+describe('buildReportCards — roles', () => {
+  it('a viewer gets report cards (viewers may request reports)', () => {
+    const cards = buildReportCards([makeReportNotification('r1')], 'viewer');
+    expect(cards).toHaveLength(1);
+  });
+
+  it('an employee gets none — reports are a company-wide surface', () => {
+    expect(buildReportCards([makeReportNotification('r1')], 'employee')).toEqual([]);
   });
 });

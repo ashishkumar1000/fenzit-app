@@ -34,7 +34,8 @@ export type TodaysJobsSectionProps = {
   onPressLeaveStrip?: () => void;
   onPressJob: (jobId: string) => void;
   onPressStrip: () => void;
-  onPressCreate: () => void;
+  /** Omit for a viewer: the "Create a job" button is then not shown. */
+  onPressCreate?: () => void;
 };
 
 export function TodaysJobsSection({
@@ -101,7 +102,7 @@ export function TodaysJobsSection({
           <Text style={styles.emptyBody}>
             You're all clear. Upcoming work shows in the tiles above.
           </Text>
-          {technicianCount > 0 ? (
+          {technicianCount > 0 && onPressCreate ? (
             <Button variant="secondary" size="md" onPress={onPressCreate} style={styles.emptyCta}>
               Create a job
             </Button>

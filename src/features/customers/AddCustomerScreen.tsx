@@ -290,6 +290,15 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     (isEdit ? !baselineHadLocation || hasLocation : hasLocation) &&
     !submitting;
 
+  // Why Save is greyed out, in the order the fields sit on screen. Shown under
+  // the button so a disabled Save never leaves the person guessing.
+  const missingHint = (() => {
+    if (submitting || canSubmit) return null;
+    if (name.trim().length === 0) return "Enter the customer's name to continue";
+    if (!phoneOk) return 'Enter a 10-digit phone number to continue';
+    return "Add the customer's location to continue";
+  })();
+
   const buildRequest = (): NewCustomerInput => ({
     name: name.trim(),
     phone,
@@ -540,6 +549,13 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             without scrolling to the bottom. */}
         <SafeAreaView edges={['bottom']} style={styles.footer}>
           {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
+          {!submitError && missingHint ? (
+            <Text
+            style={styles.missingHint}
+            accessibilityLiveRegion="polite">
+            {missingHint}
+          </Text>
+          ) : null}
           <Button
             variant="primary"
             size="lg"
@@ -702,5 +718,10 @@ const styles = StyleSheet.create({
   submitError: {
     ...typography.bodySm,
     color: colors.danger,
+  },
+  missingHint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 });

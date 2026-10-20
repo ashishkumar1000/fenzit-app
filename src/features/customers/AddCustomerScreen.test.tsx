@@ -1137,3 +1137,63 @@ describe('edit mode (customerId param — SPEC-edit-customer)', () => {
     });
   });
 });
+
+describe('why Save customer is off (add mode)', () => {
+  const HINT_COPY = [
+    "Enter the customer's name to continue",
+    'Enter a 10-digit phone number to continue',
+    "Add the customer's location to continue",
+  ];
+
+  /** The one-line reason under Save, or null when none is shown. */
+  function saveHint(root: ReactTestRenderer.ReactTestInstance): string | null {
+    const hit = root
+      .findAllByType(Text)
+      .map(t => t.props.children)
+      .find(c => typeof c === 'string' && HINT_COPY.includes(c));
+    return typeof hit === 'string' ? hit : null;
+  }
+
+  it('names the name first when the form is empty', () => {
+    const { root } = renderScreen();
+    expect(saveHint(root)).toBe("Enter the customer's name to continue");
+  });
+
+  it('treats a whitespace-only name as missing', () => {
+    const { root } = renderScreen();
+    typeName(root, '   ');
+    typePhone(root, '9876543210');
+    expect(saveHint(root)).toBe("Enter the customer's name to continue");
+  });
+
+  it('asks for the phone when the number has fewer than 10 digits', () => {
+    const { root } = renderScreen();
+    typeName(root, 'Ramesh Kumar');
+    typePhone(root, '987654321');
+    expect(saveHint(root)).toBe('Enter a 10-digit phone number to continue');
+  });
+
+  it('asks for the location last, once the name and phone are complete', () => {
+    const { root } = renderScreen();
+    typeName(root, 'Ramesh Kumar');
+    typePhone(root, '9876543210');
+    expect(saveHint(root)).toBe("Add the customer's location to continue");
+  });
+
+  it('shows no hint once a picked location completes the form', () => {
+    const { root } = renderScreen('Customers', { pickedAddress: PINNED_PICK });
+    typeName(root, 'Ramesh Kumar');
+    typePhone(root, '9876543210');
+    expect(saveHint(root)).toBeNull();
+    expect(submitButton(root).props.disabled).toBe(false);
+  });
+
+  it('drops back to the name hint when the name is cleared again', () => {
+    const { root } = renderScreen('Customers', { pickedAddress: PINNED_PICK });
+    typeName(root, 'Ramesh Kumar');
+    typePhone(root, '9876543210');
+    expect(saveHint(root)).toBeNull();
+    typeName(root, '');
+    expect(saveHint(root)).toBe("Enter the customer's name to continue");
+  });
+});

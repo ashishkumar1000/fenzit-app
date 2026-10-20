@@ -234,3 +234,93 @@ it('uses the Button loading state while the PATCH is in flight', async () => {
   expect(findSave(root).props.loading).toBe(false);
   expect(onClose).toHaveBeenCalledTimes(1);
 });
+
+/** The one-line reason under Save, or null when no reason is shown. */
+function saveHint(root: ReactTestRenderer.ReactTestInstance): string | null {
+  const copy = [
+    'Enter your name to save',
+    'Change your name to save',
+  ];
+  const hit = root
+    .findAllByType(Text)
+    .map(t => t.props.children)
+    .find(c => typeof c === 'string' && copy.includes(c));
+  return typeof hit === 'string' ? hit : null;
+}
+
+it('says why Save is off when the name is blank, with or without a current name', () => {
+  // Brand-new profile: nothing to compare against, so the hint is "enter".
+  const fresh = renderSheet({ visible: true, currentName: null, onClose: () => {} });
+  expect(saveHint(fresh)).toBe('Enter your name to save');
+
+  // Existing name, but the user clears the field: still "enter", not "change".
+  const cleared = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+  typeName(cleared, '');
+  expect(saveHint(cleared)).toBe('Enter your name to save');
+});
+
+it('treats whitespace-only input as blank, not as a change', () => {
+  const root = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+  typeName(root, '   \t ');
+  expect(saveHint(root)).toBe('Enter your name to save');
+});
+
+it('says to change the name when the trimmed input equals the current name', () => {
+  const root = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+  expect(saveHint(root)).toBe('Change your name to save');
+
+  // Padding around the same name is still "unchanged" (the server trims).
+  typeName(root, '  Kumar  ');
+  expect(saveHint(root)).toBe('Change your name to save');
+});
+
+it('hides the hint as soon as the name is a real change', () => {
+  const root = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+  typeName(root, 'Kumar S');
+  expect(saveHint(root)).toBeNull();
+  expect(findSave(root).props.disabled).toBe(false);
+});
+
+it('hides the hint while the save is in flight', async () => {
+  let resolve!: (value: { id: string; name: string }) => void;
+  updateMe.mockImplementationOnce(
+    () => new Promise<{ id: string; name: string }>(res => (resolve = res)),
+  );
+  const root = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+  typeName(root, 'Kumar S');
+  await act(async () => {
+    submit(root);
+  });
+  expect(saveHint(root)).toBeNull();
+
+  await act(async () => {
+    resolve({ id: 'u-1', name: 'Kumar S' });
+  });
+});
+
+it('shows the server error instead of the hint when the save fails', async () => {
+  updateMe.mockRejectedValueOnce({ message: 'Name is too long' });
+  const root = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+  typeName(root, 'Kumar S');
+  await act(async () => {
+    submit(root);
+  });
+  expect(saveHint(root)).toBeNull();
+  const texts = root.findAllByType(Text).map(t => t.props.children);
+  expect(texts).toContain('Name is too long');
+});
+
+it('does not send the request when Save is pressed on a blank or unchanged name', async () => {
+  const root = renderSheet({ visible: true, currentName: 'Kumar', onClose: () => {} });
+
+  typeName(root, '   ');
+  await act(async () => {
+    submit(root);
+  });
+  typeName(root, 'Kumar');
+  await act(async () => {
+    submit(root);
+  });
+
+  expect(updateMe).not.toHaveBeenCalled();
+});

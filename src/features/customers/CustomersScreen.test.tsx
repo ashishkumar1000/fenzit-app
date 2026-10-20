@@ -17,12 +17,22 @@ jest.mock('./useCustomers', () => ({
   loadCustomers: jest.fn().mockResolvedValue(undefined),
 }));
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../auth/useRole', () => ({
+  ...jest.requireActual('../auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { Button } from '../../components/ui';
 import { useCustomers } from './useCustomers';
 import CustomersScreen from './CustomersScreen';
+import { CustomerRow } from './components/CustomerRow';
 
 const useCustomersMock = useCustomers as jest.Mock;
 
@@ -60,5 +70,39 @@ it('pushes AddCustomer with returnRouteName Customers when "Add" is pressed', ()
 
   expect(mockNavigate).toHaveBeenCalledWith('AddCustomer', {
     returnRouteName: 'Customers',
+  });
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('a viewer (read-only)', () => {
+  it('has no Add button, so nothing can push the add-customer form', () => {
+    mockCanWrite = false;
+    const root = renderScreen();
+
+    expect(root.findAllByType(Button).find(b => b.props.children === 'Add')).toBeUndefined();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('still sees the customer list', () => {
+    mockCanWrite = false;
+    mockStore({
+      hasCustomers: true,
+      customers: [{ id: 'c1', name: 'Ravi', countryCode: '+91', phoneNumber: '9000000001' }],
+    });
+    const root = renderScreen();
+
+    expect(root.findAllByType(CustomerRow)).toHaveLength(1);
+  });
+
+  it('the empty state does not tell a viewer to add customers', () => {
+    mockCanWrite = false;
+    const root = renderScreen();
+    const text = JSON.stringify(root.findAll(() => true).map(n => n.props.description ?? ''));
+
+    expect(text).not.toMatch(/add them manually|create a job/i);
+    expect(text).toMatch(/Customers your team adds/);
   });
 });

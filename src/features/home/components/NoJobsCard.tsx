@@ -14,6 +14,8 @@ import { colors, radius, spacing, typography } from '../../../theme';
 type Props = {
   /** Drives the hint: assign a job, or add a technician first. */
   hasTechnicians: boolean;
+  /** False for a viewer: no create hint, since they cannot create jobs. Default true. */
+  canWrite?: boolean;
 };
 
 const DOT_GAP = 18;
@@ -65,7 +67,7 @@ function Backdrop({ width, height }: { width: number; height: number }) {
   );
 }
 
-export function NoJobsCard({ hasTechnicians }: Props) {
+export function NoJobsCard({ hasTechnicians, canWrite = true }: Props) {
   // The SVG needs pixel sizes — measure the card, draw to fit.
   const [size, setSize] = useState({ width: 0, height: 0 });
   return (
@@ -75,9 +77,11 @@ export function NoJobsCard({ hasTechnicians }: Props) {
         <View style={styles.art} />
         <Text style={styles.title}>No jobs yet</Text>
         <Text style={styles.hint}>
-          {hasTechnicians
-            ? 'Create your first job to assign it to a technician.'
-            : 'Add a technician first, then you can create and assign jobs.'}
+          {!canWrite
+            ? 'Jobs your team creates will show up here.'
+            : hasTechnicians
+              ? 'Create your first job to assign it to a technician.'
+              : 'Add a technician first, then you can create and assign jobs.'}
         </Text>
       </View>
     </Card>

@@ -29,6 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, EmptyState, InlineError } from '../../components/ui';
+import { useCanWrite } from '../auth';
 import { colors, radius, spacing, touch, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
 import { CustomerRow } from './components/CustomerRow';
@@ -81,6 +82,8 @@ export default function CustomersScreen() {
   // directly (`upsertCustomer`) and force-refreshes it before returning, so
   // there's nothing to read back here — this screen's own `useCustomers()`
   // subscription re-renders from that same store automatically.
+  const canWrite = useCanWrite();
+
   const handleAdd = () =>
     navigation.navigate('AddCustomer', { returnRouteName: 'Customers' });
 
@@ -101,14 +104,17 @@ export default function CustomersScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.title}>Customers</Text>
-        <Button
-          variant="primary"
-          size="md"
-          shape="pill"
-          onPress={handleAdd}
-          leadingIcon={<UserPlus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
-          Add
-        </Button>
+        {/* Hidden for a viewer (read-only); customers stay fully visible. */}
+        {canWrite ? (
+          <Button
+            variant="primary"
+            size="md"
+            shape="pill"
+            onPress={handleAdd}
+            leadingIcon={<UserPlus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
+            Add
+          </Button>
+        ) : null}
       </View>
 
       {/* Search only earns its space once there's something to search. */}
@@ -175,7 +181,11 @@ export default function CustomersScreen() {
                 <EmptyState
                   icon={<Users size={36} color={colors.primary} strokeWidth={1.5} />}
                   title="No customers yet"
-                  description="Customers are added automatically when you create a job, or you can add them manually."
+                  description={
+                    canWrite
+                      ? 'Customers are added automatically when you create a job, or you can add them manually.'
+                      : 'Customers your team adds will show up here.'
+                  }
                 />
               )
             }

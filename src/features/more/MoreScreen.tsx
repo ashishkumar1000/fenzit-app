@@ -24,7 +24,7 @@ import { Avatar, Badge, Card, ConfirmDialog, IconButton } from '../../components
 import { colors, radius, spacing, typography } from '../../theme';
 import { runAllResets } from '../../services';
 import { clearAuthToken } from '../../services/authToken';
-import { useAuth } from '../auth';
+import { useAuth, useCanWrite } from '../auth';
 import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
 import { loadUnreadCount, useNotifications } from '../notifications';
 import { loadCustomers, useCustomers } from '../customers';
@@ -46,6 +46,8 @@ export default function MoreScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const tileSize = (width - spacing.s4 * 2 - spacing.s3) / 2;
   const { reset } = useAuth();
+  // A viewer sees counts and lists but is never told to "add" anything.
+  const canWrite = useCanWrite();
   const { profile, isLoading } = useMyProfile();
   const { unreadCount } = useNotifications();
   const { count: customerCount, hasLoaded: customersHasLoaded } = useCustomers();
@@ -68,7 +70,9 @@ export default function MoreScreen({ navigation }: Props) {
   const technicianCount = profile?.technicianCount ?? 0;
   const techSubtitle =
     technicianCount === 0
-      ? 'Add your team'
+      ? canWrite
+        ? 'Add your team'
+        : 'No team members yet'
       : `${technicianCount} ${technicianCount === 1 ? 'technician' : 'technicians'}`;
 
   // The count arrives async (null until the throttled count lands).
@@ -85,7 +89,9 @@ export default function MoreScreen({ navigation }: Props) {
   const customersSubtitle = !customersHasLoaded
     ? 'People you serve'
     : customerCount === 0
-      ? 'Add your first customer'
+      ? canWrite
+        ? 'Add your first customer'
+        : 'No customers yet'
       : `${customerCount} ${customerCount === 1 ? 'customer' : 'customers'}`;
 
   const handleLogOut = () => setLogOutOpen(true);

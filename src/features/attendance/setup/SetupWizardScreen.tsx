@@ -243,7 +243,7 @@ export default function SetupWizardScreen({ navigation }: Props) {
         hasLoaded={weeklyOffs.hasLoaded}
         error={weeklyOffs.error}
         onRetry={weeklyOffs.refresh}
-        onManageWeeklyOff={() => navigation.navigate('AttendanceWeeklyOff', undefined)}
+        onManageWeeklyOff={() => navigation.navigate('AttendanceWeeklyOff', { returnToSetup: true })}
       />
     );
   } else if (step === 'holidays') {

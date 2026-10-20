@@ -1,13 +1,13 @@
 /**
- * GettingStartedCard — first-run checklist shown on Home until the owner has
+ * GettingStartedCard — first-run checklist shown on Home until the company admin has
  * set up their team and booked their first job. Steps light up in sequence:
  *
  *   1. Business account created   — always done (they finished auth to get here)
- *   2. Add your first technician  — active until ≥1 technician exists
+ *   2. Add your first employee    — active until ≥1 employee exists
  *   3. Create your first job      — locked until a technician exists, then active
  *
  * Driven by the live `hasTechnicians` / `hasJobs` flags so it updates the
- * moment the owner adds a technician.
+ * moment the admin adds an employee.
  */
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -50,7 +50,7 @@ export function GettingStartedCard({
         />
         <Step
           icon={<HardHat size={18} color={colors.primary} strokeWidth={2} />}
-          label="Add your first technician"
+          label="Add your first employee"
           state={technicianState}
           onPress={onAddTechnician}
         />

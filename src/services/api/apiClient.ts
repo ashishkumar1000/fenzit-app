@@ -60,6 +60,16 @@ export function setOnUnauthorized(handler: (() => void) | null): void {
   onUnauthorized = handler;
 }
 
+let onForbidden: (() => void) | null = null;
+/**
+ * Runs when a signed-in request comes back 403. A 403 does not always mean
+ * the person was removed (a role may simply not allow the action), so the
+ * handler must check before it acts. See membershipCheck.ts.
+ */
+export function setOnForbidden(handler: (() => void) | null): void {
+  onForbidden = handler;
+}
+
 /** The configured axios instance. Prefer `ApiService` over calling this directly. */
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -230,6 +240,9 @@ apiClient.interceptors.response.use(
         }, 0);
       }
     });
+    if (hadToken && error.response?.status === 403) {
+      onForbidden?.();
+    }
     return Promise.reject(apiError);
   },
 );

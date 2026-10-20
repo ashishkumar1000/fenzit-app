@@ -15,7 +15,7 @@
  * individual files — it keeps call sites stable if files move around inside
  * this folder later.
  */
-export { apiClient, setOnUnauthorized } from './api/apiClient';
+export { apiClient, setOnForbidden, setOnUnauthorized } from './api/apiClient';
 export type { ApiError } from './api/apiClient';
 export { ApiService, createCancelSignal } from './api/ApiService';
 export type { ListParams } from './api/ApiService';

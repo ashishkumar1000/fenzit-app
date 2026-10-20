@@ -18,7 +18,15 @@ import RootNavigator from './navigation/RootNavigator';
 import TechnicianRootNavigator from './navigation/TechnicianRootNavigator';
 import { navigationRef } from './navigation/navigationRef';
 import { OnboardingScreen, useOnboarding } from './features/onboarding';
-import { AuthFlow, useAuth, expireSession } from './features/auth';
+import {
+  AuthFlow,
+  NoAccessScreen,
+  hasCompanyAccess,
+  isEmployeeRole,
+  useAuth,
+  expireSession,
+  revokeCompanyAccess,
+} from './features/auth';
 import {
   ForcedUpdateScreen,
   MaintenanceBanner,
@@ -26,7 +34,14 @@ import {
   useRemoteConfig,
 } from './features/remoteConfig';
 import { RealtimeBridge } from './features/notifications/RealtimeBridge';
-import { refreshRemoteConfig, runAllResets, setOnUnauthorized } from './services';
+import {
+  refreshRemoteConfig,
+  runAllResets,
+  setOnForbidden,
+  setOnUnauthorized,
+} from './services';
+import { checkMembershipAfterForbidden } from './features/auth/membershipCheck';
+import { syncSessionFromServer } from './features/auth/sessionSync';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -64,6 +79,32 @@ function App() {
     return () => setOnUnauthorized(null);
   }, []);
 
+  // A 403 can mean the person was removed mid-session. The check re-reads the
+  // profile first, so an ordinary permission refusal does not log anyone out.
+  useEffect(() => {
+    setOnForbidden(() => {
+      void checkMembershipAfterForbidden(() => {
+        runAllResets();
+        revokeCompanyAccess();
+      });
+    });
+    return () => setOnForbidden(null);
+  }, []);
+
+  // Access can change while the app is closed or in the background (removed,
+  // re-added, role changed). Re-read it on sign-in, on launch and on every
+  // return to the foreground, so the screens follow the server.
+  useEffect(() => {
+    if (authStatus !== 'done') return;
+    void syncSessionFromServer();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        void syncSessionFromServer();
+      }
+    });
+    return () => subscription.remove();
+  }, [authStatus]);
+
   // First launch: onboarding tour → account setup → main app. The
   // force-update gate dominates the whole chain — an app older than the
   // server's minimum must not reach login or data, whatever its state.
@@ -81,16 +122,23 @@ function App() {
           completeAuth({
             role: result.role,
             tenantId: result.tenantId,
+            platformAdmin: result.platformAdmin,
           });
         }}
       />
     );
-  } else if (session?.role === 'technician') {
-    // Separate nav tree from the owner side — a technician never needs
+  } else if (!hasCompanyAccess(session)) {
+    // No company (removed person, half-set-up account) or Fenzit staff: one
+    // plain message and a Log out button — no navigation tree, no data
+    // stores, no Realtime bridge. (A brand-new person with no company never
+    // gets here: AuthFlow sends them to company setup instead.)
+    content = <NoAccessScreen platformAdmin={session?.platformAdmin ?? false} />;
+  } else if (isEmployeeRole(session?.role)) {
+    // Separate nav tree from the admin side — an employee never needs
     // MainTabs' Jobs/Customers/More routes or RootNavigator's Technicians stack.
-    // Story 14-3: the technician branch mounts the same RealtimeBridge —
-    // one bridge for both roles (the hook routes per role inside; the
-    // technician's socket listens on their own topic only).
+    // Story 14-3: the employee branch mounts the same RealtimeBridge —
+    // one bridge for every role (the hook routes per role inside; the
+    // employee's socket listens on their own topic only).
     content = (
       <NavigationContainer ref={navigationRef}>
         <TechnicianRootNavigator />
@@ -98,8 +146,10 @@ function App() {
       </NavigationContainer>
     );
   } else {
-    // Owner session. RealtimeBridge mounts the Realtime hook + owner banner
-    // here (Story 3.3; technician branch mounts it too since Story 14-3) —
+    // Company admin or viewer session (the viewer sees the same screens with
+    // every write control hidden — see `useCanWrite`). RealtimeBridge mounts
+    // the Realtime hook + banner here (Story 3.3; the employee branch mounts
+    // it too since Story 14-3) —
     // NEVER at App() top level: the role gate is a conditional render chain,
     // so a top-level hook would run Realtime code for unsigned users too.
     // The bridge re-checks the session internally as well.

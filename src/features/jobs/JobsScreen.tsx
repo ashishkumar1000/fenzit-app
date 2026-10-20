@@ -38,6 +38,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, IconButton, InlineError, SegmentedControl } from '../../components/ui';
+import { useCanWrite } from '../auth';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -236,6 +237,8 @@ export default function JobsScreen({ navigation, route }: Props) {
   const { icon: EmptyIcon, title: emptyTitle, description: emptyDescription } =
     emptyStateFor(scope, filter);
 
+  const canWrite = useCanWrite();
+
   const handleNewJob = () => {
     navigation.navigate('NewJob');
   };
@@ -282,14 +285,18 @@ export default function JobsScreen({ navigation, route }: Props) {
               </View>
             ) : null}
           </IconButton>
-          <Button
-            variant="primary"
-            size="md"
-            shape="pill"
-            onPress={handleNewJob}
-            leadingIcon={<Plus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
-            New job
-          </Button>
+          {/* A viewer cannot create jobs — the button is hidden, not
+              dead (the viewer's Home states "View-only access"). */}
+          {canWrite ? (
+            <Button
+              variant="primary"
+              size="md"
+              shape="pill"
+              onPress={handleNewJob}
+              leadingIcon={<Plus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
+              New job
+            </Button>
+          ) : null}
         </View>
       </View>
 
@@ -386,14 +393,18 @@ export default function JobsScreen({ navigation, route }: Props) {
                 <EmptyState
                   icon={<EmptyIcon size={36} color={colors.primary} strokeWidth={1.5} />}
                   title={emptyTitle}
-                  description={emptyDescription}
-                  ctaLabel={scope === 'upcoming' ? 'Schedule a job' : undefined}
+                  description={
+                    canWrite || filter !== 'all'
+                      ? emptyDescription
+                      : 'Jobs your team creates will show up here.'
+                  }
+                  ctaLabel={canWrite && scope === 'upcoming' ? 'Schedule a job' : undefined}
                   ctaIcon={
-                    scope === 'upcoming' ? (
+                    canWrite && scope === 'upcoming' ? (
                       <Plus size={20} color={colors.onPrimary} strokeWidth={2.5} />
                     ) : undefined
                   }
-                  onPressCta={scope === 'upcoming' ? handleNewJob : undefined}
+                  onPressCta={canWrite && scope === 'upcoming' ? handleNewJob : undefined}
                 />
                 {scope === 'upcoming' && overdueCount > 0 ? (
                   <DispatchTip overdueCount={overdueCount} />

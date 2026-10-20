@@ -51,19 +51,39 @@ export interface VerifyOtpRequest {
   otpCode: string;
 }
 
-export type UserRole = 'owner' | 'technician';
+/**
+ * A person's role inside one company, as the backend names it on the wire:
+ * `company_admin` (was owner), `employee` (was technician), `viewer`
+ * (read-only). Platform staff are NOT a company role — see `LoginRole`.
+ */
+export type UserRole = 'company_admin' | 'employee' | 'viewer';
+
+/**
+ * What `role` can be on a login or `/users/me` response: a company role,
+ * `platform_admin` (Fenzit staff, a flag rather than a membership), or
+ * `null` (a person with no company yet, or one who was removed).
+ */
+export type LoginRole = UserRole | 'platform_admin';
 
 export interface VerifiedUser {
   userId: string;
   /**
-   * `null` if this owner hasn't set up a company yet — route to company
-   * setup (step 3) next. Already set for returning owners or for any
-   * technician (always assigned a tenant by their owner at invite time).
+   * `null` when the person belongs to no company: a brand-new person (role
+   * is `null` too — route to company setup next), a removed person, or
+   * Fenzit staff. The token is identity only; the backend reads company and
+   * role on every request.
    */
   tenantId: string | null;
-  role: UserRole;
-  /** `null` until set — owners currently have no name field; technicians get one at invite time. */
+  role: LoginRole | null;
+  /** `null` until set — a fresh company admin has no name until Profile Edit saves one. */
   name: string | null;
+  /** True for Fenzit staff (`role` is then `'platform_admin'`, `tenantId` null). */
+  platformAdmin: boolean;
+  /**
+   * True when the person has only removed memberships (no company now). Lets
+   * the app show "no access" instead of walking them through company setup.
+   */
+  formerMember: boolean;
 }
 
 export interface VerifyOtpResponse {
@@ -81,7 +101,7 @@ async function verifyOtp(input: VerifyOtpRequest): Promise<VerifyOtpResponse> {
 // ── Company setup ────────────────────────────────────────────────────────────
 
 export interface SetupCompanyRequest {
-  /** The owner's display name — saved on their users row, shown on Home/More. */
+  /** The company admin's display name — saved on their users row, shown on Home/More. */
   name: string;
   companyName: string;
   /** 2-letter uppercase ISO 3166-2:IN code, e.g. `KA`. */
@@ -95,7 +115,8 @@ export interface SetupCompanyRequest {
 
 export interface Tenant {
   id: string;
-  ownerId: string;
+  /** The user who created the company (was `ownerId`). */
+  createdBy: string;
   companyName: string;
   gstin: string | null;
   address: string | null;
@@ -116,9 +137,11 @@ export interface SetupCompanyResponse {
 }
 
 /**
- * `POST /auth/company` — requires the token from `verifyOtp`. Owner role
- * only (technicians get 403). Idempotent: safe to call again later to
- * update company details.
+ * `POST /auth/company` — requires the token from `verifyOtp`. For a person
+ * with no company (creates it and makes them its admin) or the company's own
+ * admin (updates it). An employee, viewer or platform admin gets 403, and a
+ * person who is only invited elsewhere gets 409. Idempotent: safe to call
+ * again later to update company details.
  */
 async function setupCompany(input: SetupCompanyRequest): Promise<SetupCompanyResponse> {
   const res = await apiClient.post<SetupCompanyResponse>('/auth/company', input);

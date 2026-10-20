@@ -33,7 +33,8 @@
  * (attendance/leave) plug in here without touching the bridge, the screen
  * or the job card pipeline.
  */
-import type { ApiNotification } from '../../services';
+import type { ApiNotification, UserRole } from '../../services';
+import { isAdminRole, isCompanyWideRole, isEmployeeRole } from '../auth/roles';
 import { isAttendanceEventType } from '../../services/attendanceAccessEvents';
 import {
   ATTENDANCE_NOTIFICATION_EVENT,
@@ -54,7 +55,7 @@ export type NotificationEventAction =
   | 'generic';
 
 /** The signed-in session's role (`useAuth`) — the registry's second key. */
-export type SessionRole = 'owner' | 'technician';
+export type SessionRole = UserRole;
 
 /**
  * Classifies one notification row. Unknown event types fall through to
@@ -66,7 +67,9 @@ export function notificationEventAction(
   n: ApiNotification,
   role: SessionRole,
 ): NotificationEventAction {
-  if (role === 'owner' && isReportNotification(n)) return 'report';
+  // Reports are a company-wide surface: the admin and the viewer (who may
+  // request reports) see them; an employee's report rows stay generic.
+  if (isCompanyWideRole(role) && isReportNotification(n)) return 'report';
   // Story 19-4 (spec D8): the three attendance reminders compose their own
   // cards — ROLE-AGNOSTIC for these three literals (two employee personal
   // reminders + the owner's office summary). Everything else `attendance.*`
@@ -78,13 +81,14 @@ export function notificationEventAction(
   // composed copy (the payload is display DATA, not display text) and a
   // tap-guarded deep link to the Attendance tab (the seam decides whether
   // that tab currently exists).
-  if (role === 'technician' && isAttendanceEventType(n.eventType)) return 'attendance';
+  if (isEmployeeRole(role) && isAttendanceEventType(n.eventType)) return 'attendance';
   // Story 17-6: the leave cards — role-keyed ENUMERATED classifications of
   // exactly the shipped events (wire-truth F6). 19-4 adds the 9th owner
   // event, `leave.pending_reminder`, WITH its composed copy (the original
   // generic-card deferral is retired — see leaveNotificationModel).
-  if (role === 'owner' && isLeaveOwnerEvent(n.eventType)) return 'leave';
-  if (role === 'technician' && isLeaveEmployeeEvent(n.eventType)) return 'leave';
+  // Leave review is admin-only (a viewer cannot read leave requests).
+  if (isAdminRole(role) && isLeaveOwnerEvent(n.eventType)) return 'leave';
+  if (isEmployeeRole(role) && isLeaveEmployeeEvent(n.eventType)) return 'leave';
   if (n.jobId !== null) return 'job';
   return 'generic';
 }

@@ -2,7 +2,7 @@
  * realtimeToken.ts — Supabase Realtime token exchange (Story 3.3).
  *
  * The login JWT is rejected by Supabase Realtime (it never expires and its
- * `role: 'owner' | 'technician'` claim is not an existing Postgres role —
+ * `role` claim is not an existing Postgres role —
  * Story 3.1's spike), so the app exchanges it for a short-lived realtime
  * token: `GET /auth/realtime-token` mints `{ sub, role: 'authenticated',
  * exp }` with the same signing secret.

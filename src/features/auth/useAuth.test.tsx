@@ -18,6 +18,7 @@ import {
   useSessionExpired,
   expireSession,
   clearSessionExpired,
+  parseSession,
 } from './useAuth';
 
 // One probe reading both halves of the store — the same shapes App.tsx's
@@ -45,7 +46,7 @@ beforeEach(() => {
 describe('session expiry (story 5.3)', () => {
   it('expireSession clears the gate and raises the expiry flag', () => {
     act(() => {
-      probe.complete({ role: 'owner', tenantId: 't1' });
+      probe.complete({ role: 'company_admin', tenantId: 't1', platformAdmin: false });
     });
     expect(probe.status).toBe('done');
     expect(probe.expired).toBe(false);
@@ -66,7 +67,7 @@ describe('session expiry (story 5.3)', () => {
     expect(probe.expired).toBe(true);
 
     act(() => {
-      probe.complete({ role: 'technician', tenantId: 't2' });
+      probe.complete({ role: 'employee', tenantId: 't2', platformAdmin: false });
     });
 
     expect(probe.status).toBe('done');
@@ -104,5 +105,31 @@ describe('session expiry (story 5.3)', () => {
     });
     expect(probe.expired).toBe(true);
     expect(probe.status).toBe('pending');
+  });
+});
+
+describe('stored session validation (roles rename)', () => {
+  it.each([
+    ['company admin', { role: 'company_admin', tenantId: 't1', platformAdmin: false }],
+    ['employee', { role: 'employee', tenantId: 't1', platformAdmin: false }],
+    ['viewer', { role: 'viewer', tenantId: 't1', platformAdmin: false }],
+    ['a person with no company', { role: null, tenantId: null, platformAdmin: false }],
+    ['Fenzit staff', { role: null, tenantId: null, platformAdmin: true }],
+  ])('keeps a valid %s session as it is', (_name, stored) => {
+    expect(parseSession(stored)).toEqual(stored);
+  });
+
+  it.each([
+    ['a session saved by an older build (owner)', { role: 'owner', tenantId: 't1' }],
+    ['a session saved by an older build (technician)', { role: 'technician', tenantId: 't1' }],
+    ['a stale shape without the staff flag', { role: 'company_admin', tenantId: 't1' }],
+    ['an unknown role', { role: 'superuser', tenantId: 't1', platformAdmin: false }],
+    ['a numeric tenant', { role: 'employee', tenantId: 5, platformAdmin: false }],
+    ['a string staff flag', { role: 'employee', tenantId: 't1', platformAdmin: 'true' }],
+    ['null', null],
+    ['a bare string', 'company_admin'],
+    ['an array', []],
+  ])('drops %s so the person simply logs in again', (_name, stored) => {
+    expect(parseSession(stored)).toBeNull();
   });
 });

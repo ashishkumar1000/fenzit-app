@@ -25,13 +25,18 @@ export type BusinessProfile = {
 /**
  * What the flow hands back once setup is complete — everything the app gate
  * (`useAuth`) needs to persist to know who's signed in and route them to the
- * right side of the app (owner vs technician) on this and future launches.
+ * right side of the app (company admin, viewer, employee, or the plain
+ * "no access" screen) on this and future launches.
  */
 export type AuthResult = {
   phone: string; // E.164-ish, e.g. "+919876543210"
   profile: BusinessProfile;
-  role: UserRole;
-  /** `null` for owners (no name field yet); set for technicians at invite time. */
+  /** `null` for a person with no company, a removed person, or Fenzit staff. */
+  role: UserRole | null;
+  /** `null` for a fresh company admin (no name until Profile Edit saves one); set for invited people. */
   name: string | null;
-  tenantId: string;
+  /** `null` when the person belongs to no company. */
+  tenantId: string | null;
+  /** Fenzit staff — they use the web admin, not this app. */
+  platformAdmin: boolean;
 };

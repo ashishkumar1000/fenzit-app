@@ -37,10 +37,10 @@ const mockMarkNotificationRead = jest.fn();
 const mockMarkAllNotificationsRead = jest.fn();
 
 // Story 14-3: the screen's role comes from the auth session. Default null —
-// the screen's `?? 'owner'` bootstrap fallback — so every pre-existing
+// the screen's `?? 'company_admin'` bootstrap fallback — so every pre-existing
 // (owner-behaviour) assertion keeps meaning exactly what it meant before
 // the generalization.
-let mockSession: { role: 'owner' | 'technician' } | null = null;
+let mockSession: { role: 'company_admin' | 'employee' } | null = null;
 jest.mock('../src/features/auth/useAuth', () => ({
   useAuth: () => ({ session: mockSession }),
 }));
@@ -586,7 +586,7 @@ describe('report notifications', () => {
 
 describe('technician role routing', () => {
   beforeEach(() => {
-    mockSession = { role: 'technician' };
+    mockSession = { role: 'employee' };
   });
 
   it('tapping a job card navigates to TechJobDetail (never JobDetail)', async () => {

@@ -188,13 +188,12 @@ export function useWeeklyOffDefaultForm({
   const effectiveCanonicalFrom = futureFrom(nextView) || null;
   const effectiveDateChanged =
     effectiveCanonicalFrom !== null && effectiveFrom !== effectiveCanonicalFrom;
-  // Never configured (R-01): nothing is saved, so BOTH "no day" and the
-  // Sunday suggestion are the clean starting state — toggling back to
-  // either leaves Save disabled.
-  const dirty = neverConfigured
-    ? hasTouched &&
-      workingDays.length > 0 &&
-      !(workingDays.length === 1 && workingDays[0] === SUNDAY)
+  // No rule in effect (never configured, or cleared): nothing is saved yet,
+  // so the owner's first touch is the choice to save — including "no day
+  // off", which the screen copy spells out. An untouched form stays off.
+  const noRuleInEffect = hasLoaded && defaultView === null && nextView === null;
+  const dirty = noRuleInEffect
+    ? hasTouched
     : isWeeklyOffDirty({
         hasTouched,
         effectiveDateChanged,

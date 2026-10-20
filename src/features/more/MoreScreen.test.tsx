@@ -12,15 +12,18 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
 }));
 
+// Company admin by default; a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
 jest.mock('../auth', () => ({
   useAuth: () => ({ reset: jest.fn() }),
+  useCanWrite: () => mockCanWrite,
 }));
 
 jest.mock('../profile', () => ({
   useMyProfile: () => ({
     profile: {
       name: 'Ashish',
-      role: 'owner',
+      role: 'company_admin',
       countryCode: '+91',
       phoneNumber: '9000000000',
       technicianCount: 0,
@@ -28,7 +31,7 @@ jest.mock('../profile', () => ({
     isLoading: false,
   }),
   EditNameSheet: () => null,
-  formatRole: () => 'Owner',
+  formatRole: () => 'Admin',
   formatPhone: () => '+91 90000 00000',
 }));
 
@@ -105,6 +108,7 @@ function subtitleTexts(root: ReactTestRenderer.ReactTestRenderer['root']): strin
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCanWrite = true;
   useNotificationsMock.mockReturnValue({ unreadCount: null });
   useCustomersMock.mockReturnValue({ count: 0, hasLoaded: true });
 });
@@ -215,5 +219,30 @@ describe('MoreScreen wiring', () => {
     expect(clearAuthToken).toHaveBeenCalled();
     expect(runAllResets).toHaveBeenCalled();
     expect(dialogsUp(root)).toHaveLength(0);
+  });
+});
+
+describe('MoreScreen — a viewer (read-only)', () => {
+  beforeEach(() => {
+    mockCanWrite = false;
+  });
+
+  it('is never invited to add customers or a team', () => {
+    useCustomersMock.mockReturnValue({ count: 0, hasLoaded: true });
+    const texts = subtitleTexts(renderScreen());
+
+    expect(texts).toContain('No customers yet');
+    expect(texts).toContain('No team members yet');
+    expect(texts).not.toContain('Add your first customer');
+    expect(texts).not.toContain('Add your team');
+  });
+
+  it('still reaches Technicians, Customers, Reports, Attendance and Notifications (reads and report requests)', () => {
+    const root = renderScreen();
+    const titles = [...root.findAllByType(MoreTile), ...root.findAllByType(MoreRow)].map(n => n.props.title);
+
+    for (const expected of ['Technicians', 'Notifications', 'Customers', 'Reports', 'Attendance', 'Log out']) {
+      expect(titles).toContain(expected);
+    }
   });
 });

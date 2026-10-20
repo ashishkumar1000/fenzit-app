@@ -35,8 +35,14 @@ type Props = {
 
 /** Turns a failed `invite` call into copy this sheet can show directly. */
 function inviteErrorMessage(err: ApiError): string {
+  if (err.code === 'ALREADY_IN_TEAM') {
+    return 'This person is already in your team.';
+  }
   if (err.code === 'DUPLICATE_RESOURCE') {
-    return 'This phone number is already part of your team.';
+    return 'This number already belongs to a company.';
+  }
+  if (err.code === 'PLATFORM_STAFF_NOT_MEMBER') {
+    return 'This number belongs to Fenzit staff and cannot join a company.';
   }
   if (err.code === 'VALIDATION_ERROR') {
     return 'Check the phone number and skills — one of them looks invalid.';
@@ -82,6 +88,14 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     skillIds.length <= MAX_SKILLS &&
     !submitting;
 
+  // Why Send invite is greyed out, in the order the fields sit on screen.
+  const missingHint = (() => {
+    if (submitting || canSubmit) return null;
+    if (name.trim().length === 0) return "Enter the person's name to continue";
+    if (phone.length !== PHONE_LENGTH) return 'Enter a 10-digit phone number to continue';
+    return 'Pick at least one skill to continue';
+  })();
+
   const reset = () => {
     setName('');
     setPhone('');
@@ -100,9 +114,29 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     onClose();
   };
 
-  const handlePhoneChange = (text: string) => {
+  // Every field edit clears a stale server error, so the reason Send invite is
+  // off shows again once the owner starts fixing the form.
+  // Counts edits. An invite that fails after the owner has changed the form
+  // must not show its error, since the error describes the old form.
+  const editCount = useRef(0);
+  const markEdited = () => {
+    editCount.current += 1;
     setSubmitError('');
+  };
+
+  const handleNameChange = (text: string) => {
+    markEdited();
+    setName(text);
+  };
+
+  const handlePhoneChange = (text: string) => {
+    markEdited();
     setPhone(text.replace(/[^0-9]/g, '').slice(0, PHONE_LENGTH));
+  };
+
+  const handleSkillsChange = (ids: string[]) => {
+    markEdited();
+    setSkillIds(ids);
   };
 
   const handleSubmit = async () => {
@@ -110,12 +144,15 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     inFlightRef.current = true;
     setSubmitting(true);
     setSubmitError('');
+    const editsAtSubmit = editCount.current;
     try {
       await onSubmit({ name: name.trim(), phone, skillIds });
       reset();
       onClose();
     } catch (err) {
-      setSubmitError(inviteErrorMessage(err as ApiError));
+      if (editCount.current === editsAtSubmit) {
+        setSubmitError(inviteErrorMessage(err as ApiError));
+      }
     } finally {
       inFlightRef.current = false;
       setSubmitting(false);
@@ -147,7 +184,7 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
         <Input
           label="Name"
           value={name}
-          onChangeText={setName}
+          onChangeText={handleNameChange}
           placeholder="e.g. Suresh Kumar"
           autoCapitalize="words"
           leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
@@ -169,7 +206,7 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
         <MultiSelect
           label="Skills"
           value={skillIds}
-          onChange={setSkillIds}
+          onChange={handleSkillsChange}
           options={skillOptions}
           placeholder={loadingSkills ? 'Loading skills…' : 'Select skills'}
           helper={skillsHelper}
@@ -178,6 +215,9 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
       </View>
 
       {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
+      {!submitError && missingHint ? (
+        <Text style={styles.missingHint} accessibilityLiveRegion="polite">{missingHint}</Text>
+      ) : null}
 
       <Button
         variant="primary"
@@ -209,5 +249,11 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.danger,
     marginTop: -spacing.s2,
+  },
+  missingHint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    marginTop: -spacing.s2,
+    textAlign: 'center',
   },
 });

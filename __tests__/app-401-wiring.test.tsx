@@ -60,7 +60,7 @@ const makeProfile = (overrides: Partial<MyProfile> = {}): MyProfile => ({
   countryCode: '+91',
   phoneNumber: '9000000000',
   status: 'active',
-  role: 'owner',
+  role: 'company_admin',
   tenant: {
     id: 't-1',
     companyName: 'Fenzit Services',
@@ -124,7 +124,7 @@ it('a 401 flips the auth gate, resets the stores, and shows the expiry banner', 
   // Sign in through App's own completion callback (the store, not the
   // network): the owner tree mounts.
   await act(async () => {
-    renderer.root.findByType(AuthFlow).props.onComplete({ role: 'owner', tenantId: 't1' });
+    renderer.root.findByType(AuthFlow).props.onComplete({ role: 'company_admin', tenantId: 't1' });
   });
   // Post-login data the next session must NOT inherit (AC 5).
   await act(async () => {

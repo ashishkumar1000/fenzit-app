@@ -18,7 +18,7 @@
  * on failure, same contract as every other resource.
  */
 import { apiClient } from '../api/apiClient';
-import type { UserRole } from './authApi';
+import type { LoginRole } from './authApi';
 import type { AttendanceAccessState } from './attendanceMe';
 import type { ApiJob } from './jobs';
 
@@ -28,7 +28,7 @@ import type { Paginated } from '../api/pagination';
 /**
  * The tenant as embedded in `/users/me` — the company-level fields only.
  * Deliberately not the `Tenant` type from `authApi.ts`: that one is the
- * `POST /auth/company` response and also carries `ownerId`, `createdAt` and
+ * `POST /auth/company` response and also carries `createdBy`, `createdAt` and
  * `updatedAt`, which this payload omits.
  */
 export interface ProfileTenant {
@@ -186,18 +186,25 @@ export interface MyProfile {
   phoneNumber: string;
   status: UserStatus;
   tenant: ProfileTenant;
-  role: UserRole;
+  /**
+   * `null` when the person has no company (or was removed). The app gate
+   * routes on the login session, so screens below the gate always see a
+   * company role.
+   */
+  role: LoginRole | null;
+  /** True for Fenzit staff. Optional so an older-deployed backend fails closed (not staff). */
+  platformAdmin?: boolean;
   /**
    * The tenant's technician roster, with server-issued ids. Present only on
-   * owner-role profiles — the backend omits the field entirely for
-   * technician-role users (hence optional). `customers`/`jobs` stay
+   * company-wide profiles (company admin, viewer) — the backend omits the
+   * field entirely for employees (hence optional). `customers`/`jobs` stay
    * `unknown` until their shapes here are confirmed.
    */
   technicians?: ProfileTechnician[];
   technicianCount: number;
   /**
    * Exact tenant-wide customer total (`customers` itself is just one page).
-   * Optional: the backend only issues it on owner-role profiles.
+   * Optional: the backend only issues it on company-wide profiles (admin, viewer).
    */
   customerCount?: number;
   /**
@@ -232,6 +239,23 @@ async function getMe(signal?: AbortSignal, jobsScope?: 'today' | 'all'): Promise
 }
 
 /**
+ * `GET /users/me/access` — the access fields only (role, company, platform
+ * staff flag). Cheap enough to call on every foreground; `getMe` is the full
+ * profile. `role` stays a plain string here so the caller can reject a role
+ * the app does not know.
+ */
+export interface UserAccess {
+  role: string | null;
+  tenant: { id: string } | null;
+  platformAdmin: boolean;
+}
+
+async function getAccess(signal?: AbortSignal): Promise<UserAccess> {
+  const res = await apiClient.get<UserAccess>('/users/me/access', { signal });
+  return res.data;
+}
+
+/**
  * `PATCH /users/me` — updates the signed-in user's display name. The server
  * trims and validates (`MinLength(1)`, `MaxLength(100)` → 422) and returns
  * the SAME full role-branched profile payload as `GET /users/me`, so callers
@@ -245,5 +269,6 @@ async function updateMe(body: { name: string }): Promise<MyProfile> {
 
 export const usersApi = {
   getMe,
+  getAccess,
   updateMe,
 };

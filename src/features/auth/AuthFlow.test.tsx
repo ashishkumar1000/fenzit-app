@@ -46,7 +46,7 @@ beforeEach(() => {
   sendOtp.mockResolvedValue({ otp_session_id: 'sess-1' });
   verifyOtp.mockResolvedValue({
     token: 'token-1',
-    user: { userId: 'u-1', tenantId: null, role: 'owner', name: null },
+    user: { userId: 'u-1', tenantId: null, role: null, name: null, platformAdmin: false },
   });
 });
 

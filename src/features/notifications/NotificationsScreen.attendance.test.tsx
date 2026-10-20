@@ -11,7 +11,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../auth/useAuth', () => ({
-  useAuth: () => ({ session: { role: 'technician', tenantId: 't1' } }),
+  useAuth: () => ({ session: { role: 'employee', tenantId: 't1' } }),
 }));
 
 jest.mock('./useNotifications', () => ({

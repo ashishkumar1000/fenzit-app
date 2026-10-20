@@ -1,8 +1,9 @@
 /**
  * Tracks whether the user has finished account setup, so the auth flow only
  * shows until they have an account — and, once signed in, WHO they are
- * (`session.role`), so `App.tsx` can route owners and technicians to their
- * own side of the app. Backed by MMKV — the read is synchronous, so there
+ * (`session.role`), so `App.tsx` can route company admins, viewers and
+ * employees to their own side of the app (and everyone else to a plain
+ * "no access" screen). Backed by MMKV — the read is synchronous, so there
  * is no loading state and no first-frame flash.
  *
  * Multiple components call `useAuth()` (App.tsx's gate, the More/Profile
@@ -22,6 +23,7 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { storage } from '../../services/storage';
 import type { UserRole } from '../../services';
+import { isUserRole } from './roles';
 
 const KEY = 'fenzit.session';
 
@@ -29,15 +31,37 @@ export type AuthStatus = 'pending' | 'done';
 
 /** The gating bits — set once, by `AuthFlow`, on `complete()`. Nothing here is rendered. */
 export interface Session {
-  role: UserRole;
-  tenantId: string;
+  /** `null` for a person with no company, a removed person, or Fenzit staff. */
+  role: UserRole | null;
+  /** `null` when the person belongs to no company. */
+  tenantId: string | null;
+  /** Fenzit staff — they use the web admin, never the company screens. */
+  platformAdmin: boolean;
+}
+
+/**
+ * A stored session is trusted only if its shape still matches. A session
+ * saved by an older build (`role: 'owner' | 'technician'`) is dropped, which
+ * simply sends the person back to log in once.
+ */
+export function parseSession(value: unknown): Session | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const v = value as Record<string, unknown>;
+  const roleOk = v.role === null || isUserRole(v.role);
+  const tenantOk = v.tenantId === null || typeof v.tenantId === 'string';
+  if (!roleOk || !tenantOk || typeof v.platformAdmin !== 'boolean') return null;
+  return {
+    role: v.role as UserRole | null,
+    tenantId: v.tenantId as string | null,
+    platformAdmin: v.platformAdmin,
+  };
 }
 
 function load(): Session | null {
   const raw = storage.getString(KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as Session;
+    return parseSession(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -90,6 +114,40 @@ export function expireSession(): void {
   // re-render on the gate flip, and any mounted `useSessionExpired()` picks
   // up the flag from the same notification. No extra notify needed.
   setSession(null);
+}
+
+/**
+ * Ends the person's company access but keeps their login, so the app shows
+ * the no-access screen. Used when a removed person's next call is refused.
+ */
+export function revokeCompanyAccess(): void {
+  const current = getSnapshot();
+  if (!current) return;
+  setSession({ role: null, tenantId: null, platformAdmin: current.platformAdmin });
+}
+
+/** Current session, or `null` when signed out. Read outside React (session sync). */
+export function getSession(): Session | null {
+  return getSnapshot();
+}
+
+/**
+ * Replaces the session only when a gating field actually changed, so a
+ * foreground re-sync that finds nothing new causes no re-render. Returns
+ * `false` (and changes nothing) when the person is signed out.
+ */
+export function updateSessionIfChanged(next: Session): boolean {
+  const current = getSnapshot();
+  if (!current) return false;
+  if (
+    current.role === next.role &&
+    current.tenantId === next.tenantId &&
+    current.platformAdmin === next.platformAdmin
+  ) {
+    return false;
+  }
+  setSession(next);
+  return true;
 }
 
 /**

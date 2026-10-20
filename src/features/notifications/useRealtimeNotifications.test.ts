@@ -17,7 +17,7 @@ jest.mock('../profile/useMyProfile', () => ({
 // Story 14-3: the hook reads the session role — owner here, so every
 // pre-existing (owner-behaviour) assertion keeps meaning exactly what it
 // meant before the generalization.
-let mockSession: { role: 'owner' | 'technician' } | null = { role: 'owner' };
+let mockSession: { role: 'company_admin' | 'employee' } | null = { role: 'company_admin' };
 jest.mock('../auth/useAuth', () => ({
   useAuth: () => ({ session: mockSession }),
 }));
@@ -541,13 +541,13 @@ describe('report event routing (Epic 12)', () => {
 
 describe('technician event routing — attendance seam (Story 15-10)', () => {
   beforeEach(async () => {
-    mockSession = { role: 'technician' };
+    mockSession = { role: 'employee' };
     await mountProbe();
     broadcastCb = channel.on.mock.calls[0][2] as BroadcastCallback;
   });
 
   afterEach(() => {
-    mockSession = { role: 'owner' };
+    mockSession = { role: 'company_admin' };
     emitAttendanceAccessRefreshMock.mockClear();
   });
 
@@ -591,13 +591,13 @@ describe('technician event routing — attendance seam (Story 15-10)', () => {
 
 describe('technician event routing (Story 14-3)', () => {
   beforeEach(async () => {
-    mockSession = { role: 'technician' };
+    mockSession = { role: 'employee' };
     await mountProbe();
     broadcastCb = channel.on.mock.calls[0][2] as BroadcastCallback;
   });
 
   afterEach(() => {
-    mockSession = { role: 'owner' };
+    mockSession = { role: 'company_admin' };
   });
 
   it('force-refetches the shared notification stores and never touches owner stores or the banner', async () => {

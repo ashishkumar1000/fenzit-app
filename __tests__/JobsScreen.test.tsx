@@ -11,6 +11,15 @@
  * reduced to "run once mounted" — the screen only uses focus as a load
  * trigger, which the store's own tests already cover.
  */
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../src/features/auth/useRole', () => ({
+  ...jest.requireActual('../src/features/auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { ActivityIndicator, FlatList, RefreshControl } from 'react-native';
@@ -470,4 +479,39 @@ it("the bell's count pill shows the unread count, capped at 99+", async () => {
   mockUnreadCount = 120;
   const many = await mountScreen();
   expect(renderedText(many)).toContain('99+');
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('a viewer (read-only)', () => {
+  it('has no New job button in the header', async () => {
+    mockCanWrite = false;
+    list.mockResolvedValue(page([], null));
+    const renderer = await mountScreen();
+
+    expect(() => findButton(renderer, 'New job')).toThrow();
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  it('has no Schedule a job button in the Upcoming empty state, and the copy does not tell them to create one', async () => {
+    mockCanWrite = false;
+    list.mockResolvedValue(page([], null));
+    const renderer = await mountScreen();
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByType(SegmentedControl).props.onChange('upcoming');
+    });
+
+    expect(() => findButton(renderer, 'Schedule a job')).toThrow();
+    expect(renderedText(renderer).join(' ')).not.toMatch(/Create your first job/);
+  });
+
+  it('still lists jobs and opens a job for reading', async () => {
+    mockCanWrite = false;
+    list.mockResolvedValue(page([makeJob('job-abc')], null));
+    const renderer = await mountScreen();
+
+    expect(renderedText(renderer)).toContain('Description job-abc');
+  });
 });

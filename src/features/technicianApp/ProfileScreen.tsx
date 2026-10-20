@@ -8,7 +8,7 @@
  * Name and phone come from `GET /users/me` via `useMyProfile`, not from the
  * auth session — the session holds gating fields only.
  *
- * The name carries the same "Edit name" pencil affordance as the owner's
+ * The name carries the same "Edit name" pencil affordance as the admin's
  * More tab account card (story 5.2): both open the shared `EditNameSheet`,
  * whose successful save updates this screen instantly via the shared
  * profile store.
@@ -22,7 +22,7 @@ import { colors, spacing, typography } from '../../theme';
 import { runAllResets } from '../../services';
 import { clearAuthToken } from '../../services/authToken';
 import { useAuth } from '../auth';
-import { EditNameSheet, formatPhone, useMyProfile } from '../profile';
+import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
 
 export default function ProfileScreen() {
   const { reset } = useAuth();
@@ -68,7 +68,7 @@ export default function ProfileScreen() {
             <Pencil size={18} color={colors.textMuted} strokeWidth={2} />
           </IconButton>
         </View>
-        <Text style={styles.role}>Technician</Text>
+        <Text style={styles.role}>{formatRole(profile.role)}</Text>
       </View>
 
       <EditNameSheet

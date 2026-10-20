@@ -9,6 +9,15 @@
  * services + profile layers are mocked at the module boundary — the screen's
  * logic under test is its state machine, not the client.
  */
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../src/features/auth/useRole', () => ({
+  ...jest.requireActual('../src/features/auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View, type AlertButton, type StyleProp, type ViewStyle } from 'react-native';
@@ -591,4 +600,31 @@ it('a 409 on cancel refetches the detail without an alert', async () => {
   expect(getById).toHaveBeenCalledTimes(2);
   // No failure alert — the error alert never fires on a 409 refetch.
   expect(dialogs).not.toHaveBeenCalled();
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('a viewer (read-only)', () => {
+  it('sees a scheduled job but has no Edit or Cancel, and the edit sheet is never mounted', async () => {
+    mockCanWrite = false;
+    getById.mockResolvedValue(makeDetail({ status: 'scheduled', currentStep: null }));
+    const renderer = await mountScreen();
+
+    expect(renderer.root.findAllByProps({ testID: 'job-detail-actions' })).toHaveLength(0);
+    expect(renderer.root.findAllByType(Button).filter(b => ['Edit job', 'Cancel job'].includes(b.props.children))).toHaveLength(0);
+    // The whole edit sheet is absent (not just hidden), so its "Edit job" title is gone too.
+    expect(renderedText(renderer)).not.toContain('Edit job');
+    // The job itself is fully readable, customer included.
+    expect(renderedText(renderer)).toContain('Ravi Kumar');
+  });
+
+  it('shows the customer phone number (viewers may see phone numbers)', async () => {
+    mockCanWrite = false;
+    getById.mockResolvedValue(makeDetail({ status: 'scheduled', currentStep: null }));
+    const renderer = await mountScreen();
+
+    expect(renderedText(renderer).join(' ')).toMatch(/\+91/);
+  });
 });

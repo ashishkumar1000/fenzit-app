@@ -10,7 +10,7 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 
-let mockSession: { role: string; tenantId: string } | null = { role: 'owner', tenantId: 't1' };
+let mockSession: { role: string | null; tenantId: string | null; platformAdmin?: boolean } | null = { role: 'company_admin', tenantId: 't1' };
 jest.mock('../auth/useAuth', () => ({
   useAuth: () => ({ session: mockSession }),
 }));
@@ -45,14 +45,14 @@ function mount(): ReactTestRenderer.ReactTestRenderer {
 }
 
 beforeEach(() => {
-  mockSession = { role: 'owner', tenantId: 't1' };
+  mockSession = { role: 'company_admin', tenantId: 't1' };
 });
 
 afterEach(() => jest.clearAllMocks());
 
 describe('RealtimeBridge', () => {
   it('technician session: enables the hook but renders no banner', () => {
-    mockSession = { role: 'technician', tenantId: 't1' };
+    mockSession = { role: 'employee', tenantId: 't1' };
     mockUseRealtimeNotifications.mockReturnValue({ banner: BANNER });
 
     const renderer = mount();
@@ -72,7 +72,7 @@ describe('RealtimeBridge', () => {
   });
 
   it('owner session with no live banner: renders nothing', () => {
-    mockSession = { role: 'owner', tenantId: 't1' };
+    mockSession = { role: 'company_admin', tenantId: 't1' };
     mockUseRealtimeNotifications.mockReturnValue({ banner: null });
 
     const renderer = mount();
@@ -82,11 +82,37 @@ describe('RealtimeBridge', () => {
   });
 
   it('owner session with a live banner: renders StatusBanner', () => {
-    mockSession = { role: 'owner', tenantId: 't1' };
+    mockSession = { role: 'company_admin', tenantId: 't1' };
     mockUseRealtimeNotifications.mockReturnValue({ banner: BANNER });
 
     const renderer = mount();
 
     expect(renderer.toJSON()).not.toBeNull();
+  });
+
+  it('viewer session: enabled, and sees the same banner as the admin (read-only company view)', () => {
+    mockSession = { role: 'viewer', tenantId: 't1' };
+    mockUseRealtimeNotifications.mockReturnValue({ banner: BANNER });
+
+    const renderer = mount();
+
+    expect(renderer.toJSON()).not.toBeNull();
+    expect(mockUseRealtimeNotifications).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  it.each([
+    ['a removed person (no role, no company)', { role: null, tenantId: null }],
+    ['a role but no company', { role: 'company_admin', tenantId: null }],
+    ['Fenzit staff', { role: null, tenantId: null, platformAdmin: true }],
+    ['Fenzit staff with a stale company and role', { role: 'company_admin', tenantId: 't1', platformAdmin: true }],
+    ['an unknown role', { role: 'owner', tenantId: 't1' }],
+  ])('%s: no socket, no token exchange, no banner', (_name, session) => {
+    mockSession = session;
+    mockUseRealtimeNotifications.mockReturnValue({ banner: BANNER });
+
+    const renderer = mount();
+
+    expect(renderer.toJSON()).toBeNull();
+    expect(mockUseRealtimeNotifications).toHaveBeenCalledWith({ enabled: false });
   });
 });

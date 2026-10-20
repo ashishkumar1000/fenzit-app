@@ -6,6 +6,15 @@
  * contract: a profile carrying `jobCounts` must render the header stats
  * without crashing, on both first-run and normal Home.
  */
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../src/features/auth/useRole', () => ({
+  ...jest.requireActual('../src/features/auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import React from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { RefreshControl, ScrollView } from 'react-native';
@@ -79,7 +88,7 @@ function makeProfile(overrides: Partial<MyProfile> = {}): MyProfile {
     countryCode: '+91',
     phoneNumber: '9000000000',
     status: 'active',
-    role: 'owner',
+    role: 'company_admin',
     tenant: {
       id: 't-1',
       companyName: 'Fenzit Services',
@@ -575,4 +584,73 @@ it('pull-to-refresh force-refreshes the unread count alongside the profile', asy
     renderer.root.findByType(RefreshControl).props.onRefresh();
   });
   expect(mockLoadUnreadCount).toHaveBeenCalledWith({ force: true });
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('a viewer (read-only)', () => {
+  const ATTENDANCE = {
+    attendanceEnabled: true,
+    attendanceAccess: 'none',
+    attendanceStartDate: null,
+    onboardedAt: null,
+    pendingLeaveRequests: 4,
+  } as MyProfile['attendance'];
+  const ESTABLISHED = {
+    jobs: { data: [], nextCursor: null, hasMore: false },
+    jobCounts: { today: 0, upcoming: 0, overdue: 0, completed: 3, cancelled: 1 },
+    technicianCount: 2,
+    attendance: ATTENDANCE,
+  } as Partial<MyProfile>;
+
+  beforeEach(() => {
+    mockCanWrite = false;
+    (QuickActions as jest.Mock).mockClear();
+  });
+
+  it('shows "View-only access" instead of the New job / Add customer / Add technician tiles', async () => {
+    const renderer = await mountWithProfile(ESTABLISHED);
+
+    expect(QuickActions).not.toHaveBeenCalled();
+    expect(allText(renderer)).toContain('View-only access');
+  });
+
+  it('keeps the dashboard readable: header stats still render', async () => {
+    const renderer = await mountWithProfile(ESTABLISHED);
+
+    expect(renderer.root.findAllByType(TodaysJobsSection)).toHaveLength(1);
+  });
+
+  it('has no "Create a job" button in the all-clear card', async () => {
+    const renderer = await mountWithProfile(ESTABLISHED);
+
+    expect(renderer.root.findAllByType(Button).find(b => b.props.children === 'Create a job')).toBeUndefined();
+  });
+
+  it('never shows the leave-review strip, even when leave is pending (a viewer cannot read leave)', async () => {
+    const renderer = await mountWithProfile(ESTABLISHED);
+
+    const section = renderer.root.findByType(TodaysJobsSection);
+    expect(section.props.pendingLeaveRequests ?? 0).toBe(0);
+    expect(section.props.onPressCreate).toBeUndefined();
+  });
+
+  it('a first-run account with no jobs does not tell the viewer to create one', async () => {
+    const renderer = await mountWithProfile({ technicianCount: 0, attendance: ATTENDANCE });
+
+    const text = allText(renderer);
+    expect(text).not.toMatch(/Create your first job|Add a technician first/);
+    expect(text).toContain('Jobs your team creates will show up here.');
+  });
+
+  it('the company admin still gets the leave strip count and the create button (control)', async () => {
+    mockCanWrite = true;
+    const renderer = await mountWithProfile(ESTABLISHED);
+
+    const section = renderer.root.findByType(TodaysJobsSection);
+    expect(section.props.pendingLeaveRequests).toBe(4);
+    expect(section.props.onPressCreate).toBeDefined();
+  });
 });

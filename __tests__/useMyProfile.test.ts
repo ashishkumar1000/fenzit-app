@@ -44,7 +44,7 @@ function makeProfile(overrides: Partial<MyProfile> = {}): MyProfile {
     countryCode: '+91',
     phoneNumber: '9000000000',
     status: 'active',
-    role: 'owner',
+    role: 'company_admin',
     tenant: {
       id: 't-1',
       companyName: 'Fenzit Services',

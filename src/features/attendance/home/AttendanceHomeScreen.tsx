@@ -28,6 +28,7 @@ import { Building2, Calendar, CalendarDays, CalendarOff, LayoutDashboard, Users 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { colors, spacing } from '../../../theme';
+import { VIEW_ONLY_REASON, useCanWrite } from '../../auth';
 import { attendanceSetupService } from '../../../services';
 import { Tile } from '../../../components/Tile';
 import { Eyebrow, InlineNotice } from '../../../components/ui';
@@ -41,6 +42,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AttendanceHome'>;
 const ENABLED_NOTICE_MS = 5000;
 
 export default function AttendanceHomeScreen({ navigation, route }: Props) {
+  // A viewer reads who is in (Today, Monthly) but sets nothing up and cannot
+  // read leave — those tiles are hidden and the setup wizard never opens for
+  // them (the notice at the top says why).
+  const canWrite = useCanWrite();
   // One-time confirmation after the wizard's "Enable attendance". The param is
   // cleared straight away so coming back to this screen never repeats it.
   const enabledNotice = useFlashMessage(ENABLED_NOTICE_MS);
@@ -68,6 +73,7 @@ export default function AttendanceHomeScreen({ navigation, route }: Props) {
   // response must never redirect after a newer focus decided otherwise.
   const gateSeqRef = useRef(0);
   const runGate = useCallback(() => {
+    if (!canWrite) return;
     const seq = ++gateSeqRef.current;
     void (async () => {
       try {
@@ -90,7 +96,7 @@ export default function AttendanceHomeScreen({ navigation, route }: Props) {
         // redirect; the wizard is owner-only by affirmative 200.
       }
     })();
-  }, [navigation]);
+  }, [navigation, canWrite]);
 
   // Subscribed imperatively rather than via `useFocusEffect` so the screen
   // keeps rendering outside a navigator (the optional calls are real
@@ -114,6 +120,7 @@ export default function AttendanceHomeScreen({ navigation, route }: Props) {
             onDismiss={enabledNotice.dismiss}
           />
         ) : null}
+        {!canWrite ? <InlineNotice tone="neutral" message={VIEW_ONLY_REASON} /> : null}
         <Eyebrow>Every day</Eyebrow>
         {/* 19-4 D1 — the FR-24 dashboard tile, FIRST (the today snapshot is
             the owner's entry answer, ahead of the setup surfaces below). */}
@@ -134,44 +141,52 @@ export default function AttendanceHomeScreen({ navigation, route }: Props) {
           subtitle="Everyone's month at a glance"
           onPress={() => navigation.navigate('AttendanceMonthly')}
         />
-        {/* 17-6 — the Leave tile (Leave is "planned time";
-            the subtitle is FE copy, not mockup text). */}
-        <Tile
-          icon={<CalendarOff size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
-          iconBg={colors.status.progress.bg}
-          title="Leave"
-          subtitle="Pending requests & history"
-          onPress={() => navigation.navigate('OwnerLeave')}
-        />
-        <Eyebrow style={styles.sectionGap}>Set up</Eyebrow>
-        <Tile
-          icon={<Building2 size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
-          iconBg={colors.status.scheduled.bg}
-          title="Offices"
-          subtitle="Add offices, set location and timings"
-          onPress={() => navigation.navigate('AttendanceOffices')}
-        />
-        <Tile
-          icon={<Users size={20} color={colors.primary} strokeWidth={1.5} />}
-          iconBg={colors.surfacePage}
-          title="Team attendance"
-          subtitle="Choose each person's office and start date"
-          onPress={() => navigation.navigate('AttendanceEnrolments')}
-        />
-        <Tile
-          icon={<CalendarDays size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
-          iconBg={colors.status.scheduled.bg}
-          title="Weekly off"
-          subtitle="Same for everyone, or set per employee"
-          onPress={() => navigation.navigate('AttendanceWeeklyOff')}
-        />
-        <Tile
-          icon={<Calendar size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
-          iconBg={colors.status.progress.bg}
-          title="Holidays"
-          subtitle="Company holiday list"
-          onPress={() => navigation.navigate('AttendanceHolidays')}
-        />
+        {canWrite ? (
+          <>
+            {/* 17-6 — the Leave tile (Leave is "planned time";
+                the subtitle is FE copy, not mockup text). */}
+            <Tile
+              icon={<CalendarOff size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
+              iconBg={colors.status.progress.bg}
+              title="Leave"
+              subtitle="Pending requests & history"
+              onPress={() => navigation.navigate('OwnerLeave')}
+            />
+          </>
+        ) : null}
+        {canWrite ? (
+          <>
+            <Eyebrow style={styles.sectionGap}>Set up</Eyebrow>
+            <Tile
+              icon={<Building2 size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
+              iconBg={colors.status.scheduled.bg}
+              title="Offices"
+              subtitle="Add offices, set location and timings"
+              onPress={() => navigation.navigate('AttendanceOffices')}
+            />
+            <Tile
+              icon={<Users size={20} color={colors.primary} strokeWidth={1.5} />}
+              iconBg={colors.surfacePage}
+              title="Team attendance"
+              subtitle="Choose each person's office and start date"
+              onPress={() => navigation.navigate('AttendanceEnrolments')}
+            />
+            <Tile
+              icon={<CalendarDays size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
+              iconBg={colors.status.scheduled.bg}
+              title="Weekly off"
+              subtitle="Same for everyone, or set per employee"
+              onPress={() => navigation.navigate('AttendanceWeeklyOff')}
+            />
+            <Tile
+              icon={<Calendar size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
+              iconBg={colors.status.progress.bg}
+              title="Holidays"
+              subtitle="Company holiday list"
+              onPress={() => navigation.navigate('AttendanceHolidays')}
+            />
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

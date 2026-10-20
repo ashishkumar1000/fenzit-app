@@ -6,6 +6,7 @@
  * the same way, so the joining lives here rather than being repeated inline.
  */
 import type { MyProfile } from '../../services';
+import { ROLE_LABELS, isUserRole } from '../auth/roles';
 
 /**
  * First word of a name, or `null` when there is no name — profiles can have
@@ -23,7 +24,12 @@ export function formatPhone(
   return `${profile.countryCode} ${profile.phoneNumber}`;
 }
 
-/** `role` is a lowercase enum on the wire (`owner` | `technician`) — title-case it for display. */
-export function formatRole(role: string): string {
-  return role.charAt(0).toUpperCase() + role.slice(1);
+/**
+ * Plain display name for a role. The wire value (`company_admin`) is never
+ * shown: company_admin -> "Admin", employee -> "Employee", viewer -> "Viewer".
+ * An unknown or missing role falls back to an empty string — better a blank
+ * badge than a raw code like `company_admin` on screen.
+ */
+export function formatRole(role: string | null | undefined): string {
+  return isUserRole(role) ? ROLE_LABELS[role] : '';
 }

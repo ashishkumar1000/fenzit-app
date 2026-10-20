@@ -44,6 +44,7 @@ import {
 import { DayStatusLegend } from '../calendar/DayStatusLegend';
 import { DayDetailSheet } from '../calendar/DayDetailSheet';
 import { shiftYearMonth } from '../monthly/monthlyModel';
+import { useCanWrite } from '../../auth';
 import { correctDay } from '../../../services/resources/attendanceCorrections';
 import type { CorrectionWriteBody } from '../../../services/resources/attendanceCorrections';
 
@@ -102,6 +103,9 @@ export default function AttendanceEmployeeMonthScreen({ route, navigation }: Pro
   // stays in the pane; the parent holds the picked day only).
   const [report, setReport] = useState<RealMonthReport | null>(null);
   const [pickedDay, setPickedDay] = useState<string | null>(null);
+  // A viewer reads every day but never corrects one (`readOnly` also hides
+  // the "Correct day" entry inside the sheet).
+  const canWrite = useCanWrite();
 
   // The focusDate auto-open's arming guard (D6): armed on mount (only
   // when a normalized focusDate arrived), spent after the first
@@ -167,8 +171,9 @@ export default function AttendanceEmployeeMonthScreen({ route, navigation }: Pro
         today={report?.today ?? null}
         scope={{ kind: 'owner', employeeId }}
         onClose={() => setPickedDay(null)}
+        readOnly={!canWrite}
         onCorrect={
-          pickedDay !== null
+          pickedDay !== null && canWrite
             ? (body: CorrectionWriteBody) =>
                 correctDay(employeeId, pickedDay, body)
             : undefined

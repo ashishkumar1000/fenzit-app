@@ -43,6 +43,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useAuth } from '../auth/useAuth';
+import { isCompanyWideRole } from '../auth/roles';
 import { loadMyProfile, useMyProfile } from '../profile/useMyProfile';
 import { loadJobs } from '../jobs/useJobs';
 // Story 12-6: report terminal events (`report_ready` / `report_failed`)
@@ -65,6 +66,7 @@ import {
   teardownChannel,
   userNotificationsTopic,
 } from '../../services';
+import type { UserRole } from '../../services';
 import {
   BANNER_VISIBLE_MS,
   bannerPartsFromEvent,
@@ -113,7 +115,7 @@ export function useRealtimeNotifications(
   // The event handler reads the role through a ref: the handler closes over
   // refs only, so a session/role change can never leave a stale role in a
   // still-registered channel callback.
-  const roleRef = useRef<'owner' | 'technician' | null>(session?.role ?? null);
+  const roleRef = useRef<UserRole | null>(session?.role ?? null);
   roleRef.current = session?.role ?? null;
 
   const [banner, setBanner] = useState<OwnerNotificationBanner | null>(null);
@@ -171,7 +173,7 @@ export function useRealtimeNotifications(
     // technicians today) refetches the shared notification stores, past
     // their TTLs so a burst can't be throttled away. No banner, no
     // owner-store refetches. Later epics' event types need nothing here.
-    if (roleRef.current !== 'owner') {
+    if (!isCompanyWideRole(roleRef.current)) {
       // Story 15-10: an attendance.* event also refreshes the entry-point
       // gate (AD-19: every attendance notification refetches access), via
       // the neutral seam — the module boundary forbids importing the

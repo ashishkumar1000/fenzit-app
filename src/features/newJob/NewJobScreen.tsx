@@ -43,7 +43,7 @@
  * full-roster fallback when nobody carries the skill); the browser shows the
  * whole roster with matching rows marked.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -153,7 +153,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
     const picked = route.params?.selectedSkillId;
     if (picked === undefined) return;
     if (picked === null) {
-      setDraft(current => ({ ...current, skillId: null, technicianId: null }));
+      editDraft(current => ({ ...current, skillId: null, technicianId: null }));
     } else {
       handleSkillChange(picked);
     }
@@ -283,8 +283,20 @@ export default function NewJobScreen({ navigation, route }: Props) {
 
   const technicianOptions = noSkillMatch ? allTechnicians : matchingTechnicians;
 
+  // Every draft edit clears a stale server error. Otherwise an old "could not
+  // create" line hides the reason Create job is off after the owner fixes
+  // the form.
+  // Counts edits. A create that fails after the owner has changed the form
+  // must not show its error, since the error describes the old form.
+  const editCount = useRef(0);
+  const editDraft = (update: (current: NewJobDraft) => NewJobDraft) => {
+    editCount.current += 1;
+    setSubmitError('');
+    setDraft(update);
+  };
+
   const patch = (changes: Partial<NewJobDraft>) =>
-    setDraft(current => ({ ...current, ...changes }));
+    editDraft(current => ({ ...current, ...changes }));
 
   /**
    * Changing the skill clears a technician who doesn't carry it — otherwise
@@ -292,7 +304,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
    * that technician has just been filtered out of the picker.
    */
   const handleSkillChange = (id: string) => {
-    setDraft(current => {
+    editDraft(current => {
       if (current.skillId === id) return current;
       const roster = profile?.technicians ?? [];
       const keepTechnician =
@@ -318,6 +330,15 @@ export default function NewJobScreen({ navigation, route }: Props) {
     !isPastSlot &&
     !submitting;
 
+  // Why Create job is greyed out, in the order the sections sit on screen.
+  const missingHint = (() => {
+    if (submitting || canSubmit) return null;
+    if (!draft.skillId) return 'Pick a skill to continue';
+    if (!draft.customerId) return 'Pick a customer to continue';
+    if (!draft.technicianId) return 'Pick a technician to continue';
+    return 'Pick a time that is still to come';
+  })();
+
   const handleSubmit = async () => {
     // Narrowed once here rather than cast at each use: `canSubmit` already
     // proves all three are set, but TypeScript can't see through it.
@@ -325,6 +346,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
     if (!canSubmit || !skillId || !customerId || !technicianId) return;
     setSubmitting(true);
     setSubmitError('');
+    const editsAtSubmit = editCount.current;
     try {
       const job = await jobService.create({
         customerId,
@@ -357,7 +379,9 @@ export default function NewJobScreen({ navigation, route }: Props) {
       // rather than dropping back to wherever the owner came from.
       navigation.goBack();
     } catch (err) {
-      setSubmitError((err as ApiError).message);
+      if (editCount.current === editsAtSubmit) {
+        setSubmitError((err as ApiError).message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -684,6 +708,9 @@ export default function NewJobScreen({ navigation, route }: Props) {
           {submitError ? (
             <Text style={styles.submitError}>{submitError}</Text>
           ) : null}
+          {!submitError && missingHint ? (
+            <Text style={styles.missingHint} accessibilityLiveRegion="polite">{missingHint}</Text>
+          ) : null}
           <Button
             variant="primary"
             size="lg"
@@ -787,6 +814,11 @@ const styles = StyleSheet.create({
   submitError: {
     ...typography.bodySm,
     color: colors.danger,
+  },
+  missingHint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   fieldError: {
     ...typography.caption,

@@ -20,7 +20,6 @@
  * media/asset URL builder) can reuse the origin without re-hardcoding it.
  */
 export const API_HOST = 'https://api.fenzit.com';
-//export const API_HOST = 'http://192.168.1.218:3000';
 export const API_VERSION_PREFIX = '/api/v1';
 export const API_BASE_URL = `${API_HOST}${API_VERSION_PREFIX}`;
 

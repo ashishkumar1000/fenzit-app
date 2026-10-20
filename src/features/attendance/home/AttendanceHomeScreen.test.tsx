@@ -17,6 +17,15 @@ jest.mock('../../../services', () => ({
   },
 }));
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../../auth/useRole', () => ({
+  ...jest.requireActual('../../auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
 import AttendanceHomeScreen from './AttendanceHomeScreen';
@@ -448,3 +457,57 @@ describe('AttendanceHomeScreen — "Attendance is on" notice (UX finding 26)', (
   });
 });
 
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('AttendanceHomeScreen — a viewer (read-only)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCanWrite = false;
+  });
+
+  const textsOf = (renderer: ReactTestRenderer.ReactTestRenderer) =>
+    renderer.root
+      .findAll(node => typeof node.props.children === 'string')
+      .map(node => node.props.children as string);
+
+  it('keeps Today and Monthly (reads) and says why the rest is gone', () => {
+    const { renderer } = renderHome();
+    const texts = textsOf(renderer);
+
+    expect(texts).toContain('Today');
+    expect(texts).toContain('Monthly');
+    expect(texts).toContain('View-only access');
+  });
+
+  it('hides Leave (a viewer cannot read leave) and every set-up tile', () => {
+    const { renderer } = renderHome();
+    const texts = textsOf(renderer);
+
+    for (const hidden of ['Leave', 'Set up', 'Offices', 'Team attendance', 'Weekly off', 'Holidays']) {
+      expect(texts).not.toContain(hidden);
+    }
+  });
+
+  it('never asks the setup endpoint and never redirects into the setup wizard, even when setup is unfinished', async () => {
+    getSetup.mockResolvedValue(setupState({ started: false }));
+    const { addListener, navigation } = renderHome();
+
+    await fireFocus(addListener);
+
+    expect(getSetup).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('the company admin still gets the full hub and the setup gate (control)', async () => {
+    mockCanWrite = true;
+    getSetup.mockResolvedValue(setupState({ started: false }));
+    const { renderer, addListener, navigation } = renderHome();
+
+    await fireFocus(addListener);
+
+    expect(textsOf(renderer)).toContain('Leave');
+    expect(navigation.replace).toHaveBeenCalledWith('AttendanceSetupWizard');
+  });
+});

@@ -71,6 +71,15 @@ jest.mock('../../profile', () => {
   };
 });
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../../auth/useRole', () => ({
+  ...jest.requireActual('../../auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import React from 'react';
 import { FlatList, RefreshControl } from 'react-native';
 import { act, create } from 'react-test-renderer';
@@ -331,5 +340,43 @@ describe('the 20-1 pull-to-refresh', () => {
       await Promise.resolve();
     });
     expect(refreshControl.props.refreshing).toBe(false);
+  });
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('a viewer (read-only)', () => {
+  it('has no header Add button', () => {
+    mockCanWrite = false;
+    const { root } = renderScreen();
+
+    expect(root.findAllByType(Button).find(b => b.props.children === 'Add')).toBeUndefined();
+  });
+
+  it('never mounts the Add sheet, even when pushed with autoOpenAdd (the Home tile is hidden, but a stale link must not open it)', () => {
+    mockCanWrite = false;
+    const { root } = renderScreen(true);
+
+    expect(root.findAllByProps({ testID: 'add-technician-sheet' })).toHaveLength(0);
+  });
+
+  it('still lists the team', () => {
+    mockCanWrite = false;
+    roster.technicians = [technician('Asha')];
+    const { root } = renderScreen();
+    roster.technicians = [];
+
+    expect(root.findAllByType(FlatList)).toHaveLength(1);
+  });
+
+  it('the empty state points at the company admin, not at an Add button that is not there', () => {
+    mockCanWrite = false;
+    const { root } = renderScreen();
+    const text = JSON.stringify(root.findAll(() => true).map(n => n.props.description ?? ''));
+
+    expect(text).toMatch(/company admin/);
+    expect(text).not.toMatch(/Add your team/);
   });
 });

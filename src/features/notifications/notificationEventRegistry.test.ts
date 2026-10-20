@@ -13,7 +13,11 @@ import {
   buildGenericCards,
   notificationEventAction,
 } from './notificationEventRegistry';
-import { buildLeaveCards } from './leaveNotificationModel';
+import {
+  buildLeaveCards,
+  LEAVE_EMPLOYEE_EVENTS,
+  LEAVE_OWNER_EVENTS,
+} from './leaveNotificationModel';
 
 function makeNotification(
   id: string,
@@ -38,33 +42,33 @@ describe('notificationEventAction', () => {
 
   it('a report row (owner) is a report card', () => {
     const n = makeNotification('r1', { eventType: 'report_ready', payload: { status: 'ready' } });
-    expect(notificationEventAction(n, 'owner')).toBe('report');
-    expect(notificationEventAction(makeNotification('r2', { eventType: 'report_failed' }), 'owner')).toBe('report');
+    expect(notificationEventAction(n, 'company_admin')).toBe('report');
+    expect(notificationEventAction(makeNotification('r2', { eventType: 'report_failed' }), 'company_admin')).toBe('report');
   });
 
   it('a job row (owner) is a job card, regardless of event type', () => {
     const n = makeNotification('n1', { eventType: 'on_my_way', jobId: 'job-1' });
-    expect(notificationEventAction(n, 'owner')).toBe('job');
+    expect(notificationEventAction(n, 'company_admin')).toBe('job');
   });
 
   // --- Technician: job cards route their side, reports are owner-only ---------
 
   it('a job row (technician) is still a job card', () => {
     expect(
-      notificationEventAction(makeNotification('n1', { jobId: 'job-1' }), 'technician'),
+      notificationEventAction(makeNotification('n1', { jobId: 'job-1' }), 'employee'),
     ).toBe('job');
   });
 
   it('a report row (technician) degrades to generic — reports are an owner surface', () => {
     expect(
-      notificationEventAction(makeNotification('r1', { eventType: 'report_ready' }), 'technician'),
+      notificationEventAction(makeNotification('r1', { eventType: 'report_ready' }), 'employee'),
     ).toBe('generic');
   });
 
   // --- Unknown event types: the registry's fallback ----------------------------
 
   it('an unknown event type with no jobId falls through to generic (both roles)', () => {
-    for (const role of ['owner', 'technician'] as const) {
+    for (const role of ['company_admin', 'employee'] as const) {
       expect(
         notificationEventAction(makeNotification('x1', { eventType: 'leave_approved' }), role),
       ).toBe('generic');
@@ -77,7 +81,7 @@ describe('notificationEventAction', () => {
     expect(
       notificationEventAction(
         makeNotification('x1', { eventType: 'custom_step', jobId: 'job-9' }),
-        'technician',
+        'employee',
       ),
     ).toBe('job');
   });
@@ -91,7 +95,7 @@ describe('buildGenericCards', () => {
         makeNotification('n1', { jobId: 'job-1' }), // job → filtered out
         makeNotification('g2', { eventType: 'weekly_off_changed' }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(cards.map(c => c.key)).toEqual(['g1', 'g2']);
     expect(cards.every(c => c.kind === 'generic')).toBe(true);
@@ -100,7 +104,7 @@ describe('buildGenericCards', () => {
   it('prefers the payload\'s self-contained display text', () => {
     const cards = buildGenericCards(
       [makeNotification('g1', { eventType: 'leave_approved' }, { title: 'Leave approved', message: 'See you on the 30th' })],
-      'owner',
+      'company_admin',
     );
     expect(cards[0].title).toBe('Leave approved');
     expect(cards[0].message).toBe('See you on the 30th');
@@ -109,7 +113,7 @@ describe('buildGenericCards', () => {
   it('a payload without text falls back to the humanized event type and null message', () => {
     const cards = buildGenericCards(
       [makeNotification('g1', { eventType: 'leave_approved', payload: {} })],
-      'owner',
+      'company_admin',
     );
     expect(cards[0].title).toBe('Leave approved'); // underscores → spaces, capped
     expect(cards[0].message).toBeNull();
@@ -121,7 +125,7 @@ describe('buildGenericCards', () => {
         makeNotification('g1', { eventType: '', payload: null as unknown as Record<string, unknown> }),
         makeNotification('g2', { eventType: 'x', payload: { title: '   ' } }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(cards[0].title).toBe('Notification'); // the empty-vocabulary fallback
     expect(cards[0].message).toBeNull();
@@ -139,7 +143,7 @@ describe('buildGenericCards', () => {
         makeNotification('g1', { readAt: '2026-09-09T12:05:00Z' }),
         makeNotification('g2', {}),
       ],
-      'owner',
+      'company_admin',
     );
     expect(cards[0].isUnread).toBe(false);
     expect(cards[0].latestCreatedAt).toBe('2026-09-09T12:00:00Z');
@@ -149,7 +153,7 @@ describe('buildGenericCards', () => {
   it('a technician sees their report rows as generic cards (the registry decides)', () => {
     const cards = buildGenericCards(
       [makeNotification('r1', { eventType: 'report_ready', payload: { status: 'ready' } })],
-      'technician',
+      'employee',
     );
     expect(cards).toHaveLength(1);
     expect(cards[0].kind).toBe('generic');
@@ -161,7 +165,7 @@ describe('notificationEventAction — the attendance classification (Story 15-10
     expect(
       notificationEventAction(
         makeNotification('a1', { eventType: 'attendance.holiday_added' }),
-        'technician',
+        'employee',
       ),
     ).toBe('attendance');
   });
@@ -170,14 +174,14 @@ describe('notificationEventAction — the attendance classification (Story 15-10
     expect(
       notificationEventAction(
         makeNotification('a2', { eventType: 'attendance.something_future' }),
-        'technician',
+        'employee',
       ),
     ).toBe('attendance');
   });
 
   it('non-attendance families never classify as attendance, for either role', () => {
     for (const eventType of ['report_ready', 'on_my_way', 'attendance', 'myattendance.holiday_added']) {
-      for (const role of ['owner', 'technician'] as const) {
+      for (const role of ['company_admin', 'employee'] as const) {
         expect(notificationEventAction(makeNotification('x', { eventType }), role)).not.toBe('attendance');
       }
     }
@@ -192,7 +196,7 @@ describe('notificationEventAction — the attendance classification (Story 15-10
       eventType: 'attendance.holiday_added',
       jobId: 'job-9',
     });
-    expect(notificationEventAction(n, 'technician')).toBe('attendance');
+    expect(notificationEventAction(n, 'employee')).toBe('attendance');
   });
 });
 
@@ -205,7 +209,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
           payload: { holidayName: 'Diwali', holidayDate: '2026-11-08' },
         }),
       ],
-      'technician',
+      'employee',
     );
 
     expect(cards).toHaveLength(1);
@@ -226,7 +230,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
           payload: { holidayName: 'Diwali' },
         }),
       ],
-      'technician',
+      'employee',
     );
 
     expect(cards[0].title).toBe('Holiday removed');
@@ -236,7 +240,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
   it('an unknown attendance.* event humanizes the title and carries a null message', () => {
     const cards = buildAttendanceCards(
       [makeNotification('a3', { eventType: 'attendance.schedule_changed', payload: {} })],
-      'technician',
+      'employee',
     );
 
     // The shared humanizer replaces underscores only — the DOT of the
@@ -255,7 +259,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
         makeNotification('a6', { eventType: 'attendance.holiday_removed', payload: null as unknown as Record<string, unknown> }),
         makeNotification('a7', { eventType: 'attendance.holiday_added', payload: { holidayDate: '2026-11-08' } }),
       ],
-      'technician',
+      'employee',
     );
 
     expect(cards.map((c) => c.message)).toEqual([null, null, null, formatLongDate('2026-11-08')]);
@@ -277,7 +281,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
         }),
         makeNotification('a2', { eventType: 'attendance.holiday_removed' }),
       ],
-      'owner',
+      'company_admin',
     );
 
     expect(cards).toEqual([]);
@@ -295,7 +299,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
         }),
         makeNotification('a2', { eventType: 'attendance.holiday_added', payload: { holidayName: 'Diwali' } }),
       ],
-      'technician',
+      'employee',
     );
 
     expect(cards.map((c) => c.key)).toEqual(['a1', 'a2']);
@@ -308,7 +312,7 @@ describe('buildAttendanceCards (Story 15-10)', () => {
         makeNotification('a1', { eventType: 'attendance.holiday_added' }),
         makeNotification('a2', { eventType: 'attendance.holiday_removed', readAt: '2026-09-09T12:05:00Z' }),
       ],
-      'technician',
+      'employee',
     );
 
     expect(cards.map((c) => c.key)).toEqual(['a1', 'a2']);
@@ -328,7 +332,7 @@ describe('notificationEventAction — the 19-4 reminder literals (role-agnostic)
 
   it('the three literals classify as attendance for BOTH roles — enumerated, not prefix-swept', () => {
     for (const eventType of REMINDERS) {
-      for (const role of ['owner', 'technician'] as const) {
+      for (const role of ['company_admin', 'employee'] as const) {
         expect(
           notificationEventAction(makeNotification('x', { eventType }), role),
         ).toBe('attendance');
@@ -339,7 +343,7 @@ describe('notificationEventAction — the 19-4 reminder literals (role-agnostic)
     expect(
       notificationEventAction(
         makeNotification('y', { eventType: 'attendance.reminder_something_future' }),
-        'owner',
+        'company_admin',
       ),
     ).toBe('generic');
   });
@@ -354,7 +358,7 @@ describe('buildAttendanceCards — the 19-4 reminder cards (spec D8 copy table)'
           payload: { workDate: '2026-09-30' },
         }),
       ],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Check-in reminder',
@@ -371,7 +375,7 @@ describe('buildAttendanceCards — the 19-4 reminder cards (spec D8 copy table)'
           payload: { workDate: '2026-09-30' },
         }),
       ],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Check-out reminder',
@@ -392,7 +396,7 @@ describe('buildAttendanceCards — the 19-4 reminder cards (spec D8 copy table)'
           payload: { officeName: 'HSR Office', notCheckedInCount: 4, workDate: '2026-09-30' },
         }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(cards[0]).toMatchObject({
       title: 'Not checked in',
@@ -410,7 +414,7 @@ describe('buildAttendanceCards — the 19-4 reminder cards (spec D8 copy table)'
           payload: { pendingCount: 1 },
         }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(single).toMatchObject({
       title: 'Pending leave',
@@ -425,7 +429,7 @@ describe('buildAttendanceCards — the 19-4 reminder cards (spec D8 copy table)'
           payload: { pendingCount: 3 },
         }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(many.message).toBe('3 leave requests waiting for approval.');
   });
@@ -439,10 +443,36 @@ describe('buildAttendanceCards — the 19-4 reminder cards (spec D8 copy table)'
           { eventType: 'attendance.reminder_not_checked_in', payload: { officeName: 'HSR', notCheckedInCount: 'many' } },
         ),
       ],
-      'owner',
+      'company_admin',
     );
     expect(cards).toHaveLength(2);
     expect(cards[0]).toMatchObject({ title: 'Not checked in', message: null, tap: 'dashboard' });
     expect(cards[1].message).toBeNull();
+  });
+});
+
+describe('notificationEventAction — viewer (read-only company view)', () => {
+  it('a report row is a report card (a viewer may request reports)', () => {
+    expect(
+      notificationEventAction(makeNotification('r1', { eventType: 'report_ready' }), 'viewer'),
+    ).toBe('report');
+  });
+
+  it('a job row is a job card', () => {
+    expect(notificationEventAction(makeNotification('n1', { jobId: 'job-1' }), 'viewer')).toBe('job');
+  });
+
+  it('leave events never become leave cards (a viewer cannot read leave requests)', () => {
+    for (const eventType of [...LEAVE_OWNER_EVENTS, ...LEAVE_EMPLOYEE_EVENTS]) {
+      expect(
+        notificationEventAction(makeNotification('l1', { eventType }), 'viewer'),
+      ).not.toBe('leave');
+    }
+  });
+
+  it('an employee-only attendance event is generic, not an attendance card', () => {
+    expect(
+      notificationEventAction(makeNotification('a1', { eventType: 'attendance.access_enabled' }), 'viewer'),
+    ).not.toBe('attendance');
   });
 });

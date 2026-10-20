@@ -36,6 +36,7 @@ import { useTechnicians } from './useTechnicians';
 import { AddTechnicianSheet } from './components/AddTechnicianSheet';
 import { TechnicianRow } from './components/TechnicianRow';
 import { useMyProfile } from '../profile';
+import { useCanWrite } from '../auth';
 import type { NewTechnicianInput } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Technicians'>;
@@ -43,12 +44,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Technicians'>;
 export default function TechniciansScreen({ navigation, route }: Props) {
   const { technicians, hasTechnicians, add } = useTechnicians();
   const { isLoading, error: loadError, refresh } = useMyProfile();
+  // The roster is readable by a viewer; inviting is not. The Add button and
+  // the Add sheet are not rendered for them (no auto-open either).
+  const canWrite = useCanWrite();
   // Home's "Add technician" quick action pushes us with `autoOpenAdd` — read
   // once as the initial state, so the sheet never re-opens on later visits
   // (stack params are per-push, but a re-render must not reset a user-closed
   // sheet either).
   const [sheetVisible, setSheetVisible] = useState(
-    route.params?.autoOpenAdd ?? false,
+    canWrite && (route.params?.autoOpenAdd ?? false),
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   // The latch is a REF, not the spinner state — a same-tick double pull
@@ -97,13 +101,15 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           <Text style={styles.title}>Technicians</Text>
         </View>
 
-        <Button
-          variant="primary"
-          size="md"
-          onPress={() => setSheetVisible(true)}
-          leadingIcon={<UserPlus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
-          Add
-        </Button>
+        {canWrite ? (
+          <Button
+            variant="primary"
+            size="md"
+            onPress={() => setSheetVisible(true)}
+            leadingIcon={<UserPlus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
+            Add
+          </Button>
+        ) : null}
       </View>
 
       {isLoading && !hasTechnicians ? (
@@ -149,16 +155,22 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           <EmptyState
             icon={<HardHat size={36} color={colors.primary} strokeWidth={1.5} />}
             title="No technicians yet"
-            description="Add your team so you can assign jobs to them. They'll get an SMS invite to download the Fenzit app."
+            description={
+              canWrite
+                ? "Add your team so you can assign jobs to them. They'll get an SMS invite to download the Fenzit app."
+                : 'Your company admin has not added anyone yet.'
+            }
           />
         </ScrollView>
       )}
 
-      <AddTechnicianSheet
-        visible={sheetVisible}
-        onClose={() => setSheetVisible(false)}
-        onSubmit={handleSubmit}
-      />
+      {canWrite ? (
+        <AddTechnicianSheet
+          visible={sheetVisible}
+          onClose={() => setSheetVisible(false)}
+          onSubmit={handleSubmit}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

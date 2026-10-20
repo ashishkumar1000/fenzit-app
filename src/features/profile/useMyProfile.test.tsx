@@ -61,7 +61,7 @@ const OWNER_PROFILE = {
     stateCode: 'KA',
     upiVpa: null,
   },
-  role: 'owner',
+  role: 'company_admin',
   technicians: ROSTER,
   technicianCount: ROSTER.length,
   customers: { data: [], nextCursor: null, hasMore: false },
@@ -77,7 +77,7 @@ const TECHNICIAN_PROFILE = {
   phoneNumber: '9876500000',
   status: 'active',
   tenant: OWNER_PROFILE.tenant,
-  role: 'technician',
+  role: 'employee',
   skills: ['Plumbing'],
   skillIds: ['skill-1'],
   customers: { data: [], nextCursor: null, hasMore: false },
@@ -115,7 +115,7 @@ it('a fresh owner profile load hydrates the technicians store from the roster', 
     renderer = create(<Probe />);
   });
 
-  expect(profileState.profile?.role).toBe('owner');
+  expect(profileState.profile?.role).toBe('company_admin');
   expect(techList.map(t => t.id)).toEqual(['user-1', 'user-2']);
   expect(techList[1]).toMatchObject({ name: 'Meena Iyer', status: 'offline' });
 });
@@ -127,7 +127,7 @@ it('a technician-role profile does not touch the technicians store', async () =>
     renderer = create(<Probe />);
   });
 
-  expect(profileState.profile?.role).toBe('technician');
+  expect(profileState.profile?.role).toBe('employee');
   expect(techList).toEqual([]);
 });
 

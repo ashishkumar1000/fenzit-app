@@ -107,16 +107,16 @@ export type TappableNotificationListItem = Exclude<
  * newest-first order (the store's sort — untouched, same contract as
  * `groupNotificationsByJob`).
  *
- * `role` — Story 14-3: reports are an owner surface (AD-19/UX-DR7), so a
- * technician's report rows build NO report cards; the event-type registry
+ * `role` — Story 14-3: reports are a company-wide surface (AD-19/UX-DR7), so an
+ * employee's report rows build NO report cards; the event-type registry
  * renders them generic instead. The parameter is REQUIRED (no silent
- * 'owner' default): a caller that omits the role is a bug, not a fallback.
+ * default role): a caller that omits the role is a bug, not a fallback.
  */
 export function buildReportCards(
   items: ApiNotification[],
   role: SessionRole,
 ): ReportNotificationCardData[] {
-  return role === 'technician' ? [] : items.filter(isReportNotification).map(buildReportCard);
+  return role === 'employee' ? [] : items.filter(isReportNotification).map(buildReportCard);
 }
 
 function buildReportCard(n: ApiNotification): ReportNotificationCardData {

@@ -86,6 +86,14 @@ export function EditNameSheet({ visible, currentName, onClose }: Props) {
   const canSubmit =
     trimmed.length > 0 && trimmed !== (currentName ?? '') && !submitting;
 
+  // Why Save is greyed out. Shown under the button so a disabled Save never
+  // looks broken.
+  const missingHint = (() => {
+    if (submitting || canSubmit) return null;
+    if (trimmed.length === 0) return 'Enter your name to save';
+    return 'Change your name to save';
+  })();
+
   const handleClose = () => {
     // Don't let a backdrop tap, the X, or the Android back button dismiss the
     // sheet mid-request: the save is already in flight, and closing now would
@@ -149,6 +157,9 @@ export function EditNameSheet({ visible, currentName, onClose }: Props) {
       />
 
       {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
+      {!submitError && missingHint ? (
+        <Text style={styles.missingHint} accessibilityLiveRegion="polite">{missingHint}</Text>
+      ) : null}
 
       <Button
         variant="primary"
@@ -168,5 +179,11 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.danger,
     marginTop: -spacing.s2,
+  },
+  missingHint: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    marginTop: -spacing.s2,
+    textAlign: 'center',
   },
 });

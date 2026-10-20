@@ -42,6 +42,7 @@ import {
   IconButton,
   InlineError,
 } from '../../components/ui';
+import { useCanWrite } from '../auth';
 import { colors, spacing, typography } from '../../theme';
 import { customerService } from '../../services';
 import type { ApiError, CustomerDetail, JobHistoryItem } from '../../services';
@@ -66,6 +67,7 @@ function dateLine(iso: string): string {
 
 export default function CustomerDetailScreen() {
   const navigation = useNavigation<Navigation>();
+  const canWrite = useCanWrite();
   // Route-params guard: a deep link that lands here without a customerId has
   // nothing to show — pop back (or to the tabs) instead of crashing.
   const customerId = useRoute<RouteProp<RootStackParamList, 'CustomerDetail'>>()
@@ -294,7 +296,7 @@ export default function CustomerDetailScreen() {
             load-and-seeds by id itself, so it is safe to offer before the
             detail has loaded — but not on the not-found view, where a tap
             is a guaranteed second 404. */}
-        {!notFound ? (
+        {!notFound && canWrite ? (
           <IconButton
             variant="ghost"
             size="md"

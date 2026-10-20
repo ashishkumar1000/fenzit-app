@@ -163,6 +163,7 @@ import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { Pressable, Text, ActivityIndicator } from 'react-native';
 import NewJobScreen from './NewJobScreen';
+import { jobService } from '../../services';
 
 const SKILLS = [
   { id: 'skill-1', name: 'Plumbing' },
@@ -750,4 +751,233 @@ it('shows the empty-book copy when the owner has no customers yet', () => {
   expect(hasText(root, 'No customers yet')).toBe(true);
   // The Add-new link stays up as the way forward from here.
   expect(hasText(root, 'Customer not in list? Add new')).toBe(true);
+});
+
+// --- Why Create job is off --------------------------------------------------
+
+const JOB_HINT_COPY = [
+  'Pick a skill to continue',
+  'Pick a customer to continue',
+  'Pick a technician to continue',
+  'Pick a time that is still to come',
+];
+
+/** The one-line reason under Create job, or null when none is shown. */
+function jobHint(root: ReactTestRenderer.ReactTestInstance): string | null {
+  const hit = root
+    .findAllByType(Text)
+    .map(t => t.props.children)
+    .find(c => typeof c === 'string' && JOB_HINT_COPY.includes(c));
+  return typeof hit === 'string' ? hit : null;
+}
+
+/** The Create job button's `disabled` prop (the Button component's own node). */
+function createJobDisabled(root: ReactTestRenderer.ReactTestInstance): boolean {
+  const node = root.findAll(
+    n => n.props.children === 'Create job' && typeof n.props.disabled === 'boolean',
+  )[0];
+  if (!node) throw new Error('Create job button not found');
+  return node.props.disabled;
+}
+
+/** Presses a customer or technician tile by its visible name. */
+function pressByName(root: ReactTestRenderer.ReactTestInstance, name: string) {
+  const tile = root
+    .findAllByProps({ accessibilityLabel: name })
+    .find(t => typeof t.props.onPress === 'function');
+  if (!tile) throw new Error(`Tile "${name}" not found`);
+  act(() => {
+    tile.props.onPress();
+  });
+}
+
+describe('why Create job is off', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('asks for a skill first, on a blank form', () => {
+    const { root } = renderScreen();
+    expect(jobHint(root)).toBe('Pick a skill to continue');
+    expect(createJobDisabled(root)).toBe(true);
+  });
+
+  it('then asks for a customer, once a skill is picked', () => {
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    expect(jobHint(root)).toBe('Pick a customer to continue');
+  });
+
+  it('then asks for a technician, once a customer is picked', () => {
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    expect(jobHint(root)).toBe('Pick a technician to continue');
+  });
+
+  it('shows no hint once skill, customer and technician are set and the slot is ahead', () => {
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+    expect(jobHint(root)).toBeNull();
+    expect(createJobDisabled(root)).toBe(false);
+  });
+
+  it('asks for a time still to come when the slot has passed', () => {
+    // Clock at 10:10 — the default slot is 10:30. Then the clock moves to
+    // 11:00, so the slot is now in the past and nothing else is missing.
+    jest.useFakeTimers({ now: new Date(2026, 9, 20, 10, 10) });
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+    expect(jobHint(root)).toBeNull();
+
+    jest.setSystemTime(new Date(2026, 9, 20, 11, 0));
+    // Any state change re-renders and re-checks the slot against the clock.
+    pressByName(root, 'Arun V');
+    expect(jobHint(root)).toBe('Pick a time that is still to come');
+    expect(createJobDisabled(root)).toBe(true);
+  });
+});
+
+// --- A stale server error clears on the next edit ----------------------------
+
+describe('a server error does not outlive the edit that fixes it', () => {
+  let createSpy: jest.SpyInstance | null = null;
+
+  afterEach(() => {
+    createSpy?.mockRestore();
+    createSpy = null;
+  });
+
+  /** Presses the Create job button, awaiting the async submit. */
+  async function pressCreateJob(root: ReactTestRenderer.ReactTestInstance) {
+    const node = root.findAll(
+      n => n.props.children === 'Create job' && typeof n.props.disabled === 'boolean',
+    )[0];
+    if (!node) throw new Error('Create job button not found');
+    await act(async () => {
+      await node.props.onPress();
+    });
+  }
+
+  it('clears the create error when the notes change, so the form reads as it is', async () => {
+    createSpy = jest
+      .spyOn(jobService, 'create')
+      .mockRejectedValueOnce(new Error('Could not create the job'));
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+
+    await pressCreateJob(root);
+    expect(hasText(root, 'Could not create the job')).toBe(true);
+
+    const notes = root.findAll(
+      n => n.props.accessibilityLabel === 'Notes for technician' &&
+        typeof n.props.onChangeText === 'function',
+    )[0];
+    act(() => {
+      notes.props.onChangeText('Ring the bell');
+    });
+    expect(hasText(root, 'Could not create the job')).toBe(false);
+  });
+
+  it('clears the create error when the skill changes', async () => {
+    createSpy = jest
+      .spyOn(jobService, 'create')
+      .mockRejectedValueOnce(new Error('Could not create the job'));
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+
+    await pressCreateJob(root);
+    expect(hasText(root, 'Could not create the job')).toBe(true);
+
+    pressByName(root, 'Electrical');
+    expect(hasText(root, 'Could not create the job')).toBe(false);
+  });
+
+  it('drops a create error that arrives after the owner changed the form', async () => {
+    let rejectCreate!: (err: Error) => void;
+    createSpy = jest.spyOn(jobService, 'create').mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (rejectCreate = reject)),
+    );
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+
+    const pending = pressCreateJob(root);
+    // The owner edits the notes while the create is still running.
+    const notes = root.findAll(
+      n => n.props.accessibilityLabel === 'Notes for technician' &&
+        typeof n.props.onChangeText === 'function',
+    )[0];
+    act(() => {
+      notes.props.onChangeText('Ring the bell');
+    });
+    await act(async () => {
+      rejectCreate(new Error('Could not create the job'));
+    });
+    await pending;
+
+    // The error describes the old form, so it must not show.
+    expect(hasText(root, 'Could not create the job')).toBe(false);
+  });
+});
+
+describe('the reason comes back once a stale error clears', () => {
+  let createSpy: jest.SpyInstance | null = null;
+
+  afterEach(() => {
+    createSpy?.mockRestore();
+    createSpy = null;
+  });
+
+  it('shows the technician reason when a skill change drops the technician', async () => {
+    createSpy = jest
+      .spyOn(jobService, 'create')
+      .mockRejectedValueOnce(new Error('Could not create the job'));
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+
+    const node = root.findAll(
+      n => n.props.children === 'Create job' && typeof n.props.disabled === 'boolean',
+    )[0];
+    await act(async () => {
+      await node.props.onPress();
+    });
+    expect(hasText(root, 'Could not create the job')).toBe(true);
+
+    // Ravi only has Plumbing, so picking Electrical clears him and the form is incomplete.
+    pressByName(root, 'Electrical');
+    expect(hasText(root, 'Could not create the job')).toBe(false);
+    expect(jobHint(root)).toBe('Pick a technician to continue');
+  });
+});
+
+describe('a slot that starts exactly now', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('counts as passed, not still to come', () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 20, 10, 10) });
+    const { root } = renderScreen();
+    pickFirstSkill(root);
+    pressByName(root, 'Priya Sharma');
+    pressByName(root, 'Ravi Kumar');
+    expect(jobHint(root)).toBeNull();
+
+    // The default slot is 10:30. At exactly 10:30 it is no longer "to come".
+    jest.setSystemTime(new Date(2026, 9, 20, 10, 30));
+    pressByName(root, 'Arun V');
+    expect(jobHint(root)).toBe('Pick a time that is still to come');
+  });
 });

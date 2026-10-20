@@ -15,7 +15,9 @@ import { OtpScreen } from './screens/OtpScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { clearSessionExpired, useSessionExpired } from './useAuth';
 import { authApi, setAuthToken } from '../../services';
-import type { ApiError } from '../../services';
+import type { ApiError, VerifiedUser } from '../../services';
+import { isUserRole } from './roles';
+import { NO_COMPANY_MESSAGE } from './noAccessCopy';
 
 type Props = {
   onComplete: (result: AuthResult) => void;
@@ -47,13 +49,45 @@ function sendOtpErrorMessage(err: ApiError): string {
   return err.message;
 }
 
+/**
+ * Decides where a verified login goes next. Returns `'setup'` for a brand-new
+ * person (no company AND no role), otherwise the session to store:
+ *
+ *   - Fenzit staff           -> no company screens, a plain message
+ *   - company role + company -> the matching side of the app
+ *   - anything else          -> a plain "not part of a company" message (a
+ *     removed person, or half-filled data that must never open company data)
+ */
+export function routeAfterVerify(user: VerifiedUser):
+  | 'setup'
+  | Pick<AuthResult, 'role' | 'tenantId' | 'platformAdmin'> {
+  if (user.platformAdmin || user.role === 'platform_admin') {
+    return { role: null, tenantId: null, platformAdmin: true };
+  }
+  if (user.tenantId === null && user.role === null) {
+    // A removed person is not new: they get the plain message, not setup.
+    if (user.formerMember) {
+      return { role: null, tenantId: null, platformAdmin: false };
+    }
+    return 'setup';
+  }
+  if (user.tenantId !== null && isUserRole(user.role)) {
+    return { role: user.role, tenantId: user.tenantId, platformAdmin: false };
+  }
+  return { role: null, tenantId: null, platformAdmin: false };
+}
+
 /** Turns a failed `setupCompany` call into a copy the profile screen can show directly. */
 function setupCompanyErrorMessage(err: ApiError): string {
   if (err.code === 'VALIDATION_ERROR') {
     return 'Check your GSTIN and state — one of them looks invalid.';
   }
   if (err.status === 403) {
-    return "This account can't set up a company. Contact your business owner.";
+    return "This account can't set up a company. Contact your company admin.";
+  }
+  // 409: the person already belongs to (or is invited to) a company.
+  if (err.status === 409) {
+    return NO_COMPANY_MESSAGE;
   }
   return err.message;
 }
@@ -149,32 +183,18 @@ export default function AuthFlow({ onComplete }: Props) {
       const res = await authApi.verifyOtp({ otpSessionId, otpCode: code });
       setAuthToken(res.token);
 
-      const { tenantId } = res.user;
-      if (tenantId !== null) {
-        // Already has a tenant (returning owner, or a technician assigned
-        // one at invite time) — nothing left to set up.
-        onComplete({
-          phone: `${DIAL_CODE}${phone}`,
-          profile,
-          role: res.user.role,
-          name: res.user.name,
-          tenantId,
-        });
-      } else if (res.user.role === 'technician') {
-        // Corrupt-data corner: a technician without a tenant can't set up a
-        // company (the backend 403s step 3), so never route them there —
-        // into the app instead, where the tenant-less token surfaces the
-        // real problem.
-        onComplete({
-          phone: `${DIAL_CODE}${phone}`,
-          profile,
-          role: res.user.role,
-          name: res.user.name,
-          tenantId: '',
-        });
-      } else {
-        // New owner, first time through — company setup (step 3) is next.
+      const decision = routeAfterVerify(res.user);
+      if (decision === 'setup') {
+        // Brand-new person with no company and no role — company setup
+        // (step 3) is next.
         setStep('profile');
+      } else {
+        onComplete({
+          phone: `${DIAL_CODE}${phone}`,
+          profile,
+          ...decision,
+          name: res.user.name,
+        });
       }
     } catch (err) {
       const apiError = err as ApiError;
@@ -236,14 +256,15 @@ export default function AuthFlow({ onComplete }: Props) {
       // tenantId populated. The old one would keep failing tenant-scoped
       // endpoints. See the doc's "Token behavior" section.
       setAuthToken(res.token);
-      // Only owners ever reach step 3 (company setup is 403 for
-      // technicians) — role is hardcoded here rather than threaded through
-      // from verifyOtp's response.
+      // Only a person with no company reaches step 3, and setting one up
+      // makes them its admin — role is fixed here rather than threaded
+      // through from verifyOtp's response.
       onComplete({
         phone: `${DIAL_CODE}${phone}`,
         profile,
-        role: 'owner',
-        // The name the owner just entered — the backend saved it on their
+        role: 'company_admin',
+        platformAdmin: false,
+        // The name the admin just entered — the backend saved it on their
         // users row, and GET /users/me returns it from now on.
         name: profile.ownerName.trim(),
         tenantId: res.tenant.id,

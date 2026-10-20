@@ -25,6 +25,15 @@ jest.mock('../../../services/resources/attendanceCorrections', () => ({
   fetchCorrections: jest.fn(),
 }));
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../../auth/useRole', () => ({
+  ...jest.requireActual('../../auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
@@ -446,5 +455,46 @@ describe('AttendanceEmployeeMonthScreen — the params pair normalization (D6)',
     await flush();
     expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
+  });
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
+});
+
+describe('AttendanceEmployeeMonthScreen — a viewer (read-only)', () => {
+  it('opens the day sheet read-only with no correction write wired in', async () => {
+    mockCanWrite = false;
+    fetchOwner.mockResolvedValue(envelope('e1', [row('2026-09-14')]));
+    const { renderer } = renderHost({
+      employeeId: 'e1',
+      employeeName: 'Asha',
+      yearMonth: '2026-09',
+    });
+    await flush();
+    act(() => {
+      findCell(renderer, '2026-09-14').props.onPress();
+    });
+
+    const sheet = sheetNode(renderer);
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.readOnly).toBe(true);
+    expect(sheet.props.onCorrect).toBeUndefined();
+  });
+
+  it('the company admin still gets the correction write (control)', async () => {
+    fetchOwner.mockResolvedValue(envelope('e1', [row('2026-09-14')]));
+    const { renderer } = renderHost({
+      employeeId: 'e1',
+      employeeName: 'Asha',
+      yearMonth: '2026-09',
+    });
+    await flush();
+    act(() => {
+      findCell(renderer, '2026-09-14').props.onPress();
+    });
+
+    expect(sheetNode(renderer).props.readOnly).toBe(false);
+    expect(typeof sheetNode(renderer).props.onCorrect).toBe('function');
   });
 });

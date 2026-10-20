@@ -25,6 +25,7 @@ import { attendanceLeaveService } from '../../../services';
 import type { ApiError } from '../../../services/api/apiError';
 import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import type { RootStackParamList } from '../../../navigation/types';
+import { VIEW_ONLY_REASON, useCanWrite } from '../../auth';
 import ScreenHeader from '../offices/ScreenHeader';
 import { LeaveRequestRow as LeaveRequestRowView } from './LeaveRequestRow';
 import { LeaveDetailSheet, type LeaveDetailActionState } from './LeaveDetailSheet';
@@ -38,7 +39,32 @@ const SEGMENTS = [
   { value: 'all' as const, label: 'All' },
 ];
 
-export default function OwnerLeaveScreen({ navigation, route }: Props) {
+/**
+ * Leave review is for company admins. A viewer cannot read leave requests
+ * (they can carry medical reasons), so they get one plain explanation
+ * instead of a list that would only fail. The wrapper keeps the queue hook
+ * (and its fetches) from ever running for a viewer.
+ */
+export default function OwnerLeaveScreen(props: Props) {
+  const canWrite = useCanWrite();
+  if (!canWrite) {
+    return (
+      <SafeAreaView style={styles.root} edges={['top']}>
+        <ScreenHeader title="Leave" onBack={() => props.navigation.goBack()} />
+        <View style={styles.emptyWrap}>
+          <EmptyState
+            icon={<CalendarOff size={24} color={colors.primary} strokeWidth={1.5} />}
+            title={VIEW_ONLY_REASON}
+            description="Leave requests can only be seen and decided by your company admin."
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+  return <OwnerLeaveContent {...props} />;
+}
+
+function OwnerLeaveContent({ navigation, route }: Props) {
   const queue = useOwnerLeaveQueue(
     navigation,
     route.params?.tab === 'all' ? 'all' : 'pending',

@@ -50,19 +50,19 @@ describe('the enumerated classifiers (wire-truth F6)', () => {
     expect(isLeaveOwnerEvent('leave.pending_reminder')).toBe(true);
     expect(isLeaveEmployeeEvent('leave.pending_reminder')).toBe(false);
     const n = notification({ eventType: 'leave.pending_reminder', payload: { pendingCount: 2 } });
-    expect(notificationEventAction(n, 'owner')).toBe('leave');
-    expect(notificationEventAction(n, 'technician')).toBe('generic');
+    expect(notificationEventAction(n, 'company_admin')).toBe('leave');
+    expect(notificationEventAction(n, 'employee')).toBe('generic');
   });
 
   it('the registry routes the 8 events to the leave card per role', () => {
     expect(
-      notificationEventAction(notification({ eventType: 'leave.applied' }), 'owner'),
+      notificationEventAction(notification({ eventType: 'leave.applied' }), 'company_admin'),
     ).toBe('leave');
     expect(
-      notificationEventAction(notification({ eventType: 'leave.applied' }), 'technician'),
+      notificationEventAction(notification({ eventType: 'leave.applied' }), 'employee'),
     ).not.toBe('leave'); // a technician never renders owner cards
     expect(
-      notificationEventAction(notification({ eventType: 'leave.approved' }), 'technician'),
+      notificationEventAction(notification({ eventType: 'leave.approved' }), 'employee'),
     ).toBe('leave');
   });
 });
@@ -71,7 +71,7 @@ describe('owner cards (spec D5 table)', () => {
   it('leave.applied → "{name} applied for leave" / "{dates} · {n} working days", CalendarOff, Pending', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.applied', payload: { employeeName: 'Arya', ...SPAN, workingDays: 3 } })],
-      'owner',
+      'company_admin',
     );
     expect(card).toMatchObject({
       title: 'Arya applied for leave',
@@ -89,7 +89,7 @@ describe('owner cards (spec D5 table)', () => {
           payload: { employeeName: 'Arya', ...SPAN, cancelledDates: ['2026-10-09'] },
         }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(card).toMatchObject({
       title: 'Arya cancelled leave',
@@ -102,7 +102,7 @@ describe('owner cards (spec D5 table)', () => {
   it('leave.employee_cancelled without cancelledDates degrades to the span', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.employee_cancelled', payload: { employeeName: 'Arya', ...SPAN } })],
-      'owner',
+      'company_admin',
     );
     expect(card.message).toBe('5–9 Oct 2026');
   });
@@ -115,7 +115,7 @@ describe('owner cards (spec D5 table)', () => {
           payload: { employeeName: 'Suresh', leaveDate: '2026-10-05' },
         }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(card).toMatchObject({
       title: 'Suresh checked in on leave',
@@ -130,7 +130,7 @@ describe('employee cards (spec D5 table)', () => {
   it('leave.applied_on_behalf → "Leave applied for you" · span · count, CalendarOff, guarded tap', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.applied_on_behalf', payload: { ...SPAN, workingDays: 3 } })],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Leave applied for you',
@@ -143,7 +143,7 @@ describe('employee cards (spec D5 table)', () => {
   it('leave.approved → "Leave approved", CheckCircle2', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.approved', payload: { ...SPAN, workingDays: 3 } })],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Leave approved',
@@ -155,7 +155,7 @@ describe('employee cards (spec D5 table)', () => {
   it('leave.rejected WITH a reason → `{dates} — "{reason}"`, XCircle', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.rejected', payload: { ...SPAN, reason: 'Harvest week' } })],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Leave rejected',
@@ -172,7 +172,7 @@ describe('employee cards (spec D5 table)', () => {
         // Key absent — same copy, defensive.
         notification({ id: 'n2', eventType: 'leave.rejected', payload: { ...SPAN } }),
       ],
-      'technician',
+      'employee',
     );
     for (const card of cards) {
       expect(card.message).toBe('5–9 Oct 2026');
@@ -187,7 +187,7 @@ describe('employee cards (spec D5 table)', () => {
           payload: { ...SPAN, revokedDates: ['2026-10-08', '2026-10-09'], reason: 'Coverage gap' },
         }),
       ],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Leave revoked',
@@ -204,7 +204,7 @@ describe('employee cards (spec D5 table)', () => {
           payload: { ...SPAN, revokedDates: ['2026-10-09'], reason: null },
         }),
       ],
-      'technician',
+      'employee',
     );
     expect(card.message).toBe('9 Oct 2026 no longer counts as leave');
   });
@@ -212,7 +212,7 @@ describe('employee cards (spec D5 table)', () => {
   it('leave.cancelled_by_disable with cancelledDates → the exact dates, not the span', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.cancelled_by_disable', payload: { ...SPAN, cancelledDates: ['2026-10-05', '2026-10-06'] } })],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Leave cancelled',
@@ -225,7 +225,7 @@ describe('employee cards (spec D5 table)', () => {
   it('leave.cancelled_by_disable → "Leave cancelled" / "{dates}", CalendarX, guarded (no-op when none)', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.cancelled_by_disable', payload: { ...SPAN } })],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({
       title: 'Leave cancelled',
@@ -245,7 +245,7 @@ describe('payload truths shared across events', () => {
           payload: { employeeName: 'Arya', startDate: '2026-10-05', endDate: '2026-10-05', workingDays: 1 },
         }),
       ],
-      'owner',
+      'company_admin',
     );
     expect(card.message).toBe('5 Oct 2026 · 1 working day');
   });
@@ -256,7 +256,7 @@ describe('payload truths shared across events', () => {
         notification({ eventType: 'leave.approved', payload: { ...SPAN, workingDays: 1 }, readAt: '2026-09-29T11:00:00Z' }),
         notification({ id: 'n2', eventType: 'leave.approved', payload: { ...SPAN, workingDays: 1 } }),
       ],
-      'technician',
+      'employee',
     );
     expect(read.unreadIds).toEqual([]);
     expect(unread.unreadIds).toEqual(['n2']);
@@ -265,7 +265,7 @@ describe('payload truths shared across events', () => {
   it('a drifted payload on a KNOWN event degrades to the minimal honest card', () => {
     const [card] = buildLeaveCards(
       [notification({ eventType: 'leave.approved', payload: { oops: true } })],
-      'technician',
+      'employee',
     );
     expect(card).toMatchObject({ title: 'Leave approved', message: null });
   });
@@ -273,8 +273,23 @@ describe('payload truths shared across events', () => {
   it('unknown leave-shaped events never build leave cards (the generic card owns them)', () => {
     const cards = buildLeaveCards(
       [notification({ eventType: 'leave.something_new', payload: {} })],
-      'owner',
+      'company_admin',
     );
     expect(cards).toEqual([]);
+  });
+});
+
+describe('buildLeaveCards — viewer', () => {
+  it('builds no leave cards for any leave event (a viewer cannot read leave requests)', () => {
+    const rows = [...LEAVE_OWNER_EVENTS, ...LEAVE_EMPLOYEE_EVENTS].map(eventType =>
+      notification({ eventType }),
+    );
+    expect(buildLeaveCards(rows, 'viewer')).toEqual([]);
+  });
+
+  it('an empty list builds an empty list for every role', () => {
+    for (const role of ['company_admin', 'employee', 'viewer'] as const) {
+      expect(buildLeaveCards([], role)).toEqual([]);
+    }
   });
 });

@@ -43,6 +43,15 @@ jest.mock('../features/notifications', () => ({
   }),
 }));
 
+// The real session is empty in this test, so the role hooks are pinned:
+// a company admin by default, a viewer where a test flips `mockCanWrite`.
+let mockCanWrite = true;
+jest.mock('../features/auth/useRole', () => ({
+  ...jest.requireActual('../features/auth/useRole'),
+  useCanWrite: () => mockCanWrite,
+  useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { Text } from 'react-native';
@@ -55,7 +64,7 @@ function ownerProfile(attendance?: Record<string, unknown>): unknown {
   return {
     id: 'owner-1',
     name: 'Ashish',
-    role: 'owner',
+    role: 'company_admin',
     countryCode: '+91',
     phoneNumber: '9000000000',
     status: 'active',
@@ -300,4 +309,8 @@ describe('HomeScreen — the bell on the first-run Home', () => {
     });
     expect(mockNavigate).toHaveBeenCalledWith('Notifications');
   });
+});
+
+beforeEach(() => {
+  mockCanWrite = true;
 });

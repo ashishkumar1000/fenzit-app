@@ -38,7 +38,7 @@ function makeCard(
           createdAt: CREATED_AT,
         } as ApiNotification,
       ],
-      'owner',
+      'company_admin',
     )[0],
     ...overrides,
   };

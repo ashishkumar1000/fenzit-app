@@ -49,6 +49,7 @@ import type { ApiError, ApiJob, JobDetail } from '../../services';
 import type { RootStackParamList } from '../../navigation/types';
 import { upsertJob } from '../jobs';
 import { loadMyProfile, useMyProfile } from '../profile';
+import { useCanWrite } from '../auth';
 import { flattenApiMessage } from './editJobModel';
 import { PersonRow } from './components/PersonRow';
 import { ActivityTimeline } from './components/ActivityTimeline';
@@ -84,6 +85,9 @@ export default function JobDetailScreen() {
   // — the only source of server-issued ids safe to send on a reassign.
   const { profile } = useMyProfile();
   const [isEditOpen, setIsEditOpen] = useState(false);
+  // A viewer reads the job but cannot edit or cancel it — the actions slot
+  // and the edit sheet are not rendered for them.
+  const canWrite = useCanWrite();
   // Cancel job asks through the shared ConfirmDialog instead of a system
   // Alert (the 20-1 modal ask); `submitting` mirrors the cancel PATCH.
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -355,11 +359,13 @@ export default function JobDetailScreen() {
           ) : null}
 
           {/* 2. Actions slot — edit + cancel for scheduled jobs only. */}
-          <JobActionsSection
-            jobStatus={detail.status}
-            onEdit={() => setIsEditOpen(true)}
-            onCancel={confirmCancel}
-          />
+          {canWrite ? (
+            <JobActionsSection
+              jobStatus={detail.status}
+              onEdit={() => setIsEditOpen(true)}
+              onCancel={confirmCancel}
+            />
+          ) : null}
 
           {/* 3. Customer */}
           <SectionCard title="Customer">
@@ -551,7 +557,7 @@ export default function JobDetailScreen() {
             the native sheet on screen, frozen (seen live 2026-09-15 — the
             sheet stayed on "Saving…" after a successful save). Kept mounted
             while the detail exists, `visible` alone drives present/dismiss. */}
-        {detail ? (
+        {detail && canWrite ? (
           <EditJobSheet
             visible={isEditOpen}
             job={detail}

@@ -158,6 +158,7 @@ export type {
   VerifyOtpResponse,
   VerifiedUser,
   UserRole,
+  LoginRole,
   SetupCompanyRequest,
   SetupCompanyResponse,
   Tenant,

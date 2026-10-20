@@ -16,7 +16,7 @@
  * `revokedDates[]` (not the span), and every field degrades to null —
  * never a crash, never `undefined` on screen.
  */
-import type { ApiNotification } from '../../services';
+import type { ApiNotification, UserRole } from '../../services';
 import {
   formatLeaveDate,
   formatLeaveRange,
@@ -257,10 +257,16 @@ function copyFor(eventType: string, payload: Record<string, unknown>): LeaveEven
  */
 export function buildLeaveCards(
   items: ApiNotification[],
-  role: 'owner' | 'technician',
+  role: UserRole,
 ): LeaveNotificationCardData[] {
+  // Admin sees the review events, an employee the decision events, and a
+  // viewer neither (a viewer cannot read leave requests).
   const matches =
-    role === 'owner' ? isLeaveOwnerEvent : isLeaveEmployeeEvent;
+    role === 'company_admin'
+      ? isLeaveOwnerEvent
+      : role === 'employee'
+        ? isLeaveEmployeeEvent
+        : () => false;
   return items
     .filter(n => matches(n.eventType))
     .map(n => {
@@ -273,7 +279,7 @@ export function buildLeaveCards(
         title,
         message: copy?.message ?? null,
         icon: copy?.icon ?? 'CalendarX',
-        tap: copy?.tap ?? (role === 'owner' ? 'owner-all' : 'attendance-guarded'),
+        tap: copy?.tap ?? (role === 'company_admin' ? 'owner-all' : 'attendance-guarded'),
         latestCreatedAt: n.createdAt,
         isUnread: n.readAt === null,
         unreadIds: n.readAt === null ? [n.id] : [],

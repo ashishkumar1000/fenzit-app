@@ -66,6 +66,7 @@ import type {
   TechnicianTabParamList,
 } from '../../navigation/types';
 import { useAuth } from '../auth/useAuth';
+import { isCompanyWideRole } from '../auth/roles';
 import {
   loadMoreNotifications,
   loadNotifications,
@@ -142,9 +143,9 @@ function LeaveCardIcon({ name }: { name: LeaveCardIconName }) {
 
 export default function NotificationsScreen({ navigation }: Props) {
   const { session } = useAuth();
-  // The screen is only reachable with a session; `owner` is also the
-  // bootstrap fallback so the original behaviour is the default.
-  const role: SessionRole = session?.role ?? 'owner';
+  // The screen is only reachable with a company session; `company_admin` is
+  // also the bootstrap fallback so the original behaviour is the default.
+  const role: SessionRole = session?.role ?? 'company_admin';
   const {
     items,
     isLoading,
@@ -198,12 +199,12 @@ export default function NotificationsScreen({ navigation }: Props) {
       // guard. It loads its own list on focus, so no reports-store arming
       // is needed here.
       if (card.kind === 'report') {
-        if (role === 'owner') navigation.navigate('Reports');
+        if (isCompanyWideRole(role)) navigation.navigate('Reports');
         return;
       }
       // Story 14-3: the deep link routes per role — job cards open the
       // viewer for the signed-in role's tree.
-      if (role === 'technician') {
+      if (role === 'employee') {
         navigation.navigate('TechJobDetail', { jobId: card.jobId });
         return;
       }
@@ -469,7 +470,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                   icon={<Bell size={36} color={colors.primary} strokeWidth={1.5} />}
                   title="No notifications yet"
                   description={
-                    role === 'technician'
+                    role === 'employee'
                       ? 'Updates for you will show up here.'
                       : 'Updates from your technicians — job arrivals, progress, completions and report updates — will show up here.'
                   }

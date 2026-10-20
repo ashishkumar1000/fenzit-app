@@ -245,7 +245,11 @@ export type RootStackParamList = {
    *  navigate-back-with-params (the new-job picker pattern) when the owner
    *  picks an employee for the override flow. Read once on focus + cleared
    *  so a stale pick can't re-fire. */
-  AttendanceWeeklyOff: { selectedTechnicianId?: string | null } | undefined;
+  /** `returnToSetup`: opened from the setup wizard, so a confirmed save goes
+   *  back to the wizard. Absent when the screen is opened directly. */
+  AttendanceWeeklyOff:
+    | { selectedTechnicianId?: string | null; returnToSetup?: boolean }
+    | undefined;
   /** Story 15-6 — holidays list + add/edit sheet. */
   AttendanceHolidays: undefined;
   /**

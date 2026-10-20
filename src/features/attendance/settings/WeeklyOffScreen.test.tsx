@@ -129,7 +129,10 @@ type Screen = {
   readonly root: ReactTestRenderer.ReactTestInstance;
 };
 
-function renderScreen(canGoBack = true): Screen {
+function renderScreen(
+  canGoBack = true,
+  params: Record<string, unknown> = {},
+): Screen {
   const navigation = {
     navigate: jest.fn(),
     goBack: jest.fn(),
@@ -141,7 +144,7 @@ function renderScreen(canGoBack = true): Screen {
     renderer = create(
       <WeeklyOffScreen
         navigation={navigation as never}
-        route={{ params: {} } as never}
+        route={{ params } as never}
       />,
     );
   });
@@ -159,8 +162,11 @@ async function flush(times = 6) {
 }
 
 /** Renders and settles both focus-effect fetches. */
-async function renderLoaded(canGoBack = true): Promise<Screen> {
-  const screen = renderScreen(canGoBack);
+async function renderLoaded(
+  canGoBack = true,
+  params: Record<string, unknown> = {},
+): Promise<Screen> {
+  const screen = renderScreen(canGoBack, params);
   await act(async () => {
     await flush();
   });
@@ -1087,5 +1093,40 @@ describe('WeeklyOffScreen redesign — plain-words summaries', () => {
         typeof n.props.onPress === 'function',
     );
     expect(pill.length).toBeGreaterThan(0);
+  });
+});
+
+describe('save from the setup wizard returns to the wizard', () => {
+  /** Picks Friday and saves it: the default block's Save, on a fresh company. */
+  async function pickAndSave(screen: Screen) {
+    act(() => {
+      findPill(screen.root, 5).props.onPress();
+    });
+    await act(async () => {
+      findDefaultSave(screen.root).props.onPress();
+      await flush();
+    });
+  }
+
+  it('a confirmed save goes back when the screen was opened from the wizard', async () => {
+    const screen = await renderLoaded(true, { returnToSetup: true });
+    await pickAndSave(screen);
+    expect(setDefaultMock).toHaveBeenCalledTimes(1);
+    expect(screen.navigation.goBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('a confirmed save stays on the screen when it was opened directly', async () => {
+    const screen = await renderLoaded(true);
+    await pickAndSave(screen);
+    expect(setDefaultMock).toHaveBeenCalledTimes(1);
+    expect(screen.navigation.goBack).not.toHaveBeenCalled();
+  });
+
+  it('a failed save does not leave the wizard, so the owner can fix it', async () => {
+    setDefaultMock.mockRejectedValue(new Error('Network request failed'));
+    const screen = await renderLoaded(true, { returnToSetup: true });
+    await pickAndSave(screen);
+    expect(setDefaultMock).toHaveBeenCalledTimes(1);
+    expect(screen.navigation.goBack).not.toHaveBeenCalled();
   });
 });

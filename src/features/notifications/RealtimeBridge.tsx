@@ -17,19 +17,22 @@
  *      on the owner branch.
  */
 import { useAuth } from '../auth/useAuth';
+import { isCompanyWideRole } from '../auth/roles';
+import { hasCompanyAccess } from '../auth/useRole';
 import { useRealtimeNotifications } from './useRealtimeNotifications';
 import { StatusBanner } from '../../components/StatusBanner';
 
 export function RealtimeBridge() {
   const { session } = useAuth();
   // Allowlist, not denylist: bootstrap (session null) and any future role
-  // suspend the hook by default — only an explicit owner/technician session
-  // enables it.
-  const isEnabled = session?.role === 'owner' || session?.role === 'technician';
+  // suspend the hook by default — only a session inside a company (not a
+  // removed person or Fenzit staff) enables it.
+  const isEnabled = hasCompanyAccess(session);
 
   const { banner } = useRealtimeNotifications({ enabled: isEnabled });
 
-  if (session?.role !== 'owner' || !banner) return null;
+  // Job-status banners are for the company-wide roles (admin, viewer).
+  if (!isEnabled || !isCompanyWideRole(session?.role) || !banner) return null;
 
   return <StatusBanner banner={banner} />;
 }
