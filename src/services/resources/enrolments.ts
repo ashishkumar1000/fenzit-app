@@ -76,6 +76,11 @@ export interface EnrolmentOverview {
   onboardedAt: string | null;
   officeId: string | null;
   officeName: string | null;
+  /**
+   * `invited` until the person signs in for the first time. Only `active`
+   * people can be tracked (the database refuses an invited employee).
+   */
+  memberStatus: 'invited' | 'active';
 }
 
 /** Defensive unwrap of one roster row — a contract break degrades to an
@@ -92,6 +97,9 @@ function normalizeRow(row: Partial<EnrolmentOverview> | null | undefined): Enrol
     onboardedAt: row?.onboardedAt ?? null,
     officeId: row?.officeId ?? null,
     officeName: row?.officeName ?? null,
+    // Anything other than `active` is held back: a missing value must never
+    // let an invited person be switched on.
+    memberStatus: row?.memberStatus === 'active' ? 'active' : 'invited',
   };
 }
 

@@ -83,10 +83,14 @@ export function EnrolmentRow({
   const covering = enrolmentCoversToday(row, today);
   const upcoming = upcomingStart(row, today);
   const pill = PILLS[state];
+  // Invited people have not signed in yet: the server refuses to track them, so
+  // the switch cannot turn them ON. A switch that is already on can still be off.
+  const notSignedIn = row.memberStatus === 'invited';
+  const blockedOn = notSignedIn && !covering;
   const secondary = secondaryLine(row);
 
   const toggle = () => {
-    if (isPending || state === 'upcoming') return;
+    if (isPending || state === 'upcoming' || blockedOn) return;
     if (covering) {
       onDisable();
     } else {
@@ -145,7 +149,7 @@ export function EnrolmentRow({
       <View style={styles.toggleRow}>
         <Pressable
           accessibilityRole="switch"
-          accessibilityState={{ checked: covering, disabled: isPending || state === 'upcoming' }}
+          accessibilityState={{ checked: covering, disabled: isPending || state === 'upcoming' || blockedOn }}
           accessibilityLabel={`Track attendance for ${row.employeeName}`}
           onPress={toggle}
           style={styles.toggleText}>
@@ -153,6 +157,8 @@ export function EnrolmentRow({
           <Text style={styles.toggleDescription}>
             {state === 'upcoming'
               ? `Tracking begins on their start date — nothing before that.`
+              : blockedOn
+                ? `Hasn't signed in yet. They can be tracked after their first sign-in.`
               : covering
                 ? `They check in near ${row.officeName ?? 'their office'}.`
                 : 'Turn on to choose their office and start tracking.'}
@@ -172,8 +178,8 @@ export function EnrolmentRow({
           importantForAccessibility={'no-hide-descendants'}>
           <Switch
             value={covering}
-            onValueChange={(next) => (next ? onToggleOn() : onDisable())}
-            disabled={isPending || state === 'upcoming'}
+            onValueChange={(next) => (next ? toggle() : onDisable())}
+            disabled={isPending || state === 'upcoming' || blockedOn}
           />
         </View>
       </View>

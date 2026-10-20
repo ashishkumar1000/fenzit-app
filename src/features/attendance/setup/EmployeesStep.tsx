@@ -106,6 +106,8 @@ export function EmployeesStep({
     const upcoming =
       row.attendanceStartDate !== null && !enrolmentCoversToday(row, today);
     if (nextValue && upcoming) return;
+    // Invited people cannot be tracked yet: never open the picker or enable them.
+    if (nextValue && row.memberStatus === 'invited') return;
     if (!nextValue) {
       setDisableAskId(row.employeeId);
       return;
@@ -147,6 +149,8 @@ export function EmployeesStep({
             !coversToday && row.attendanceStartDate !== null
               ? row.attendanceStartDate
               : null;
+          // Invited people have not signed in yet; the database refuses them.
+          const notSignedIn = row.memberStatus === 'invited';
           return (
             <Card key={row.employeeId} padding="md">
               <View style={styles.rowHead}>
@@ -155,7 +159,9 @@ export function EmployeesStep({
                     {row.employeeName}
                   </Text>
                   <Text style={styles.rowSub} numberOfLines={1}>
-                    {coversToday
+                    {notSignedIn
+                      ? "Hasn't signed in yet. Tracking can start after their first sign-in."
+                      : coversToday
                       ? row.officeId
                         ? `Office: ${row.officeName ?? 'Unknown'}`
                         : 'No office assigned'
@@ -181,7 +187,11 @@ export function EmployeesStep({
                     ? `Starts ${upcomingStart} \u00B7 tracking begins then — adjust from Team attendance`
                     : `Track attendance for ${row.employeeName}`
                 }
-                disabled={isRowPending(row.employeeId) || upcomingStart !== null}
+                disabled={
+                  isRowPending(row.employeeId) ||
+                  upcomingStart !== null ||
+                  notSignedIn
+                }
               />
               {rowErr ? (
                 <View style={styles.rowError}>

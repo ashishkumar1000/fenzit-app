@@ -68,6 +68,7 @@ function row(overrides: Partial<EnrolmentOverview> = {}): EnrolmentOverview {
     onboardedAt: null,
     officeId: 'o1',
     officeName: 'Office o1',
+    memberStatus: 'active',
     ...overrides,
   };
 }

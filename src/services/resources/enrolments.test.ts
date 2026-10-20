@@ -33,6 +33,7 @@ const ENABLED_ROW = {
   onboardedAt: '2026-09-28T09:00:00Z',
   officeId: 'o1',
   officeName: 'HQ',
+  memberStatus: 'active',
 };
 
 // What the WRITE endpoints really return — the access state WITHOUT the
@@ -75,8 +76,20 @@ describe('enrolmentsService.list', () => {
         onboardedAt: null,
         officeId: null,
         officeName: null,
+        // No membership status from the server: held back, never tracked.
+        memberStatus: 'invited',
       },
     ]);
+  });
+
+  it('keeps an invited person invited, so the wizard cannot switch them on', async () => {
+    get.mockResolvedValueOnce({
+      data: [{ ...ENABLED_ROW, memberStatus: 'invited' }],
+    });
+
+    const returned = await enrolmentsService.list();
+
+    expect(returned[0]?.memberStatus).toBe('invited');
   });
 
   it('falls back to [] when the body is missing/malformed/null (never-enrolled is 200 [], never 404)', async () => {

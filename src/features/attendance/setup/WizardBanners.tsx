@@ -70,7 +70,7 @@ export function WizardBanners({
         </View>
       ) : null}
       {completionError ? (
-        <InlineError message="Attendance couldn't be enabled yet. Check the requirements below and try again." />
+        <InlineError message={completionFailureText(completionError)} />
       ) : null}
       {STEP_SURFACES[step].map((key) => {
         const surface = surfaces[key];
@@ -88,3 +88,13 @@ const styles = StyleSheet.create({
     paddingTop: spacing.s3,
   },
 });
+
+/** The banner line for a refused "Enable attendance". The server's own reason
+ *  (for example, an employee who has not signed in yet) is shown after the
+ *  header, so the owner knows what to fix. */
+function completionFailureText(error: ApiError): string {
+  if (error.code === 'ATTENDANCE_SETUP_INCOMPLETE' && error.message) {
+    return `Attendance couldn't be enabled yet. ${error.message}`;
+  }
+  return "Attendance couldn't be enabled yet. Try again.";
+}

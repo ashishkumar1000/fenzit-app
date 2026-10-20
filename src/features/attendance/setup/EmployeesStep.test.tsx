@@ -32,6 +32,7 @@ function row(overrides: Partial<EnrolmentOverview> = {}): EnrolmentOverview {
     onboardedAt: null,
     officeId: null,
     officeName: null,
+    memberStatus: 'active',
     ...overrides,
   };
 }
@@ -121,6 +122,65 @@ describe('EmployeesStep — the 15-9 upcoming-row guard', () => {
     });
     const sw = renderer.root.find(
       (n) => n.props?.label === 'Track attendance for Ramesh',
+    );
+    expect(sw.props.disabled).toBe(false);
+  });
+});
+
+describe('EmployeesStep — invited employees cannot be tracked yet', () => {
+  // Given an office, a forced turn-on would reach onEnable without the guard.
+  const INVITED = row({
+    employeeId: 'e4',
+    employeeName: 'Suresh',
+    memberStatus: 'invited',
+    officeId: 'o1',
+    officeName: 'HQ',
+  });
+
+  it('an invited row shows the not-signed-in hint and a DISABLED switch; a forced toggle enables nothing', async () => {
+    const onEnable = jest.fn();
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <EmployeesStep
+          {...baseProps()}
+          roster={[INVITED]}
+          liveOffices={[{ id: 'o1', name: 'HQ' } as never]}
+          onEnable={onEnable}
+        />,
+      );
+    });
+
+    const texts = renderer.root
+      .findAll((n) => n.type === Text && typeof n.props.children === 'string')
+      .map((n) => n.props.children as string);
+    expect(texts).toContain(
+      "Hasn't signed in yet. Tracking can start after their first sign-in.",
+    );
+
+    const sw = renderer.root.find(
+      (n) => n.props?.label === 'Track attendance for Suresh',
+    );
+    expect(sw.props.disabled).toBe(true);
+
+    await act(async () => {
+      sw.props.onValueChange(true);
+    });
+    expect(onEnable).not.toHaveBeenCalled();
+  });
+
+  it('an active row with the same details keeps its enabled switch', () => {
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(
+        <EmployeesStep
+          {...baseProps()}
+          roster={[row({ employeeId: 'e5', employeeName: 'Suresh' })]}
+        />,
+      );
+    });
+    const sw = renderer.root.find(
+      (n) => n.props?.label === 'Track attendance for Suresh',
     );
     expect(sw.props.disabled).toBe(false);
   });

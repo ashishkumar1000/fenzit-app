@@ -61,6 +61,7 @@ function rosterRow(
     onboardedAt: null,
     officeId: officeName ? 'o1' : null,
     officeName,
+    memberStatus: 'active',
   };
 }
 

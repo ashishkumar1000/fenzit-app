@@ -31,10 +31,24 @@ function surfaceMessage(root: ReactTestRenderer.ReactTestInstance): string[] {
         "Couldn't refresh holidays. Showing the last loaded list.",
         "Couldn't refresh your team. Showing the last loaded list.",
         "Couldn't save your progress. Check your connection and try again.",
-        "Attendance couldn't be enabled yet. Check the requirements below and try again.",
       ].includes(value),
     );
 }
+
+/** The completion line only: the header, then the server's reason or the plain retry line. */
+function completionTexts(root: ReactTestRenderer.ReactTestInstance): string[] {
+  return root
+    .findAll((n) => n.type === Text)
+    .map((n) => String(n.props.children))
+    .filter((value) => value.startsWith("Attendance couldn't be enabled yet."));
+}
+
+const ALL_OK: BannersProps['surfaces'] = {
+  offices: surface(),
+  weeklyOff: surface(),
+  holidays: surface(),
+  roster: surface(),
+};
 
 const ALL_STALE: BannersProps['surfaces'] = {
   offices: surface({ hasError: true, message: "Couldn't refresh offices. Showing the last loaded list." }),
@@ -123,19 +137,70 @@ describe('WizardBanners per-surface mapping', () => {
 
   it('the completion banner renders on the final step', () => {
     expect(
-      surfaceMessage(
+      completionTexts(
         renderBanners({
           step: 'employees',
           completionError: {
             status: 422,
             code: 'ATTENDANCE_SETUP_INCOMPLETE',
-            message: 'gates unmet',
+            message: 'Suresh has not signed in to the app yet. Tracking can start after their first sign-in.',
             details: null,
           },
         }),
       ),
-    ).toContain(
-      "Attendance couldn't be enabled yet. Check the requirements below and try again.",
-    );
+    ).toEqual(["Attendance couldn't be enabled yet. Suresh has not signed in to the app yet. Tracking can start after their first sign-in."]);
+  });
+
+  it('shows the server reason, exactly as sent, after the header when Enable is refused as incomplete', () => {
+    const reason =
+      'Suresh has not signed in to the app yet. Tracking can start after their first sign-in.';
+    expect(
+      completionTexts(
+        renderBanners({
+          step: 'employees',
+          surfaces: ALL_OK,
+          completionError: {
+            status: 422,
+            code: 'ATTENDANCE_SETUP_INCOMPLETE',
+            message: reason,
+            details: null,
+          },
+        }),
+      ),
+    ).toEqual([`Attendance couldn't be enabled yet. ${reason}`]);
+  });
+
+  it('does not invent a reason for other failures: the plain retry line only', () => {
+    expect(
+      completionTexts(
+        renderBanners({
+          step: 'employees',
+          surfaces: ALL_OK,
+          completionError: {
+            status: 500,
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Failed to complete attendance setup',
+            details: null,
+          },
+        }),
+      ),
+    ).toEqual(["Attendance couldn't be enabled yet. Try again."]);
+  });
+
+  it('an incomplete refusal with no server text falls back to the plain retry line', () => {
+    expect(
+      completionTexts(
+        renderBanners({
+          step: 'employees',
+          surfaces: ALL_OK,
+          completionError: {
+            status: 422,
+            code: 'ATTENDANCE_SETUP_INCOMPLETE',
+            message: '',
+            details: null,
+          },
+        }),
+      ),
+    ).toEqual(["Attendance couldn't be enabled yet. Try again."]);
   });
 });

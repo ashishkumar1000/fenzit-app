@@ -132,6 +132,7 @@ function enrolRow(
     onboardedAt: null,
     officeId: null,
     officeName: null,
+    memberStatus: 'active',
     ...overrides,
   };
 }
@@ -603,7 +604,7 @@ describe('completion', () => {
     completeSetup.mockRejectedValue({
       status: 422,
       code: 'ATTENDANCE_SETUP_INCOMPLETE',
-      message: 'gates unmet',
+      message: 'Suresh has not signed in to the app yet. Tracking can start after their first sign-in.',
       details: null,
     });
     const wizard = await renderLoaded();
@@ -618,7 +619,7 @@ describe('completion', () => {
     expect(
       hasText(
         wizard.root,
-        "Attendance couldn't be enabled yet. Check the requirements below and try again.",
+        "Attendance couldn't be enabled yet. Suresh has not signed in to the app yet. Tracking can start after their first sign-in.",
       ),
     ).toBe(true);
     // The gate data was refetched so the caption recomputes from truth.
