@@ -1,37 +1,39 @@
 /**
- * AttendanceHomeScreen — the owner entry into attendance (Story 15-6,
- * gated by the 15-8 setup wizard).
+ * AttendanceHomeScreen — the setup-only attendance hub behind the Account
+ * tab's Attendance row (Story 15-6, gated by the 15-8 setup wizard).
  *
  * For 15-6 this was a minimal shim: two tiles (Offices + Settings). Finding 9
  * of the office-setup UX report split the hub into "Every day" (Today,
  * Monthly, Leave) and "Set up" (Offices, Team attendance, Weekly off,
- * Holidays) — the old Settings tile hid Team attendance two taps deep; the
- * `AttendanceSettings` route stays registered as a deep-link shim. 15-8
- * adds the ENTRY GATE: on every focus, an affirmative 200 from
- * `GET /attendance/setup` whose `setupCompletedAt` is still null
- * `replace`s this screen with the wizard (FR-3: the tile opens the wizard,
- * not an empty dashboard — `replace` so the back stack stays honest and
- * the two routes can never sit on the stack together, which is what makes
- * the loop guard trivial: the wizard never redirects into itself, it only
- * ever replaces BACK to this screen, whose gate then sees a completed
- * setup and renders the shim). Any gate failure — network error, or a
- * technician's 403 — means NO redirect: the shim renders exactly as
+ * Holidays) — 2026-10 moved the "Every day" tiles to the Attendance TAB page
+ * (`AttendanceTabHomeScreen`), leaving this screen the SETUP surface only:
+ * Offices, Team attendance, Weekly off, Holidays (the old Settings tile hid
+ * Team attendance two taps deep; the `AttendanceSettings` route stays
+ * registered as a deep-link shim). 15-8 adds the ENTRY GATE: on every focus,
+ * an affirmative 200 from `GET /attendance/setup` whose `setupCompletedAt`
+ * is still null `replace`s this screen with the wizard (FR-3: the row opens
+ * the wizard, not an empty dashboard — `replace` so the back stack stays
+ * honest and the two routes can never sit on the stack together, which is
+ * what makes the loop guard trivial: the wizard never redirects into itself,
+ * it only ever replaces BACK to this screen, whose gate then sees a
+ * completed setup and renders the shim). Any gate failure — network error,
+ * or a technician's 403 — means NO redirect: the shim renders exactly as
  * today, so a failure can never start a redirect loop and the full
  * nav-guard stays with the 15-6 D1 deferral story.
  *
- * The tiles below are the post-setup surface (Epic 16 replaces them with a
- * real dashboard without breaking 15-6's nav).
+ * The row (and this screen) stays visible to every role: a view-only user
+ * sees only the view-only notice — no tiles.
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Building2, Calendar, CalendarDays, CalendarOff, LayoutDashboard, Users } from 'lucide-react-native';
+import { Building2, Calendar, CalendarDays, Users } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { colors, spacing } from '../../../theme';
 import { VIEW_ONLY_REASON, useCanWrite } from '../../auth';
 import { attendanceSetupService } from '../../../services';
 import { Tile } from '../../../components/Tile';
-import { Eyebrow, InlineNotice } from '../../../components/ui';
+import { InlineNotice } from '../../../components/ui';
 import { useFlashMessage } from '../../../hooks/useFlashMessage';
 import ScreenHeader from '../offices/ScreenHeader';
 import type { RootStackParamList } from '../../../navigation/types';
@@ -42,9 +44,10 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AttendanceHome'>;
 const ENABLED_NOTICE_MS = 5000;
 
 export default function AttendanceHomeScreen({ navigation, route }: Props) {
-  // A viewer reads who is in (Today, Monthly) but sets nothing up and cannot
-  // read leave — those tiles are hidden and the setup wizard never opens for
-  // them (the notice at the top says why).
+  // A viewer sets nothing up — and this screen is the SETUP hub only since
+  // 2026-10 (the reads — Today, Monthly — live on the Attendance tab) — so
+  // they see just the notice saying why, no tiles, and the gate never asks
+  // the setup endpoint for them (the wizard never opens for a viewer).
   const canWrite = useCanWrite();
   // One-time confirmation after the wizard's "Enable attendance". The param is
   // cleared straight away so coming back to this screen never repeats it.
@@ -121,42 +124,11 @@ export default function AttendanceHomeScreen({ navigation, route }: Props) {
           />
         ) : null}
         {!canWrite ? <InlineNotice tone="neutral" message={VIEW_ONLY_REASON} /> : null}
-        <Eyebrow>Every day</Eyebrow>
-        {/* 19-4 D1 — the FR-24 dashboard tile, FIRST (the today snapshot is
-            the owner's entry answer, ahead of the setup surfaces below). */}
-        <Tile
-          icon={<LayoutDashboard size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
-          iconBg={colors.status.progress.bg}
-          title="Today"
-          subtitle="Who's in and who's not"
-          onPress={() => navigation.navigate('AttendanceDashboard')}
-        />
-        {/* 19-5 D1 — the FR-25 monthly review tile, between Today and
-            Leave (the production AttendanceHome family reads blue =
-            "review people" — the Sally Q1 ruling). */}
-        <Tile
-          icon={<CalendarDays size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
-          iconBg={colors.status.progress.bg}
-          title="Monthly"
-          subtitle="Everyone's month at a glance"
-          onPress={() => navigation.navigate('AttendanceMonthly')}
-        />
         {canWrite ? (
           <>
-            {/* 17-6 — the Leave tile (Leave is "planned time";
-                the subtitle is FE copy, not mockup text). */}
-            <Tile
-              icon={<CalendarOff size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
-              iconBg={colors.status.progress.bg}
-              title="Leave"
-              subtitle="Pending requests & history"
-              onPress={() => navigation.navigate('OwnerLeave')}
-            />
-          </>
-        ) : null}
-        {canWrite ? (
-          <>
-            <Eyebrow style={styles.sectionGap}>Set up</Eyebrow>
+            {/* No "Set up" eyebrow (owner, 2026-10-23): with the reads moved
+                to the tab, every tile here IS setup — the header said nothing
+                the page didn't. */}
             <Tile
               icon={<Building2 size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
               iconBg={colors.status.scheduled.bg}
@@ -200,8 +172,5 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.s4,
     gap: spacing.s3,
-  },
-  sectionGap: {
-    marginTop: spacing.s3,
   },
 });

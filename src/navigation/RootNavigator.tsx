@@ -11,7 +11,7 @@ import { JobDetailScreen } from '../features/jobDetail';
 import { NotificationsScreen } from '../features/notifications';
 import { ReportsScreen } from '../features/reports';
 import { CustomerDetailScreen } from '../features/customerDetail';
-import { AddCustomerScreen } from '../features/customers';
+import { AddCustomerScreen, CustomersScreen } from '../features/customers';
 import {
   OfficesScreen,
   OfficeFormScreen,
@@ -37,7 +37,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 /**
  * The single source of truth for top-level navigation routes.
- * `MainTabs` holds the four bottom-tab screens (Home, Jobs, Customers, More).
+ * `MainTabs` holds the four bottom-tab screens (Home, Jobs, Attendance, More).
  * Full-screen routes that should cover the tab bar (e.g. Technicians)
  * go here, as siblings of MainTabs.
  */
@@ -92,6 +92,14 @@ export default function RootNavigator() {
       <Stack.Screen
         name="CustomerDetail"
         component={CustomerDetailScreen}
+        options={{ headerShown: false }}
+      />
+      {/* 2026-10 — the customer list stacked here (Attendance took the
+          footer slot; the Account tab's row pushes it). The route name is
+          AddCustomer's post-save return target (`AddCustomerReturnRouteName`). */}
+      <Stack.Screen
+        name="Customers"
+        component={CustomersScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

@@ -23,7 +23,6 @@ import {
   Sun,
   User,
   UserCog,
-  Users,
   type LucideIcon,
 } from 'lucide-react-native';
 import { colors, fontSize, spacing, weight } from '../theme';
@@ -32,13 +31,14 @@ const ICONS: Record<string, LucideIcon> = {
   // Owner tabs (MainTabParamList)
   Home: HomeIcon,
   Jobs: ClipboardList,
-  Customers: Users,
   // Labelled "Account" in MainTabs — the route key stays `More`.
   More: UserCog,
   // Technician tabs (TechnicianTabParamList)
   Today: Sun,
   History: History,
   // 15-10 — mounted conditionally by TechnicianTabs (FR-3 access gate).
+  // 2026-10 — the owner footer's Attendance tab shares this entry (one
+  // per route name serves both tab groups).
   Attendance: CalendarCheck,
   Profile: User,
 };

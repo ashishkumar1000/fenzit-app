@@ -1,10 +1,12 @@
 /**
- * HomeScreen — the Attendance entry-point contract (2026-09-30): the tile
- * renders ONLY while the profile's `attendance` mirror says the tenant
- * module is enabled (an absent mirror — older backend, pre-onboarding —
- * fails HIDDEN, never crashes), and pressing it opens the attendance hub,
- * whose own focus gate owns setup completeness. The stores are mocked —
- * their internals are their own tests' job.
+ * HomeScreen — the Attendance entry contract (2026-09-30, split targets
+ * 2026-10): the attendance surfaces render ONLY while the profile's
+ * `attendance` mirror says the tenant module is enabled (an absent mirror —
+ * older backend, pre-onboarding — fails HIDDEN, never crashes). The
+ * today-pulse card opens the Today dashboard; the plain tile opens the
+ * Attendance TAB page with its "Today, monthly & leave" subtitle — neither
+ * lands on the setup-only hub. The stores are mocked — their internals are
+ * their own tests' job.
  */
 const mockNavigate = jest.fn();
 
@@ -120,7 +122,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
     mockPulse.value = { status: 'error' };
   });
 
-  it('falls back to the plain tile when the Pulse request fails, and navigates to the hub', () => {
+  it('falls back to the plain tile when the Pulse request fails, and it opens the Attendance tab page', () => {
     mockProfileState.profile = ownerProfile({
       attendanceEnabled: true,
       attendanceAccess: 'none',
@@ -130,7 +132,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
     const root = renderScreen();
 
     expect(texts(root)).toContain('Attendance');
-    expect(texts(root)).toContain("Who's in, leave, offices & team");
+    expect(texts(root)).toContain('Today, monthly & leave');
 
     // The label query alone matches jest's wrapper duplicates (the store
     // mock's known RTR gotcha) — pin the one PRESSABLE via predicate.
@@ -143,7 +145,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
     act(() => {
       tile[0].props.onPress();
     });
-    expect(mockNavigate).toHaveBeenCalledWith('AttendanceHome');
+    expect(mockNavigate).toHaveBeenCalledWith('Attendance');
   });
 
   it('renders nothing when the module is disabled', () => {
@@ -208,7 +210,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
       onboardedAt: null,
     });
 
-  it('shows Today\'s Pulse (not the plain tile) once the numbers load, and opens the hub', () => {
+  it('shows Today\'s Pulse (not the plain tile) once the numbers load, and it opens the Today dashboard', () => {
     mockProfileState.profile = enabledProfile();
     mockPulse.value = {
       status: 'ready',
@@ -220,7 +222,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
     expect(texts(root)).toContain("Attendance today");
     expect(texts(root)).toContain('Saturday, Oct 24');
     expect(texts(root)).toContain('84%');
-    expect(texts(root)).not.toContain("Who's in, leave, offices & team");
+    expect(texts(root)).not.toContain('Today, monthly & leave');
     const card = root.findAll(
       (node: ReactTestRenderer.ReactTestInstance) =>
         String(node.props?.accessibilityLabel ?? '').startsWith("Attendance today") &&
@@ -230,7 +232,7 @@ describe('HomeScreen — the Attendance entry tile', () => {
     act(() => {
       card[0].props.onPress();
     });
-    expect(mockNavigate).toHaveBeenCalledWith('AttendanceHome');
+    expect(mockNavigate).toHaveBeenCalledWith('AttendanceDashboard');
   });
 
   it('shimmers while the Pulse request is in flight — no tile, no numbers', () => {

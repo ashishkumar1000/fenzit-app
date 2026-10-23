@@ -135,7 +135,7 @@ function App() {
     content = <NoAccessScreen platformAdmin={session?.platformAdmin ?? false} />;
   } else if (isEmployeeRole(session?.role)) {
     // Separate nav tree from the admin side — an employee never needs
-    // MainTabs' Jobs/Customers/More routes or RootNavigator's Technicians stack.
+    // MainTabs' Jobs/Attendance/More routes or RootNavigator's Technicians stack.
     // Story 14-3: the employee branch mounts the same RealtimeBridge —
     // one bridge for every role (the hook routes per role inside; the
     // employee's socket listens on their own topic only).

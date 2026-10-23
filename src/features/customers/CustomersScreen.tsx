@@ -2,6 +2,10 @@
  * CustomersScreen — the tenant's customer list from `GET /customers`, with
  * search and an "+ Add" action that pushes `AddCustomerScreen`.
  *
+ * Stacked on the root stack and pushed from the Account tab's Customers row
+ * (2026-10: Attendance took the footer slot) — hence the header's back
+ * affordance, on the ScreenHeader pattern.
+ *
  * Renders exclusively from the shared `useCustomers` store (same source as
  * NewJob's picker), so there is exactly one fetch path to the endpoint. Focus
  * refetches go through `loadCustomers`, throttled to one request per
@@ -24,11 +28,11 @@ import {
   TextInput as RNTextInput,
   View,
 } from 'react-native';
-import { Search, Users, UserPlus } from 'lucide-react-native';
+import { ChevronLeft, Search, Users, UserPlus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, EmptyState, InlineError } from '../../components/ui';
+import { Button, EmptyState, IconButton, InlineError } from '../../components/ui';
 import { useCanWrite } from '../auth';
 import { colors, radius, spacing, touch, typography } from '../../theme';
 import type { RootStackParamList } from '../../navigation/types';
@@ -45,12 +49,12 @@ export default function CustomersScreen() {
 
   const { customers, isLoading, error, hasCustomers, refresh } = useCustomers();
 
-  // Refetch every time the tab is focused, not just on mount — the tab stays
-  // mounted once opened, so a mount-only fetch would go stale as soon as a
-  // customer is added elsewhere (another device, or server-side by a job).
-  // The store throttles (skips within 15s of a success), so rapid tab
-  // switches stay cheap; the first focus shows the spinner via the store's
-  // `isLoading`, later ones refresh in place so switching doesn't blank the
+  // Refetch every time the screen is focused, not just on mount — the screen
+  // stays mounted while pushed, so a mount-only fetch would go stale as soon
+  // as a customer is added elsewhere (another device, or server-side by a
+  // job). The store throttles (skips within 15s of a success), so rapid
+  // revisits stay cheap; the first focus shows the spinner via the store's
+  // `isLoading`, later ones refresh in place so revisiting doesn't blank the
   // list.
   useFocusEffect(
     useCallback(() => {
@@ -84,6 +88,17 @@ export default function CustomersScreen() {
   // subscription re-renders from that same store automatically.
   const canWrite = useCanWrite();
 
+  // Back that works from anywhere: when this screen is the only route on
+  // the stack (a deep link), `goBack` would strand the user — reset to the
+  // tabs (the AttendanceHomeScreen pattern).
+  const goBackSafely = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs');
+    }
+  }, [navigation]);
+
   const handleAdd = () =>
     navigation.navigate('AddCustomer', { returnRouteName: 'Customers' });
 
@@ -103,6 +118,11 @@ export default function CustomersScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
+        {/* Back affordance — this screen stacks on the root stack now (it was
+            a tab root until 2026-10). Same ghost ChevronLeft as ScreenHeader. */}
+        <IconButton variant="ghost" size="md" label="Go back" onPress={goBackSafely}>
+          <ChevronLeft size={22} color={colors.textStrong} strokeWidth={2} />
+        </IconButton>
         <Text style={styles.title}>Customers</Text>
         {/* Hidden for a viewer (read-only); customers stay fully visible. */}
         {canWrite ? (
@@ -205,6 +225,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.s2,
     justifyContent: 'space-between',
     paddingHorizontal: spacing.s4,
     paddingTop: spacing.s4,
@@ -213,6 +234,9 @@ const styles = StyleSheet.create({
   title: {
     ...typography.title,
     color: colors.textStrong,
+    // Absorb the row's free width so the title sits beside the back button
+    // (ScreenHeader's layout), never centred between it and the Add button.
+    flex: 1,
   },
   searchWrap: {
     paddingHorizontal: spacing.s4,

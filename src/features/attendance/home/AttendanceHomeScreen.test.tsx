@@ -1,8 +1,10 @@
 /**
- * Tests for the AttendanceHomeScreen (Story 15-6): two owner-only
- * tiles ("Offices" + "Settings") that wire into the existing nav graph.
- * The screen is a minimal shim — the only contract here is that BOTH
- * tiles render and navigate to the right routes.
+ * Tests for the AttendanceHomeScreen — the setup-only attendance hub behind
+ * the Account tab's Attendance row. Since 2026-10 the "Every day" tiles
+ * (Today, Monthly, Leave) live on the Attendance TAB page
+ * (AttendanceTabHomeScreen); the hub keeps ONLY the owner-only "Set up"
+ * tiles (Offices, Team attendance, Weekly off, Holidays) and the view-only
+ * notice.
  *
  * Story 15-8 adds the ENTRY GATE: on every focus, an affirmative 200 from
  * `GET /attendance/setup` whose `setupCompletedAt` is null replaces this
@@ -112,17 +114,11 @@ function findTile(
 }
 
 describe('AttendanceHomeScreen', () => {
-  it('renders the every-day and set-up tiles', () => {
+  it('renders the set-up tiles only — the "Every day" tiles moved to the tab page (2026-10)', () => {
     const { renderer } = renderHome();
     const texts = renderer.root
       .findAll(node => typeof node.props.children === 'string')
       .map(node => node.props.children as string);
-    expect(texts).toContain('Today');
-    expect(texts).toContain("Who's in and who's not");
-    expect(texts).toContain('Monthly');
-    expect(texts).toContain("Everyone's month at a glance");
-    expect(texts).toContain('Leave');
-    expect(texts).toContain('Pending requests & history');
     expect(texts).toContain('Offices');
     expect(texts).toContain('Add offices, set location and timings');
     expect(texts).toContain('Team attendance');
@@ -131,13 +127,16 @@ describe('AttendanceHomeScreen', () => {
     expect(texts).toContain('Same for everyone, or set per employee');
     expect(texts).toContain('Holidays');
     expect(texts).toContain('Company holiday list');
-    // Section labels, and the retired catch-all tile.
-    expect(texts).toContain('Every day');
-    expect(texts).toContain('Set up');
-    expect(texts).not.toContain('Settings');
+    // No section eyebrow (owner, 2026-10-23: every tile here IS setup), and
+    // everything that left with the restructure stays gone.
+    expect(texts).not.toContain('Set up');
+    expect(texts).not.toContain('Every day');
+    expect(texts).not.toContain('Today');
+    expect(texts).not.toContain('Monthly');
+    expect(texts).not.toContain('Leave');
   });
 
-  it('renders the full tappable inventory: the seven tiles (the dev lab row retired with 19-6)', () => {
+  it('renders the full tappable inventory: the four set-up tiles + back', () => {
     const { renderer } = renderHome();
     // NO pre-filter: every button-role label on the screen, deduped (RTR
     // mirrors Pressables through host Views, so a raw findAll counts each
@@ -154,47 +153,10 @@ describe('AttendanceHomeScreen', () => {
     expect(labels.sort()).toEqual([
       'Go back',
       'Holidays',
-      'Leave',
-      'Monthly',
       'Offices',
       'Team attendance',
-      'Today',
       'Weekly off',
     ]);
-  });
-
-  it('renders the 19-4 "Today" tile FIRST, above Leave', () => {
-    const { renderer } = renderHome();
-    // The today snapshot is the owner's first answer (19-4 D1) — the tile
-    // must precede the Leave tile in the tile order.
-    const all = renderer.root
-      .findAll((node) => node.props.accessibilityRole === 'button')
-      .map((node) => node.props.accessibilityLabel as string);
-    expect(all.indexOf('Today')).toBeGreaterThanOrEqual(0);
-    expect(all.indexOf('Today')).toBeLessThan(all.indexOf('Leave'));
-  });
-
-  it('renders the 19-5 "Monthly" tile BETWEEN Today and Leave, and it navigates (D1)', () => {
-    const { renderer, navigation } = renderHome();
-    const all = renderer.root
-      .findAll((node) => node.props.accessibilityRole === 'button')
-      .map((node) => node.props.accessibilityLabel as string);
-    expect(all.indexOf('Today')).toBeLessThan(all.indexOf('Monthly'));
-    expect(all.indexOf('Monthly')).toBeLessThan(all.indexOf('Leave'));
-    const monthlyButton = findTile(renderer, 'Monthly');
-    act(() => {
-      monthlyButton.props.onPress();
-    });
-    expect(navigation.navigate).toHaveBeenCalledWith('AttendanceMonthly');
-  });
-
-  it('tapping "Today" navigates to AttendanceDashboard (19-4 D1)', () => {
-    const { renderer, navigation } = renderHome();
-    const todayButton = findTile(renderer, 'Today');
-    act(() => {
-      todayButton.props.onPress();
-    });
-    expect(navigation.navigate).toHaveBeenCalledWith('AttendanceDashboard');
   });
 
   it('tapping "Offices" navigates to AttendanceOffices', () => {
@@ -472,20 +434,20 @@ describe('AttendanceHomeScreen — a viewer (read-only)', () => {
       .findAll(node => typeof node.props.children === 'string')
       .map(node => node.props.children as string);
 
-  it('keeps Today and Monthly (reads) and says why the rest is gone', () => {
+  it('is the view-only notice only — the reads (Today, Monthly) live on the tab page now', () => {
     const { renderer } = renderHome();
     const texts = textsOf(renderer);
 
-    expect(texts).toContain('Today');
-    expect(texts).toContain('Monthly');
     expect(texts).toContain('View-only access');
+    expect(texts).not.toContain('Today');
+    expect(texts).not.toContain('Monthly');
   });
 
-  it('hides Leave (a viewer cannot read leave) and every set-up tile', () => {
+  it('hides every tile (a viewer cannot read leave or set anything up)', () => {
     const { renderer } = renderHome();
     const texts = textsOf(renderer);
 
-    for (const hidden of ['Leave', 'Set up', 'Offices', 'Team attendance', 'Weekly off', 'Holidays']) {
+    for (const hidden of ['Today', 'Monthly', 'Leave', 'Set up', 'Offices', 'Team attendance', 'Weekly off', 'Holidays']) {
       expect(texts).not.toContain(hidden);
     }
   });
@@ -500,14 +462,14 @@ describe('AttendanceHomeScreen — a viewer (read-only)', () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it('the company admin still gets the full hub and the setup gate (control)', async () => {
+  it('the company admin still gets the set-up hub and the setup gate (control)', async () => {
     mockCanWrite = true;
     getSetup.mockResolvedValue(setupState({ started: false }));
     const { renderer, addListener, navigation } = renderHome();
 
     await fireFocus(addListener);
 
-    expect(textsOf(renderer)).toContain('Leave');
+    expect(textsOf(renderer)).toContain('Offices');
     expect(navigation.replace).toHaveBeenCalledWith('AttendanceSetupWizard');
   });
 });

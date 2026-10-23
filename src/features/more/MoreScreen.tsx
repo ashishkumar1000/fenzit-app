@@ -7,7 +7,7 @@
  * is cleared, and `useAuth().reset()` sends the user back to login.
  *
  * Tile/row counts read the shared stores — `technicianCount` is server
- * truth on the profile; the customers row mirrors the Customers tab's own
+ * truth on the profile; the customers row mirrors the Customers screen's own
  * store and the notifications tile mirrors the bells' unread count. Both
  * loaders are focus-throttled in their stores, so a focus refresh here
  * costs at most one request per window.
@@ -15,7 +15,7 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -57,7 +57,7 @@ export default function MoreScreen({ navigation }: Props) {
   const [logOutOpen, setLogOutOpen] = useState(false);
 
   // Same throttled focus refresh the bells (Jobs/Home headers) and the
-  // Customers tab run — at most one request per store per window.
+  // Customers screen run — at most one request per store per window.
   useFocusEffect(
     useCallback(() => {
       void loadUnreadCount();
@@ -177,6 +177,9 @@ export default function MoreScreen({ navigation }: Props) {
           />
         </View>
 
+        {/* 2026-10 — pushes the customer list as a stacked root-stack
+            screen (Attendance took the footer slot); it covers the tab bar
+            and pops back here on back. */}
         <MoreRow
           icon={<Users size={20} color={colors.status.done.solid} strokeWidth={1.5} />}
           iconBg={colors.status.done.bg}
@@ -194,19 +197,17 @@ export default function MoreScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Reports')}
         />
 
-        {/* Story 15-6 — Attendance Home shim (FR-5 + FR-18/19/20). Routes
-            through the Home shim so the Settings tile is reachable; the
-            offices tile inside the shim is what actually navigates to
-            AttendanceOffices. Deliberately UNGATED (2026-09-30 triage):
-            this row is the only funnel into attendance SETUP — the hub's
-            focus gate is the sole navigation into the 15-8 wizard — so it
-            must render before attendance is enabled, unlike Home's tile.
-            Subtitle aligned with the hub-first framing (2026-09-30 review). */}
+        {/* Story 15-6 — the attendance SETUP hub (FR-5 + FR-18/19/20; the
+            daily reads moved to the Attendance tab, 2026-10). Deliberately
+            UNGATED (2026-09-30 triage): this row is the only funnel into
+            attendance SETUP — the hub's focus gate is the sole navigation
+            into the 15-8 wizard — so it must render before attendance is
+            enabled, unlike Home's tile. Subtitle is setup-focused (2026-10). */}
         <MoreRow
           icon={<Building2 size={20} color={colors.status.scheduled.solid} strokeWidth={1.5} />}
           iconBg={colors.status.scheduled.bg}
           title="Attendance"
-          subtitle="Who's in, leave, offices & team"
+          subtitle="Offices, team, weekly off & holidays"
           onPress={() => navigation.navigate('AttendanceHome')}
         />
 

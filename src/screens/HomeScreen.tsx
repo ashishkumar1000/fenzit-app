@@ -19,7 +19,7 @@ import HomeHeader from '../components/HomeHeader';
 import NotificationBell from '../components/NotificationBell';
 import { EmptyState, InlineError, InlineNotice, Skeleton } from '../components/ui';
 import { Tile } from '../components/Tile';
-import { colors, radius, spacing, typography } from '../theme';
+import { colors, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
 import { firstName, loadMyProfile, useMyProfile } from '../features/profile';
 import {
@@ -199,13 +199,15 @@ export default function HomeScreen({ navigation }: Props) {
       ? (profile.attendance.pendingLeaveRequests ?? 0)
       : 0;
 
-  // The Attendance entry (2026-09-30): shown only while the tenant's
+  // The Attendance entries (2026-09-30): shown only while the tenant's
   // attendance module is enabled. The flag rides the profile's `attendance`
   // mirror — no second request — and an absent mirror (older backend,
-  // pre-onboarding) fails HIDDEN. The hub's own focus gate covers the
-  // stale-mirror race: a tap that somehow lands before setup completes is
-  // replaced into the wizard, never an empty dashboard. (Defined after the
-  // loading/error early returns, where `profile` is narrowed non-null.)
+  // pre-onboarding) fails HIDDEN. 2026-10 (CAP-6) the two entries SPLIT
+  // targets: the pulse card goes straight to the Today dashboard, and the
+  // plain tile opens the Attendance TAB page — an incomplete setup surfaces
+  // there as the setup banner; neither lands on the setup-only hub.
+  // (Defined after the loading/error early returns, where `profile` is
+  // narrowed non-null.)
   const plainAttendanceTile = (
       <Tile
         icon={
@@ -217,8 +219,8 @@ export default function HomeScreen({ navigation }: Props) {
         }
         iconBg={colors.status.progress.bg}
         title="Attendance"
-        subtitle="Who's in, leave, offices & team"
-        onPress={() => navigation.navigate('AttendanceHome')}
+        subtitle="Today, monthly & leave"
+        onPress={() => navigation.navigate('Attendance')}
       />
     );
 
@@ -226,7 +228,7 @@ export default function HomeScreen({ navigation }: Props) {
   // flight); if that request fails the plain tile keeps the entry point.
   const attendanceTile =
     profile.attendance?.attendanceEnabled !== true ? null : pulse.status === 'ready' ? (
-      <TodayPulseCard pulse={pulse} onPress={() => navigation.navigate('AttendanceHome')} />
+      <TodayPulseCard pulse={pulse} onPress={() => navigation.navigate('AttendanceDashboard')} />
     ) : pulse.status === 'loading' ? (
       <View accessibilityLabel="Loading today's attendance">
         <Skeleton rows={1} height={150} />

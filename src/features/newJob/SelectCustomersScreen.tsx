@@ -14,8 +14,8 @@
  *
  * Customers come straight from the shared `useCustomers` store (the same
  * fetch New Job already made) — no extra request, and the rows here can
- * never disagree with the ones on the Customers tab. Rows keep the store's
- * order; only the caller's tiles are recency-sorted.
+ * never disagree with the ones on the Customers screen. Rows keep the
+ * store's order; only the caller's tiles are recency-sorted.
  */
 import { useMemo, useState } from 'react';
 import {

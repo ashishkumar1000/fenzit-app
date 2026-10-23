@@ -1,7 +1,12 @@
 /**
- * features/attendance/home — Attendance Home shim (Story 15-6).
+ * features/attendance/home — the owner's attendance surfaces.
  *
- * Two tiles (Offices + Settings) for 15-6; future stories (15-8 wizard,
- * 19+ dashboard) extend the screen without breaking 15-6's nav.
+ * AttendanceHomeScreen is the setup-only hub behind the Account tab's
+ * Attendance row (the 15-6 shim, gated by the 15-8 wizard). AttendanceTabHomeScreen
+ * is the Attendance TAB page (2026-10 footer restructure): the "Every day"
+ * tiles + the setup banner. The basenames deliberately differ —
+ * `AttendanceTabScreen.tsx` is the technician's tab screen in
+ * features/attendance/me/.
  */
 export { default as AttendanceHomeScreen } from './AttendanceHomeScreen';
+export { default as AttendanceTabHomeScreen } from './AttendanceTabHomeScreen';

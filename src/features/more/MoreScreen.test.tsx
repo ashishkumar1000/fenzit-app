@@ -174,12 +174,16 @@ describe('MoreScreen wiring', () => {
     });
     expect(mockNavigate).toHaveBeenCalledWith('Customers');
 
-    // The Attendance row is the entry point for the attendance surface
-    // (Offices + Settings + later the dashboard). It must navigate to the
-    // Attendance Home route, not a dead-end.
+    // The Attendance row is the entry point for the attendance SETUP hub
+    // (the daily reads live on the Attendance tab since 2026-10). It must
+    // navigate to the hub route, not a dead-end, and its subtitle must
+    // promise only the setup surfaces the hub actually holds.
     const attendanceRow = root
       .findAllByType(MoreRow)
       .find(t => t.props.title === 'Attendance');
+    expect(subtitleTexts(renderScreen())).toContain(
+      'Offices, team, weekly off & holidays',
+    );
     act(() => {
       attendanceRow?.props.onPress();
     });

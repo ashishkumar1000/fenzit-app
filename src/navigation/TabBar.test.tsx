@@ -41,8 +41,9 @@ const labelNode = (root: ReactTestRenderer.ReactTestInstance, text: string) =>
 
 describe('TabBar labels', () => {
   it('every label caps at 1.3x, one line, and shrinks to fit instead of truncating', () => {
-    const { root, r } = setup(['Home', 'Jobs', 'Customers', 'More'], { More: 'Account' });
-    for (const t of ['Home', 'Jobs', 'Customers', 'Account']) {
+    // The shipped owner footer (2026-10: Attendance took Customers' slot).
+    const { root, r } = setup(['Home', 'Jobs', 'Attendance', 'More'], { More: 'Account' });
+    for (const t of ['Home', 'Jobs', 'Attendance', 'Account']) {
       const n = labelNode(root, t);
       expect(n.props.maxFontSizeMultiplier).toBe(1.3);
       expect(n.props.adjustsFontSizeToFit).toBe(true);

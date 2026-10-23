@@ -29,7 +29,14 @@ export type MainTabParamList = {
    * re-apply on every later tab-bar focus and fight a manually picked scope.
    */
   Jobs: { scope?: JobScope } | undefined;
-  Customers: undefined;
+  /**
+   * The owner's Attendance tab page (2026-10: Attendance took the Customers
+   * footer slot) — the "Every day" tiles + the setup banner. Shares its key
+   * with the technician tab of the same name; the two never mount in one
+   * tree, and a root-stack caller reaches either only through its tab group
+   * (see the TechnicianTabs delegation note below).
+   */
+  Attendance: undefined;
   More: undefined;
 };
 
@@ -136,6 +143,15 @@ export type RootStackParamList = {
   /** Owner-only customer profile + job history — opened with the customer's uuid. */
   CustomerDetail: { customerId: string };
   /**
+   * The tenant's customer list, stacked on the root stack (2026-10:
+   * Attendance took the footer slot; the Account tab's Customers row pushes
+   * this). The route NAME is load-bearing: `AddCustomerReturnRouteName`
+   * carries `'Customers'` as the post-save return target and
+   * `AddCustomerScreen` treats it as defaulting to `'Customers'`. No params —
+   * the list reads the shared `useCustomers` store.
+   */
+  Customers: undefined;
+  /**
    * Full-page add/edit customer form — one route for both, the
    * `OfficeFormScreen` precedent. `returnRouteName` decides post-save
    * behavior — see `AddCustomerScreen`'s file doc. `pickedAddress` is set by
@@ -199,7 +215,8 @@ export type RootStackParamList = {
   /**
    * Story 19-4 — the FR-24 owner dashboard (Today snapshot: five KPI
    * tiles, flag strips, office filter). Owner-only by the BE route;
-   * entered only from AttendanceHome's "Today" tile.
+   * entered from the Attendance tab's "Today" tile and Home's today-pulse
+   * card.
    */
   AttendanceDashboard: undefined;
   /**

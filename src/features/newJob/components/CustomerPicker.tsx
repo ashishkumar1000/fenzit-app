@@ -70,7 +70,7 @@ export function CustomerPicker({ title, options, value, onChange, onBrowseAll }:
   /**
    * Empty query → the default surface: the two most recently served
    * customers plus the "+N more" tile. Non-empty → every match across the
-   * whole store (same name-or-phone semantics as the Customers tab), so a
+   * whole store (same name-or-phone semantics as the Customers screen), so a
    * search like "pri" finds rows beyond the idle tiles without leaving
    * the screen.
    */

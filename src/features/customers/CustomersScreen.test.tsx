@@ -4,13 +4,23 @@
  * else to read back here — `AddCustomerScreen` updates the shared
  * `useCustomers` store directly, so this screen's own subscription
  * re-renders on its own; that contract is `AddCustomerScreen.test.tsx`'s job.
+ *
+ * 2026-10: the screen stacked on the root stack (Attendance took the footer
+ * slot) — the header's back affordance is pinned here too.
  */
 const mockNavigate = jest.fn();
+const mockGoBack = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: mockNavigate }),
+  useNavigation: () => ({
+    navigate: mockNavigate,
+    goBack: mockGoBack,
+    canGoBack: jest.fn(() => mockCanGoBack),
+  }),
   useFocusEffect: jest.fn(),
 }));
+
+let mockCanGoBack = true;
 
 jest.mock('./useCustomers', () => ({
   useCustomers: jest.fn(),
@@ -58,6 +68,7 @@ function renderScreen() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockStore();
+  mockCanGoBack = true;
 });
 
 it('pushes AddCustomer with returnRouteName Customers when "Add" is pressed', () => {
@@ -70,6 +81,37 @@ it('pushes AddCustomer with returnRouteName Customers when "Add" is pressed', ()
 
   expect(mockNavigate).toHaveBeenCalledWith('AddCustomer', {
     returnRouteName: 'Customers',
+  });
+});
+
+describe('the back affordance (stacked-screen contract)', () => {
+  const findBack = (root: ReactTestRenderer.ReactTestInstance) =>
+    root.findAll(
+      (node) =>
+        node.props.accessibilityLabel === 'Go back' &&
+        typeof node.props.onPress === 'function',
+    );
+
+  it('goes back when there is a screen beneath (the Account tab push)', () => {
+    const root = renderScreen();
+    expect(findBack(root).length).toBeGreaterThan(0);
+    act(() => {
+      findBack(root)[0].props.onPress();
+    });
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the tabs when the screen is the stack root (deep link)', () => {
+    // goBack would strand the user with nothing beneath — reset to the
+    // tabs (the same both-branch contract the attendance screens pin).
+    mockCanGoBack = false;
+    const root = renderScreen();
+    act(() => {
+      findBack(root)[0].props.onPress();
+    });
+    expect(mockGoBack).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('MainTabs');
   });
 });
 
