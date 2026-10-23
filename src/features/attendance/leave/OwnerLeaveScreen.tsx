@@ -13,6 +13,14 @@
  * list work the same way but morphs the sheet back to the REFRESHED detail
  * view; 409 already-handled leaves the sheet open on the notice and
  * refetches the row's truth.
+ *
+ * Dual-hosting (CAP-1): the screen stays a pushed root-stack route AND
+ * embeds as the Attendance tab page's Leave pane. `embedded` drops the
+ * pushed-screen chrome the pane host already provides (back header, top
+ * SafeArea), starts the queue at the host's `initialTab` (always 'pending'
+ * today) and makes the `{ tab }` param consume PUSHED-MODE ONLY — embedded,
+ * `route.params` (when a host ever passes one) is the tab PAGE's param and
+ * must never be read or cleared here.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
@@ -20,19 +28,33 @@ import { CalendarOff, Users } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, InlineError, SegmentedControl, Skeleton } from '../../../components/ui';
+import { LeaveEmptyArt } from './LeaveEmptyArt';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { attendanceLeaveService } from '../../../services';
 import type { ApiError } from '../../../services/api/apiError';
 import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import type { RootStackParamList } from '../../../navigation/types';
 import { VIEW_ONLY_REASON, useCanWrite } from '../../auth';
+import { loadMyProfile } from '../../profile';
 import ScreenHeader from '../offices/ScreenHeader';
 import { LeaveRequestRow as LeaveRequestRowView } from './LeaveRequestRow';
 import { LeaveDetailSheet, type LeaveDetailActionState } from './LeaveDetailSheet';
 import { classifyLeaveWriteFailure, type LeaveTab } from './ownerLeaveModel';
 import { useOwnerLeaveQueue } from './useOwnerLeaveQueue';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'OwnerLeave'>;
+type StackProps = NativeStackScreenProps<RootStackParamList, 'OwnerLeave'>;
+
+type Props = Omit<StackProps, 'route'> & {
+  /** The navigator's route — absent when hosted as a tab pane (the page
+   *  owns the route; embedded panes never read its params). */
+  route?: StackProps['route'];
+  /** Tab-pane hosting: no pushed-screen header, no top SafeArea inset,
+   *  and the `{ tab }` param consume is pushed-mode only. */
+  embedded?: boolean;
+  /** Pane hosting's entry tab (the pushed mode reads the `{ tab }` route
+   *  param instead); defaults to 'pending'. */
+  initialTab?: LeaveTab;
+};
 
 const SEGMENTS = [
   { value: 'pending' as const, label: 'Pending' },
@@ -46,13 +68,17 @@ const SEGMENTS = [
  * (and its fetches) from ever running for a viewer.
  */
 export default function OwnerLeaveScreen(props: Props) {
+  const { navigation, embedded } = props;
   const canWrite = useCanWrite();
   if (!canWrite) {
     return (
-      <SafeAreaView style={styles.root} edges={['top']}>
-        <ScreenHeader title="Leave" onBack={() => props.navigation.goBack()} />
+      <SafeAreaView style={styles.root} edges={embedded ? [] : ['top']}>
+        {embedded ? null : (
+          <ScreenHeader title="Leave" onBack={() => navigation.goBack()} />
+        )}
         <View style={styles.emptyWrap}>
           <EmptyState
+            illustration={<LeaveEmptyArt />}
             icon={<CalendarOff size={24} color={colors.primary} strokeWidth={1.5} />}
             title={VIEW_ONLY_REASON}
             description="Leave requests can only be seen and decided by your company admin."
@@ -64,10 +90,17 @@ export default function OwnerLeaveScreen(props: Props) {
   return <OwnerLeaveContent {...props} />;
 }
 
-function OwnerLeaveContent({ navigation, route }: Props) {
+function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
+  // Entry tab: pushed mode reads the merged `{ tab }` deep-link param; pane
+  // mode takes the host's prop (the page-level param is the TAB PAGE's —
+  // the Review landing — never this pane's).
   const queue = useOwnerLeaveQueue(
     navigation,
-    route.params?.tab === 'all' ? 'all' : 'pending',
+    embedded
+      ? (initialTab ?? 'pending')
+      : route?.params?.tab === 'all'
+        ? 'all'
+        : 'pending',
   );
   const { state, activeTab, refreshing, refreshFailedTab } = queue;
 
@@ -85,13 +118,17 @@ function OwnerLeaveContent({ navigation, route }: Props) {
     };
   }, []);
 
-  // Deep link / on-behalf landing: consume the merged `{ tab }` param.
-  const navTab = route.params?.tab;
+  // Deep link / on-behalf landing: consume the merged `{ tab }` param —
+  // pushed mode ONLY. Embedded, the route belongs to the tab PAGE (its
+  // `tab` is this story's Review landing: 'leave'), which this pane must
+  // never read or clear.
+  const navTab = route?.params?.tab;
   useEffect(() => {
+    if (embedded) return;
     if (navTab !== 'pending' && navTab !== 'all') return;
     queue.consumeTabParam(navTab, () => navigation.setParams({ tab: undefined }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navTab]);
+  }, [navTab, embedded]);
 
   // --- The decision write (D2 lifecycle; 17-7 D3 adds the revoke). --------
   const runWrite = useCallback(
@@ -119,6 +156,10 @@ function OwnerLeaveContent({ navigation, route }: Props) {
           queue.dispatch({ type: 'removeRow', id: view.id }); // Pending: filtered
           queue.dispatch({ type: 'replaceRow', row: view }); // All: in place
           queue.dispatch({ type: 'markStale', tabs: ['pending', 'all'] });
+          // The decision must reach the shared /users/me mirror too — the
+          // Attendance tab's badge and Home's banner read it (forced past
+          // the focus throttle).
+          void loadMyProfile({ force: true });
           if (action === 'revoke') {
             // D3: the stage morphs back to the REFRESHED detail view (the
             // write response is authoritative — divergence is absorbed;
@@ -155,8 +196,10 @@ function OwnerLeaveContent({ navigation, route }: Props) {
   const page = state[activeTab];
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <ScreenHeader title="Leave" onBack={() => navigation.goBack()} />
+    <SafeAreaView style={styles.root} edges={embedded ? [] : ['top']}>
+      {embedded ? null : (
+        <ScreenHeader title="Leave" onBack={() => navigation.goBack()} />
+      )}
 
       <FlatList
         contentContainerStyle={styles.content}
@@ -220,6 +263,7 @@ function OwnerLeaveContent({ navigation, route }: Props) {
           ) : page.items.length === 0 ? (
             <View style={styles.emptyWrap}>
               <EmptyState
+                illustration={<LeaveEmptyArt />}
                 icon={<CalendarOff size={24} color={colors.primary} strokeWidth={1.5} />}
                 title={activeTab === 'pending' ? 'No pending requests' : 'No leave requests yet'}
                 description={
@@ -270,8 +314,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfacePage,
   },
   content: {
-    padding: spacing.s4,
+    paddingTop: spacing.s4,
+    paddingHorizontal: spacing.s4,
     gap: spacing.s3,
+    // The empty posture centers in the pane (owner mockup 2026-10-23):
+    // flexGrow lets emptyWrap's flex centering own the viewport height.
+    flexGrow: 1,
   },
   listHeader: {
     gap: spacing.s3,

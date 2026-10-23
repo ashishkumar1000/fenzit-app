@@ -52,6 +52,23 @@ function officeRow(overrides: Record<string, unknown> = {}): Record<string, unkn
   return { id: 'o1', name: 'Hero wala', tracked: 3, checkedIn: 2, ...overrides };
 }
 
+/** A wire-valid pulse row — every field the BE's employees feed owes. */
+function pulseRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    employeeId: 'e1',
+    employeeName: 'Rahul Verma',
+    phone: '+91 9810000001',
+    officeName: 'Main Office',
+    status: 'checked_in',
+    checkInAt: '2026-09-30T09:30:00+05:30',
+    checkoutAt: null,
+    lateMinutes: null,
+    workedMinutes: null,
+    leavePart: null,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   // resetAllMocks (not clearAllMocks) — an unconsumed mockResolvedValueOnce
   // would leak into the next test's first fetch.
@@ -248,5 +265,51 @@ describe('null officeName (the removed office case)', () => {
     expect(res.flags.checkoutMissing[0].officeName).toBeNull();
     // …and flagRowDetail (dashboardModel) renders it without an office
     // caption — pinned in dashboardModel.test.
+  });
+});
+
+describe('normalizeEmployees — the pulse feed is OPTIONAL but fail-closed when present', () => {
+  it('an envelope WITHOUT employees is an older deployed BE — null, not a failure', () => {
+    const res = normalizeDashboard(envelope());
+    expect(res.employees).toBeNull();
+  });
+
+  it('a valid rows array passes through in wire order', () => {
+    const res = normalizeDashboard(
+      envelope({ employees: [pulseRow(), pulseRow({ employeeId: 'e2', employeeName: 'Priya Sharma', status: 'on_leave', checkInAt: null, leavePart: 'full_day' })] }),
+    );
+    expect(res.employees).toHaveLength(2);
+    expect(res.employees![0].employeeName).toBe('Rahul Verma');
+    expect(res.employees![1].status).toBe('on_leave');
+    expect(res.employees![1].leavePart).toBe('full_day');
+  });
+
+  it('PRESENT but malformed still fails closed (the offices doctrine)', () => {
+    // null is malformed presence — NOT the absent field.
+    expect(() => normalizeDashboard(envelope({ employees: null }))).toThrow('dashboard:');
+    expect(() => normalizeDashboard(envelope({ employees: 'nope' }))).toThrow('dashboard:');
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ employeeId: '' })] })),
+    ).toThrow('dashboard:');
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ status: 'vacation' })] })),
+    ).toThrow('dashboard:');
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ checkInAt: 'yesterday' })] })),
+    ).toThrow('dashboard:');
+    // The detail scalars are validated too — a wrong-typed one rejects the
+    // whole envelope rather than rendering nonsense in a tag.
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ checkoutAt: 42 })] })),
+    ).toThrow('dashboard:');
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ lateMinutes: -5 })] })),
+    ).toThrow('dashboard:');
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ workedMinutes: 'lots' })] })),
+    ).toThrow('dashboard:');
+    expect(() =>
+      normalizeDashboard(envelope({ employees: [pulseRow({ leavePart: 'half' })] })),
+    ).toThrow('dashboard:');
   });
 });

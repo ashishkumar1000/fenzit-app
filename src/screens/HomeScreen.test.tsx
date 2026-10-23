@@ -316,3 +316,98 @@ describe('HomeScreen — the bell on the first-run Home', () => {
 beforeEach(() => {
   mockCanWrite = true;
 });
+
+describe('HomeScreen — the leave banner (CAP-4)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPulse.value = { status: 'error' };
+    mockCanWrite = true;
+  });
+
+  it('shows the banner on the FIRST-RUN Home too — a pending request cannot depend on the account having jobs', () => {
+    mockProfileState.profile = ownerProfile({
+      attendanceEnabled: true,
+      pendingLeaveRequests: 2,
+    });
+    const root = renderScreen();
+
+    expect(texts(root)).toContain('2 leave requests');
+    expect(texts(root)).toContain('Action pending approval');
+    expect(texts(root)).toContain('Review');
+    // Owner ruling 2026-10-23: the banner LEADS the section — above the
+    // "Today's jobs" title, not under it.
+    const order = texts(root);
+    expect(order.indexOf('2 leave requests')).toBeLessThan(
+      order.indexOf("Today's jobs"),
+    );
+  });
+
+  it('reads the singular count honestly ("1 leave request")', () => {
+    mockProfileState.profile = ownerProfile({
+      attendanceEnabled: true,
+      pendingLeaveRequests: 1,
+    });
+    const root = renderScreen();
+
+    expect(texts(root)).toContain('1 leave request');
+    expect(texts(root)).not.toContain('1 leave requests');
+  });
+
+  it('no banner at a zero count (fail-hidden, not "0 requests")', () => {
+    mockProfileState.profile = ownerProfile({
+      attendanceEnabled: true,
+      pendingLeaveRequests: 0,
+    });
+    const root = renderScreen();
+
+    expect(texts(root)).not.toContain('Action pending approval');
+    expect(texts(root)).not.toContain('Review');
+  });
+
+  it('fails HIDDEN when the count is absent from the mirror (older backend)', () => {
+    mockProfileState.profile = ownerProfile({ attendanceEnabled: true });
+    const root = renderScreen();
+
+    expect(texts(root)).not.toContain('Action pending approval');
+  });
+
+  it('shows the banner on the ESTABLISHED dashboard (the branch most owners live in)', () => {
+    const base = ownerProfile({
+      attendanceEnabled: true,
+      pendingLeaveRequests: 1,
+    }) as Record<string, unknown>;
+    mockProfileState.profile = {
+      ...base,
+      technicianCount: 2,
+      jobCounts: { today: 1, upcoming: 0, overdue: 0, completed: 3, cancelled: 0 },
+    };
+    const root = renderScreen();
+
+    expect(texts(root)).toContain('1 leave request');
+    expect(texts(root)).toContain('Action pending approval');
+  });
+
+  it('Review opens the Attendance tab pre-selected to Leave (the one-shot param)', () => {
+    mockProfileState.profile = ownerProfile({
+      attendanceEnabled: true,
+      pendingLeaveRequests: 1,
+    });
+    const root = renderScreen();
+
+    // The house pressable walk-up: from the label Text to its
+    // onPress-carrying ancestor (the sole press target on the banner).
+    let node = root.find(
+      (n: ReactTestRenderer.ReactTestInstance) =>
+        n.type === Text && n.props.children === 'Review',
+    ).parent;
+    while (node != null && typeof node.props.onPress !== 'function') {
+      node = node.parent;
+    }
+    expect(node).not.toBeNull();
+    act(() => {
+      node!.props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('Attendance', { tab: 'leave' });
+  });
+});

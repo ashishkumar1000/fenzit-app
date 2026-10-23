@@ -10,10 +10,12 @@ import { Button } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
 
 type Props = {
-  primaryLabel: string;
-  onPrimary: () => void;
-  primaryDisabled: boolean;
-  primaryLoading: boolean;
+  /** Omitted on a step whose only action is the secondary (Holidays:
+   *  "Skip for now" IS the way forward — two buttons, one behaviour). */
+  primaryLabel?: string;
+  onPrimary?: () => void;
+  primaryDisabled?: boolean;
+  primaryLoading?: boolean;
   /** The explanatory caption under a disabled primary; null hides it. */
   caption: string | null;
   secondaryLabel?: string;
@@ -31,14 +33,16 @@ export function WizardFooter({
 }: Props) {
   return (
     <View>
-      <Button
-        fullWidth
-        size="lg"
-        onPress={onPrimary}
-        disabled={primaryDisabled}
-        loading={primaryLoading}>
-        {primaryLabel}
-      </Button>
+      {primaryLabel ? (
+        <Button
+          fullWidth
+          size="lg"
+          onPress={onPrimary}
+          disabled={primaryDisabled}
+          loading={primaryLoading}>
+          {primaryLabel}
+        </Button>
+      ) : null}
       {secondaryLabel && onSecondary ? (
         <Button
           fullWidth

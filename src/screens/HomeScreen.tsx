@@ -26,6 +26,7 @@ import {
   QuickActions,
   TodayPulseCard,
   NoJobsCard,
+  LeaveReviewBanner,
   TodaysJobsSection,
   hasAnyJobCount,
   useTodayPulse,
@@ -56,7 +57,7 @@ export default function HomeScreen({ navigation }: Props) {
   // error early returns — during those renders profile is still null.
   const hasTechnicians = (profile?.technicianCount ?? 0) > 0;
   // A viewer sees the dashboard but never the create/add tiles; the leave
-  // review strip is admin-only (a viewer cannot read leave requests).
+  // review banner is admin-only (a viewer cannot read leave requests).
   const canWrite = useCanWrite();
   const isAdmin = isAdminRole(useSessionRole());
 
@@ -100,11 +101,13 @@ export default function HomeScreen({ navigation }: Props) {
     navigation.navigate('Notifications');
   }, [navigation]);
 
-  // 20-1 leave-review strip: opens the owner's Leave screen, pre-set to
-  // the Pending tab. MUST live with the other callbacks — hooks can never
-  // run after this screen's loading/error early returns.
-  const handlePressLeaveStrip = useCallback(() => {
-    navigation.navigate('OwnerLeave', { tab: 'pending' });
+  // 20-1 leave-review strip → CAP-4 banner: Review lands on the Attendance
+  // TAB page with the Leave pane pre-selected — the page consumes the
+  // one-shot `tab` param on arrival (the Jobs `scope` convention). MUST
+  // live with the other callbacks — hooks can never run after this
+  // screen's loading/error early returns.
+  const handlePressLeaveBanner = useCallback(() => {
+    navigation.navigate('Attendance', { tab: 'leave' });
   }, [navigation]);
 
   const quickActions = !canWrite ? (
@@ -190,10 +193,11 @@ export default function HomeScreen({ navigation }: Props) {
   const businessName = profile.tenant.companyName;
   const { jobCounts, technicianCount } = profile;
 
-  // 20-1 (AC 12): the leave-review strip's count rides the same attendance
-  // mirror the Attendance tile gates on — no second request. Only an
-  // ENROLLED attendance tenant shows it, and count > 0 gates the render
-  // (the 15-6 fail-HIDDEN idiom; an older backend answers 0 → absent).
+  // 20-1 (AC 12) → CAP-4: the leave-review banner's count rides the same
+  // attendance mirror the Attendance tile gates on — no second request.
+  // Only an ENROLLED attendance tenant shows it, and count > 0 gates the
+  // render (the 15-6 fail-HIDDEN idiom; an older backend answers 0 →
+  // absent).
   const pendingLeaveRequests =
     isAdmin && profile.attendance?.attendanceEnabled === true
       ? (profile.attendance.pendingLeaveRequests ?? 0)
@@ -273,6 +277,17 @@ export default function HomeScreen({ navigation }: Props) {
           {attendanceTile}
 
           <View style={styles.jobsSection}>
+            {/* First-run accounts take this branch instead of
+                TodaysJobsSection, so the pending-leave banner must be
+                reached here too — and it LEADS the section, above the
+                title (owner ruling 2026-10-23): a request awaiting
+                approval outranks the jobs list. */}
+            {pendingLeaveRequests > 0 ? (
+              <LeaveReviewBanner
+                count={pendingLeaveRequests}
+                onPress={handlePressLeaveBanner}
+              />
+            ) : null}
             <Text style={styles.sectionTitle}>Today's jobs</Text>
             <NoJobsCard hasTechnicians={hasTechnicians} canWrite={canWrite} />
           </View>
@@ -306,7 +321,7 @@ export default function HomeScreen({ navigation }: Props) {
           technicianCount={technicianCount}
           technicians={profile.technicians ?? []}
           pendingLeaveRequests={pendingLeaveRequests}
-          onPressLeaveStrip={handlePressLeaveStrip}
+          onPressLeaveBanner={handlePressLeaveBanner}
           onPressJob={handlePressJob}
           onPressStrip={() => handleTilePress('overdue')}
           onPressCreate={canWrite ? handleNewJob : undefined}

@@ -287,7 +287,9 @@ export default function SetupWizardScreen({ navigation }: Props) {
       banner={banners}
       footer={
         <WizardFooter
-          primaryLabel={isFinalStep ? 'Enable attendance' : 'Continue'}
+          primaryLabel={
+            step === 'holidays' ? undefined : isFinalStep ? 'Enable attendance' : 'Continue'
+          }
           onPrimary={isFinalStep ? wizard.complete : wizard.advance}
           primaryDisabled={isFinalStep ? completionReason !== null : gateReason !== null}
           primaryLoading={isFinalStep ? wizard.isCompleting : wizard.isAdvancing}
@@ -295,7 +297,8 @@ export default function SetupWizardScreen({ navigation }: Props) {
           secondaryLabel={step === 'holidays' ? 'Skip for now' : undefined}
           onSecondary={step === 'holidays' ? wizard.advance : undefined}
         />
-      }>
+      }
+      scrolls={step !== 'employees'}>
       {body}
     </WizardStepFrame>
   );

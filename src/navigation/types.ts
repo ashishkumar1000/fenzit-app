@@ -31,12 +31,21 @@ export type MainTabParamList = {
   Jobs: { scope?: JobScope } | undefined;
   /**
    * The owner's Attendance tab page (2026-10: Attendance took the Customers
-   * footer slot) — the "Every day" tiles + the setup banner. Shares its key
-   * with the technician tab of the same name; the two never mount in one
-   * tree, and a root-stack caller reaches either only through its tab group
-   * (see the TechnicianTabs delegation note below).
+   * footer slot; CAP-1 turned the tiles into a Today | Monthly | Leave
+   * segmented page). Shares its key with the technician tab of the same
+   * name; the two never mount in one tree, and a root-stack caller reaches
+   * either only through its tab group (see the TechnicianTabs delegation
+   * note below).
+   *
+   * `tab` — Home's leave-review banner's Review landing (CAP-4):
+   * `navigate('Attendance', { tab: 'leave' })` opens the page on that pane.
+   * Tab params persist across navigations, so the page consumes and clears
+   * the param on arrival (the Jobs `scope` convention) — an uncleared param
+   * would re-select the pane on every later focus and fight manual segment
+   * taps. Optional union so plain `navigate('Attendance')` call sites keep
+   * typechecking.
    */
-  Attendance: undefined;
+  Attendance: { tab?: 'today' | 'monthly' | 'leave' } | undefined;
   More: undefined;
 };
 

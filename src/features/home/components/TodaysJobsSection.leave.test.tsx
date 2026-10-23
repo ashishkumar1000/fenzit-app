@@ -1,14 +1,16 @@
 /**
- * TodaysJobsSection × the leave-review strip (20-1). The strip's own
- * suite (`LeaveReviewStrip.test.tsx`) pins the strip's anatomy; this one
- * pins the CALLER-side wiring:
+ * TodaysJobsSection × the leave-review banner (20-1 AC 12 → CAP-4;
+ * requirement superseded 2026-10: the pointer-row strip became the
+ * LeaveReviewBanner, whose own suite
+ * (`LeaveReviewBanner.test.tsx`) pins the banner's anatomy). This one
+ * pins the CALLER-side wiring, which the supersession did NOT change:
  *
- *  - the strip renders only when the count is a POSITIVE number AND a
+ *  - the banner renders only when the count is a POSITIVE number AND a
  *    routing callback arrived (a null count fail-hides, the 19-5a rule);
- *  - "You're all clear" is suppressed while the strip shows — pending
+ *  - "You're all clear" is suppressed while the banner shows — pending
  *    leave requests are something needing attention, and the empty card
  *    would lie under it;
- *  - the all-clear returns only when the strip leaves (the decision made
+ *  - the all-clear returns only when the banner leaves (the decision made
  *    or the count read 0 on refetch).
  */
 import React from 'react';
@@ -17,7 +19,7 @@ import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
 import type { ProfileTechnician } from '../../../services';
 import type { TodaysJobsSectionProps } from './TodaysJobsSection';
-import { LeaveReviewStrip } from './LeaveReviewStrip';
+import { LeaveReviewBanner } from './LeaveReviewBanner';
 import { TodaysJobsSection } from './TodaysJobsSection';
 
 function baseProps(pendingLeaveRequests?: number): TodaysJobsSectionProps {
@@ -37,7 +39,7 @@ function baseProps(pendingLeaveRequests?: number): TodaysJobsSectionProps {
     technicianCount: 1,
     technicians: [technician],
     pendingLeaveRequests,
-    onPressLeaveStrip: jest.fn(),
+    onPressLeaveBanner: jest.fn(),
     onPressJob: jest.fn(),
     onPressStrip: jest.fn(),
     onPressCreate: jest.fn(),
@@ -61,26 +63,26 @@ function texts(rendered: ReactTestRenderer): string[] {
     );
 }
 
-describe('the leave strip wiring (20-1)', () => {
-  it('count 3 + a routing callback: the strip renders; one tap files ONE route', () => {
+describe('the leave banner wiring (20-1 → CAP-4)', () => {
+  it('count 3 + a routing callback: the banner renders; one tap files ONE route', () => {
     const props = baseProps(3);
-    const onPressLeaveStrip = props.onPressLeaveStrip as jest.Mock;
+    const onPressLeaveBanner = props.onPressLeaveBanner as jest.Mock;
     let rendered!: ReactTestRenderer;
     act(() => {
       rendered = create(<TodaysJobsSection {...props} />);
     });
     mountedRenderers.push(rendered);
 
-    expect(rendered.root.findAllByType(LeaveReviewStrip)).toHaveLength(1);
-    // The tap-through goes to the OWNER'S pending queue.
-    const strip = rendered.root.findAllByType(LeaveReviewStrip)[0];
+    expect(rendered.root.findAllByType(LeaveReviewBanner)).toHaveLength(1);
+    // The tap-through lands on the Attendance tab's Leave pane.
+    const banner = rendered.root.findAllByType(LeaveReviewBanner)[0];
     act(() => {
-      strip.props.onPress();
+      banner.props.onPress();
     });
-    expect(onPressLeaveStrip).toHaveBeenCalledTimes(1);
+    expect(onPressLeaveBanner).toHaveBeenCalledTimes(1);
   });
 
-  it('count 0 hides the strip; a MISSING count fail-hides too', () => {
+  it('count 0 hides the banner; a MISSING count fail-hides too', () => {
     for (const count of [0, undefined]) {
       const props = baseProps(count);
       let rendered!: ReactTestRenderer;
@@ -88,14 +90,14 @@ describe('the leave strip wiring (20-1)', () => {
         rendered = create(<TodaysJobsSection {...props} />);
       });
       mountedRenderers.push(rendered);
-      expect(rendered.root.findAllByType(LeaveReviewStrip)).toHaveLength(0);
+      expect(rendered.root.findAllByType(LeaveReviewBanner)).toHaveLength(0);
       const r = rendered;
       mountedRenderers.splice(mountedRenderers.indexOf(r), 1);
       act(() => r.unmount());
     }
   });
 
-  it('"You\'re all clear" is suppressed while the strip shows', () => {
+  it('"You\'re all clear" is suppressed while the banner shows', () => {
     const props = baseProps(2);
     let rendered!: ReactTestRenderer;
     act(() => {
@@ -105,10 +107,11 @@ describe('the leave strip wiring (20-1)', () => {
 
     const joined = texts(rendered).join('\n');
     expect(joined).not.toContain("You're all clear");
-    expect(joined).toContain('Leave requests to review');
+    expect(joined).toContain('2 leave requests');
+    expect(joined).toContain('Action pending approval');
   });
 
-  it('the all-clear RETURNS when the strip leaves (no pending requests, nothing else needs attention)', () => {
+  it('the all-clear RETURNS when the banner leaves (no pending requests, nothing else needs attention)', () => {
     const props = baseProps(0);
     let rendered!: ReactTestRenderer;
     act(() => {
@@ -118,6 +121,7 @@ describe('the leave strip wiring (20-1)', () => {
 
     const joined = texts(rendered).join('\n');
     expect(joined).toContain("You're all clear");
-    expect(joined).not.toContain('Leave requests to review');
+    expect(joined).not.toContain('leave requests');
+    expect(joined).not.toContain('Action pending approval');
   });
 });

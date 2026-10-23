@@ -110,6 +110,7 @@ describe('checkedInPct', () => {
   });
 });
 
+
 describe('flagStrips', () => {
   it('suppresses BOTH strips at zero — absent, not rendered-and-hidden', () => {
     expect(

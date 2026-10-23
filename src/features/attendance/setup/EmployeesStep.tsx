@@ -1,7 +1,16 @@
 /**
- * EmployeesStep — wizard step 5 (Story 15-8), enrolment-lite. The roster
- * is `GET /attendance/enrolments` (every tenant technician joined with
- * their access state); each row is a required office + an enable toggle.
+ * EmployeesStep — wizard's final step, enrolment-lite. The roster is
+ * `GET /attendance/enrolments` (every tenant technician joined with their
+ * access state); each row is an avatar, a status chip and an enable toggle,
+ * inside ONE grouped scrolling card — the roster is a FlatList (owner
+ * ruling 2026-10-23: a big team must virtualize, not stretch the step),
+ * with the search + count above and the info banner, the Enable attendance
+ * button and the gate line in the footer.
+ *
+ * Row chips (one status per row): "Hasn't signed in yet" (invited — the
+ * database refuses them), "Office: X" (tracked), "Starts DATE" (upcoming —
+ * the switch is disabled: a bare enable PUT clamps the start to today and
+ * deletes the future period, AD-8), "Not tracking attendance".
  *
  * UX-DR9 (switch-not-committed-until-office): toggling ON for an employee
  * with no office opens the office picker INLINE immediately and the switch
@@ -9,29 +18,30 @@
  * until a pick PUTs and the returned post-write state lands. Cancelling
  * the picker writes nothing and the switch springs back off. Toggling OFF
  * asks through the shared ConfirmDialog first (20-1), then DELETEs
- * (idempotent). Failures surface as the row's own banner and the
- * row keeps its pre-write server state (per-row retry = toggle again).
- *
- * Future start dates, reassignment and bulk-enable are 15-9's roster UI.
- * 15-9's one guard here: an UPCOMING row's switch is disabled with a hint
- * — a bare enable PUT clamps the start date to today and deletes the
- * future period (AD-8), so the wizard may never silently cancel a
- * future-dated enrolment; adjust it from the Team enrolment screen.
+ * (idempotent). Failures surface as the row's own banner and the row keeps
+ * its pre-write server state (per-row retry = toggle again).
  */
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import { Users } from 'lucide-react-native';
 import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Info, Search, Users, XCircle } from 'lucide-react-native';
+import {
+  Avatar,
   Button,
   Card,
   ConfirmDialog,
   EmptyState,
   InlineError,
+  Input,
   Skeleton,
   Switch,
 } from '../../../components/ui';
-import { XCircle } from 'lucide-react-native';
-import { colors, spacing, typography } from '../../../theme';
+import { colors, palette, radius, spacing, typography } from '../../../theme';
 import type { ApiError, EnrolmentOverview } from '../../../services';
 import type { Office } from '../../../types/office';
 import { enrolmentCoversToday } from './wizardModel';
@@ -53,6 +63,8 @@ type Props = {
   onDisable: (employeeId: string) => Promise<boolean>;
 };
 
+type Chip = { text: string; bg: string; fg: string; dot: string } | null;
+
 export function EmployeesStep({
   roster,
   liveOffices,
@@ -71,6 +83,8 @@ export function EmployeesStep({
   // 20-1 — the switch-off DELETE ask (same posture as the roster screen:
   // the DELETE fires only after the shared ConfirmDialog confirms).
   const [disableAskId, setDisableAskId] = useState<string | null>(null);
+  // The search narrows the roster by name (the mockup's "Search employees").
+  const [query, setQuery] = useState('');
 
   if (isLoading && !hasLoaded) {
     // First load: a roster-shaped shimmer, labelled (the 19-5 idiom); the
@@ -92,6 +106,19 @@ export function EmployeesStep({
       </View>
     );
   }
+
+  const shown = roster.filter((row) =>
+    row.employeeName.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+  // How many of the shown rows cannot be switched on right now (invited —
+  // the database refuses them — or a future start): the amber count tag.
+  const notEnabledCount = shown.filter((row) => {
+    const coversToday = enrolmentCoversToday(row, today);
+    return (
+      !coversToday &&
+      (row.memberStatus === 'invited' || row.attendanceStartDate !== null)
+    );
+  }).length;
 
   const pickerEmployee =
     roster.find((row) => row.employeeId === pickingId) ?? null;
@@ -130,80 +157,152 @@ export function EmployeesStep({
     void onEnable(employee.employeeId, officeId);
   };
 
-  return (
-    <View style={styles.stack}>
-      {roster.length === 0 ? (
-        <EmptyState
-          icon={<Users size={24} color={colors.primary} strokeWidth={1.5} />}
-          title="Invite technicians first"
-          description="Your team roster is empty. Invite technicians from the Home tab, then return here to switch on tracking."
-        />
-      ) : (
-        roster.map((row) => {
-          const rowErr = rowError(row.employeeId);
-          // Raw enrolment truth (never the kill-switch-gated module flag —
-          // see `enrolmentCoversToday`): covers-today drives the switch and
-          // the "Office:" line; a future start renders as upcoming.
-          const coversToday = enrolmentCoversToday(row, today);
-          const upcomingStart =
-            !coversToday && row.attendanceStartDate !== null
-              ? row.attendanceStartDate
-              : null;
-          // Invited people have not signed in yet; the database refuses them.
-          const notSignedIn = row.memberStatus === 'invited';
-          return (
-            <Card key={row.employeeId} padding="md">
-              <View style={styles.rowHead}>
-                <View style={styles.rowIdentity}>
-                  <Text style={styles.rowName} numberOfLines={1}>
-                    {row.employeeName}
-                  </Text>
-                  <Text style={styles.rowSub} numberOfLines={1}>
-                    {notSignedIn
-                      ? "Hasn't signed in yet. Tracking can start after their first sign-in."
-                      : coversToday
-                      ? row.officeId
-                        ? `Office: ${row.officeName ?? 'Unknown'}`
-                        : 'No office assigned'
-                      : upcomingStart !== null
-                        ? row.officeId
-                          ? `Starts ${upcomingStart} \u00B7 Office: ${row.officeName ?? 'Unknown'}`
-                          : `Starts ${upcomingStart}`
-                        : 'Not tracking attendance'}
-                  </Text>
-                </View>
-                {/* In-flight write feedback: the switch is disabled while
-                    the write is pending — the spinner makes the wait
-                    legible (matches the 15-9 roster rows). */}
-                {isRowPending(row.employeeId) ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : null}
-              </View>
-              <Switch
-                value={coversToday}
-                onValueChange={(nextValue) => onToggle(row, nextValue)}
-                label={
-                  upcomingStart !== null
-                    ? `Starts ${upcomingStart} \u00B7 tracking begins then — adjust from Team attendance`
-                    : `Track attendance for ${row.employeeName}`
-                }
-                // An invited person can be switched OFF (a covered row); only
-                // switching them ON is refused.
-                disabled={
-                  isRowPending(row.employeeId) ||
-                  upcomingStart !== null ||
-                  (notSignedIn && !coversToday)
-                }
-              />
-              {rowErr ? (
-                <View style={styles.rowError}>
-                  <InlineError message="Couldn't save this change. Try again." />
+  /** The row's one status chip — colours are the same tint families the
+   *  Avatar draws from (name-derived), never new hues. */
+  function chipFor(row: EnrolmentOverview): Chip {
+    const coversToday = enrolmentCoversToday(row, today);
+    const upcomingStart =
+      !coversToday && row.attendanceStartDate !== null
+        ? row.attendanceStartDate
+        : null;
+    if (row.memberStatus === 'invited' && !coversToday) {
+      return { text: "Hasn't signed in yet", bg: palette.amber50, fg: palette.amber700, dot: palette.amber500 };
+    }
+    if (coversToday) {
+      return {
+        text: row.officeId ? `${row.officeName ?? 'Office'} assigned` : 'No office assigned',
+        bg: palette.green50,
+        fg: palette.green700,
+        dot: palette.green500,
+      };
+    }
+    if (upcomingStart !== null) {
+      return { text: `Starts ${upcomingStart}`, bg: palette.blue50, fg: palette.blue700, dot: palette.blue500 };
+    }
+    return { text: 'Not tracking attendance', bg: palette.gray100, fg: palette.gray600, dot: palette.gray400 };
+  }
+
+  const renderRow = ({ item: row }: { item: EnrolmentOverview }) => {
+    const rowErr = rowError(row.employeeId);
+    // Raw enrolment truth (never the kill-switch-gated module flag —
+    // see `enrolmentCoversToday`): covers-today drives the switch and
+    // the chip; a future start renders as upcoming.
+    const coversToday = enrolmentCoversToday(row, today);
+    const upcomingStart =
+      !coversToday && row.attendanceStartDate !== null
+        ? row.attendanceStartDate
+        : null;
+    // Invited people have not signed in yet; the database refuses them.
+    const notSignedIn = row.memberStatus === 'invited';
+    const chip = chipFor(row);
+    // Rows that cannot be enabled yet (invited, or a future start) render
+    // dimmed — easy to scan past (owner ruling 2026-10-23).
+    const cannotEnable = upcomingStart !== null || (notSignedIn && !coversToday);
+    return (
+      // The row is a COLUMN: the write-failure banner gets the full width
+      // BELOW the row line — inside the row's flex it would squeeze into
+      // the sliver right of the switch (review finding 2026-10-23).
+      <View>
+        <View style={[styles.row, cannotEnable && styles.rowDisabled]}>
+          <Avatar name={row.employeeName} size="md" />
+          <View style={styles.rowText}>
+            <View style={styles.nameLine}>
+              <Text style={styles.rowName}>{row.employeeName}</Text>
+              {row.phone ? (
+                <View style={styles.phoneTag}>
+                  <Text style={styles.phoneTagText}>{row.phone}</Text>
                 </View>
               ) : null}
-            </Card>
-          );
-        })
-      )}
+            </View>
+            {chip ? (
+              <View style={[styles.chip, { backgroundColor: chip.bg }]}>
+                <View style={[styles.chipDot, { backgroundColor: chip.dot }]} />
+                <Text style={[styles.chipText, { color: chip.fg }]} numberOfLines={1}>
+                  {chip.text}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          {/* In-flight write feedback: the switch is disabled while the write
+              is pending — the spinner makes the wait legible. The switch is
+              bare (the chip carries the status — the mockup's anatomy). */}
+          {isRowPending(row.employeeId) ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Switch
+              value={coversToday}
+              onValueChange={(nextValue) => onToggle(row, nextValue)}
+              disabled={
+                isRowPending(row.employeeId) ||
+                upcomingStart !== null ||
+                (notSignedIn && !coversToday)
+              }
+            />
+          )}
+        </View>
+        {rowErr ? (
+          <View style={styles.rowError}>
+            <InlineError message="Couldn't save this change. Try again." />
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.stack}>
+      {/* The search earns its place only on a big roster — six or fewer
+         members are scannable at a glance (owner ruling 2026-10-23). */}
+      {roster.length > 6 ? (
+        <Input
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search employees..."
+          leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
+        />
+      ) : null}
+
+      <View style={styles.countRow}>
+        <View style={styles.countTag}>
+          <Text style={styles.countTagText}>
+            {`${shown.length} ${shown.length === 1 ? 'Member' : 'Members'} found`}
+          </Text>
+        </View>
+        {notEnabledCount > 0 ? (
+          <View style={styles.warnTag}>
+            <Text style={styles.warnTagText}>{`${notEnabledCount} not enabled`}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Card padding="none" style={styles.groupCard}>
+        <FlatList
+          data={shown}
+          keyExtractor={(row) => row.employeeId}
+          renderItem={renderRow}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <EmptyState
+              icon={<Users size={24} color={colors.primary} strokeWidth={1.5} />}
+              title={query ? 'No one matches' : 'Invite technicians first'}
+              description={
+                query
+                  ? 'No team member matches that search.'
+                  : 'Your team roster is empty. Invite technicians from the Home tab, then return here to switch on tracking.'
+              }
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      </Card>
+
+      <View style={styles.infoBanner}>
+        <Info size={16} color={colors.primary} strokeWidth={2} />
+        <Text style={styles.infoText}>
+          Tracking starts automatically on their first punch once active. You
+          can modify settings any time.
+        </Text>
+      </View>
 
       <OfficePickerSheet
         visible={pickerEmployee !== null}
@@ -235,33 +334,123 @@ export function EmployeesStep({
 
 const styles = StyleSheet.create({
   stack: {
+    flex: 1,
     gap: spacing.s3,
   },
   skeleton: {
     paddingVertical: spacing.s8,
   },
-  rowHead: {
-    marginBottom: spacing.s2,
+  countRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: spacing.s2,
   },
-  rowIdentity: {
+  countTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.s2,
+    paddingVertical: 2,
+  },
+  countTagText: {
+    ...typography.labelStrong,
+    fontSize: 12,
+    color: colors.primary,
+  },
+  warnTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.status.warning.bg,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.s2,
+    paddingVertical: 2,
+  },
+  warnTagText: {
+    ...typography.labelStrong,
+    fontSize: 12,
+    color: colors.status.warning.fg,
+  },
+  groupCard: {
+    flex: 1,
+    overflow: 'hidden',
+    minHeight: 120,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s3,
+    paddingHorizontal: spacing.s4,
+    paddingVertical: spacing.s3,
+  },
+  rowText: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: spacing.s1,
+  },
+  // Name + phone sit inline and WRAP to the next line when they grow —
+  // never truncate and never overflow the row (owner ask 2026-10-23).
+  nameLine: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.s1,
   },
   rowName: {
     ...typography.body,
     fontWeight: '600',
     color: colors.textStrong,
   },
-  rowSub: {
-    ...typography.bodySm,
-    color: colors.textMuted,
+  phoneTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: palette.gray100,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.s2,
+    paddingVertical: 2,
+  },
+  phoneTagText: {
+    ...typography.caption,
+    color: palette.gray600,
+  },
+  chip: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.s2,
+    paddingVertical: 2,
+  },
+  chipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: radius.pill,
+  },
+  chipText: {
+    ...typography.caption,
   },
   rowError: {
     marginTop: spacing.s2,
+  },
+  rowDisabled: {
+    opacity: 0.5,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.borderSubtle,
+    marginHorizontal: spacing.s4,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.s2,
+    backgroundColor: colors.primarySoft,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.s3,
+    paddingVertical: spacing.s3,
+  },
+  infoText: {
+    flex: 1,
+    ...typography.bodySm,
+    color: colors.textStrong,
   },
 });

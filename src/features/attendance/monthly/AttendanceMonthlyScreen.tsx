@@ -15,55 +15,69 @@
  *     surfaces the fixed copy + Retry BELOW the list; a failed office
  *     pick / month switch reverts the {month, office} PAIR (the engine's
  *     seam).
- *   - Month nav: ‹ unbounded past (FR-25), › disabled-until-known (the
- *     wire `today` gates it — the day-statuses route does NOT 422 a
- *     future month) and disabled AT the current month; both chevrons
- *     render disabled while a PARAMETER load is in flight (the
- *     acknowledgment AND the race guard). A parameter load (month
- *     switch / office pick) answers with the row Skeleton — the user's
- *     2026-09-30 direction ("can we add some loader while the data is
- *     fetching"), superseding Q5's silent swap; focus/AppState
- *     refetches stay silent in-place.
+ *   - Month nav: the chip strip (2026-10 owner redesign from the
+ *     fare-calendar idea) — a sticky year tag plus a horizontal scroll
+ *     of month chips. Past chips are unbounded (FR-25), future chips
+ *     disabled (the old ›'s wire-`today` clamp kept), and the strip
+ *     disables while a PARAMETER load is in flight (the acknowledgment
+ *     AND the race guard). A parameter load (month switch / office
+ *     pick) answers with the row Skeleton — the user's 2026-09-30
+ *     direction ("can we add some loader while the data is fetching"),
+ *     superseding Q5's silent swap; focus/AppState refetches stay
+ *     silent in-place.
  *   - `employees.length === 0` → the EmptyState inside the plain
  *     ScrollView (dashboard parity) — no "yet": ‹ is unbounded, a past
  *     month will never fill in.
  *
  * The wire's `today` echo drives the month bounds + the fetch clamp (the
  * model's monthlyWindow) — the FE never derives it from the device clock.
+ *
+ * Dual-hosting (CAP-1): the screen stays a pushed root-stack route AND
+ * embeds as the Attendance tab page's Monthly pane. `embedded` drops the
+ * pushed-screen chrome the pane host already provides — the back header
+ * and the top SafeArea inset (pull-to-refresh already exists).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   AppState,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { ChevronLeft, ChevronRight, Users } from 'lucide-react-native';
+import { Users } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState, Skeleton } from '../../../components/ui';
-import { colors, fontSize, radius, spacing, weight } from '../../../theme';
+import { MonthlyEmptyArt } from './MonthlyEmptyArt';
+import { MonthChipStrip } from './MonthChipStrip';
+import { colors, spacing } from '../../../theme';
 import type { RootStackParamList } from '../../../navigation/types';
 import ScreenHeader from '../offices/ScreenHeader';
 import { WorkspaceSelector } from '../dashboard/WorkspaceSelector';
 import { OfficeFilterSheet } from '../dashboard/OfficeFilterSheet';
 import { LoadErrorRetry } from '../dashboard/LoadErrorRetry';
 import { MonthlyEmployeeRow, ROW_HEIGHT } from './MonthlyEmployeeRow';
-import { monthTitle } from './monthlyModel';
 import { MONTHLY_ERROR_COPY, useMonthlyData } from './useMonthlyData';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'AttendanceMonthly'>;
+type StackProps = NativeStackScreenProps<RootStackParamList, 'AttendanceMonthly'>;
+
+type Props = Omit<StackProps, 'route'> & {
+  /** The navigator's route — absent when hosted as a tab pane (the page
+   *  owns the route; embedded panes never read its params). */
+  route?: StackProps['route'];
+  /** Tab-pane hosting: no pushed-screen header, no top SafeArea inset. */
+  embedded?: boolean;
+};
 
 /** The skeleton stands in for SIX rows at the row's real height — the
  *  swap doesn't jump (the container gap matches the rows' gap). */
 const SKELETON_ROWS = 6;
 
-export default function AttendanceMonthlyScreen({ navigation }: Props) {
+export default function AttendanceMonthlyScreen({ navigation, embedded }: Props) {
   // Back that works from anywhere (the AttendanceHome goBackSafely idiom).
   const goBackSafely = useCallback(() => {
     if (navigation.canGoBack()) {
@@ -137,13 +151,10 @@ export default function AttendanceMonthlyScreen({ navigation }: Props) {
 
   const [filterSheetVisible, setFilterSheetVisible] = useState(false);
 
-  // › is disabled-until-known (never enabled-and-unbounded — the
-  // day-statuses route does NOT 422 a future range) and disabled AT the
-  // current month; ‹ is unbounded past. BOTH render disabled while a
-  // PARAMETER load is in flight (Q5 — the acknowledgment AND the race
-  // guard); silent focus/AppState refetches leave them alone.
-  const today = data?.today ?? null;
-  const nextDisabled = today === null || yearMonth === today.slice(0, 7);
+  // The strip disables while a PARAMETER load is in flight (Q5 — the
+  // acknowledgment AND the race guard); silent focus/AppState refetches
+  // leave it alone. Future months clamp inside the strip itself (the old
+  // ›'s disabled-until-known rule lives there now).
   const navDisabled = paramLoading;
 
   // First load AND parameter loads (month switch / office pick — the
@@ -153,11 +164,16 @@ export default function AttendanceMonthlyScreen({ navigation }: Props) {
   const employees = paramLoading ? null : (data?.employees ?? null);
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <ScreenHeader title="Monthly" onBack={goBackSafely} />
+    <SafeAreaView style={styles.root} edges={embedded ? [] : ['top']}>
+      {embedded ? null : <ScreenHeader title="Monthly" onBack={goBackSafely} />}
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          ((employees !== null && employees.length === 0) ||
+            (data === null && firstLoadError !== null)) &&
+          styles.contentCentered,
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}>
         {/* The office filter — static chrome, renders in every posture.
@@ -169,29 +185,24 @@ export default function AttendanceMonthlyScreen({ navigation }: Props) {
           onPress={() => setFilterSheetVisible(true)}
         />
 
-        {/* Month nav — the host furniture the pane also renders (ONE
-            monthTitle table in the model); 44×44 pill buttons. */}
-        <View style={styles.navRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Previous month"
-            accessibilityState={{ disabled: navDisabled }}
-            disabled={navDisabled}
-            onPress={() => shiftMonth(-1)}
-            style={styles.navButton}>
-            <ChevronLeft size={20} color={colors.textBody} strokeWidth={2} />
-          </Pressable>
-          <Text style={styles.monthLabel}>{monthTitle(yearMonth)}</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Next month"
-            accessibilityState={{ disabled: navDisabled || nextDisabled }}
-            disabled={navDisabled || nextDisabled}
-            onPress={() => shiftMonth(1)}
-            style={styles.navButton}>
-            <ChevronRight size={20} color={colors.textBody} strokeWidth={2} />
-          </Pressable>
-        </View>
+        {/* Month nav — the chip strip (2026-10 owner redesign from the
+            fare-calendar idea): sticky year tag, tap a month to jump.
+            Future months render disabled (the old ›'s clamp kept). */}
+        <MonthChipStrip
+          value={yearMonth}
+          disabled={navDisabled}
+          onSelect={(ym) => {
+            const [cy, cm] = [
+              Number(yearMonth.slice(0, 4)),
+              Number(yearMonth.slice(5, 7)),
+            ];
+            const [ty, tm] = [
+              Number(ym.slice(0, 4)),
+              Number(ym.slice(5, 7)),
+            ];
+            shiftMonth((ty - cy) * 12 + (tm - cm));
+          }}
+        />
 
         {showSkeleton ? (
           // Row-shaped placeholders at the row's real height, labelled —
@@ -202,9 +213,22 @@ export default function AttendanceMonthlyScreen({ navigation }: Props) {
         ) : null}
 
         {data === null && firstLoadError !== null ? (
-          <LoadErrorRetry
-            message={MONTHLY_ERROR_COPY}
-            onRetry={() => void load()}
+          // The first-load failure gets the SAME organized centered pattern
+          // as the empty posture (owner 2026-10-23: "use the similar
+          // pattern") — art, copy, and the Retry CTA in one block.
+          <EmptyState
+            illustration={
+              <View style={styles.emptyArtGap}>
+                <MonthlyEmptyArt />
+              </View>
+            }
+            icon={
+              <Users size={26} color={colors.status.neutral.fg} strokeWidth={1.5} />
+            }
+            title="Couldn't load the monthly view"
+            description="Check your connection and try again."
+            ctaLabel="Retry"
+            onPressCta={() => void load()}
           />
         ) : null}
 
@@ -212,6 +236,11 @@ export default function AttendanceMonthlyScreen({ navigation }: Props) {
           employees.length === 0 ? (
             // No "yet": ‹ is unbounded, so a past month will never fill in.
             <EmptyState
+              illustration={
+                <View style={styles.emptyArtGap}>
+                  <MonthlyEmptyArt />
+                </View>
+              }
               icon={
                 <Users size={26} color={colors.status.neutral.fg} strokeWidth={1.5} />
               }
@@ -275,25 +304,13 @@ const styles = StyleSheet.create({
     padding: spacing.s4,
     gap: spacing.s3,
   },
-  navRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  // The empty posture centers in the pane (owner mockup 2026-10-23):
+  // flexGrow lets the flex:1 EmptyState own the viewport height.
+  contentCentered: {
+    flexGrow: 1,
   },
-  navButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceCard,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-  },
-  monthLabel: {
-    fontSize: fontSize.base,
-    fontWeight: weight.semibold,
-    color: colors.textStrong,
+  emptyArtGap: {
+    marginBottom: spacing.s5,
   },
   rows: {
     gap: spacing.s3,

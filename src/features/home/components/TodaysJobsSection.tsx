@@ -18,7 +18,7 @@ import { JobCard } from '../../jobs/components/JobCard';
 import type { ProfileJob, ProfileTechnician } from '../../../services';
 import { selectTodayJobs } from '../selectTodayJobs';
 import { OverdueStrip } from './OverdueStrip';
-import { LeaveReviewStrip } from './LeaveReviewStrip';
+import { LeaveReviewBanner } from './LeaveReviewBanner';
 
 export type TodaysJobsSectionProps = {
   jobs: ProfileJob[];
@@ -26,12 +26,12 @@ export type TodaysJobsSectionProps = {
   technicianCount: number;
   /** Roster fallback for `job.technician.name` on a data-anomaly row. */
   technicians: ProfileTechnician[];
-  /** 20-1 (AC 12): the owner's pending leave-review count — the strip
-   *  renders only when non-zero AND `onPressLeaveStrip` is provided;
+  /** 20-1 (AC 12) → CAP-4: the owner's pending leave-review count — the
+   *  banner renders only when non-zero AND `onPressLeaveBanner` is provided;
    *  omitted (or undefined) renders nothing and keeps older callers
    *  byte-identical. */
   pendingLeaveRequests?: number;
-  onPressLeaveStrip?: () => void;
+  onPressLeaveBanner?: () => void;
   onPressJob: (jobId: string) => void;
   onPressStrip: () => void;
   /** Omit for a viewer: the "Create a job" button is then not shown. */
@@ -44,37 +44,40 @@ export function TodaysJobsSection({
   technicianCount,
   technicians,
   pendingLeaveRequests,
-  onPressLeaveStrip,
+  onPressLeaveBanner,
   onPressJob,
   onPressStrip,
   onPressCreate,
 }: TodaysJobsSectionProps) {
   const todayJobs = selectTodayJobs(jobs);
   const technicianNames = new Map(technicians.map(t => [t.id, t.name]));
-  const leaveStrip =
+  const leaveBanner =
     pendingLeaveRequests != null &&
     pendingLeaveRequests > 0 &&
-    onPressLeaveStrip != null;
-  // "You're all clear" would lie under a visible leave-review strip —
+    onPressLeaveBanner != null;
+  // "You're all clear" would lie under a visible leave-review banner —
   // pending requests count as something needing attention too.
-  const isEmpty = todayJobs.length === 0 && overdueCount === 0 && !leaveStrip;
+  const isEmpty = todayJobs.length === 0 && overdueCount === 0 && !leaveBanner;
   // The urgency rail's clock — one 60s tick for the section's rows.
   const now = useNow();
 
   return (
     <View style={styles.section}>
+      {/* CAP-4 — the banner LEADS the section, above the title (owner
+          ruling 2026-10-23): a request awaiting approval outranks the
+          day's job list. */}
+      {pendingLeaveRequests != null &&
+      pendingLeaveRequests > 0 &&
+      onPressLeaveBanner != null ? (
+        <LeaveReviewBanner
+          count={pendingLeaveRequests}
+          onPress={onPressLeaveBanner}
+        />
+      ) : null}
+
       <Text style={styles.sectionTitle}>Today & needs attention</Text>
 
       {overdueCount > 0 ? <OverdueStrip count={overdueCount} onPress={onPressStrip} /> : null}
-
-      {pendingLeaveRequests != null &&
-      pendingLeaveRequests > 0 &&
-      onPressLeaveStrip != null ? (
-        <LeaveReviewStrip
-          count={pendingLeaveRequests}
-          onPress={onPressLeaveStrip}
-        />
-      ) : null}
 
       {todayJobs.map(job => (
         <JobCard

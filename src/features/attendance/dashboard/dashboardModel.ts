@@ -78,6 +78,7 @@ export function checkedInPct(
   return Math.round((counts.checkedIn / counts.tracked) * 100);
 }
 
+
 /** Which strip(s) render — each only when its count is > 0 (the
  *  TodaysJobsSection caller idiom; OverdueStrip's anatomy). */
 export interface FlagStripSpec {

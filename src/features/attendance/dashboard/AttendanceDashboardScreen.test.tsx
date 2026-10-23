@@ -36,6 +36,7 @@ jest.mock('../../../services', () => ({
 }));
 
 import type ReactTestRenderer from 'react-test-renderer';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { act, create } from 'react-test-renderer';
 import { ActivityIndicator, AppState, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -153,7 +154,7 @@ function retries(renderer: ReactTestRenderer.ReactTestRenderer): Array<() => voi
   return blocks.map(block => block.props.onRetry as () => void);
 }
 
-function renderScreen() {
+function renderScreen(opts: { embedded?: boolean } = {}) {
   const navigation = {
     navigate: jest.fn(),
     goBack: jest.fn(),
@@ -166,6 +167,7 @@ function renderScreen() {
       <AttendanceDashboardScreen
         navigation={navigation as never}
         route={{} as never}
+        embedded={opts.embedded}
       />,
     );
   });
@@ -271,6 +273,93 @@ describe('AttendanceDashboardScreen — loading postures', () => {
     expect(shown).toContain("Add employees to attendance to see today's summary here.");
     hasA11yLabel(renderer, 'On attendance: 0', false);
     expect(shown).not.toContain('40% workforce present today');
+  });
+});
+
+/** A wire-valid pulse row (the shape the FE normalizer admits). */
+function pulseRow(overrides: Record<string, unknown> = {}) {
+  return {
+    employeeId: 'e1',
+    employeeName: 'Rahul Verma',
+    phone: '+91 9810000001',
+    officeName: 'Main Office',
+    status: 'checked_in',
+    checkInAt: '2026-09-30T09:30:00+05:30',
+    checkoutAt: null,
+    lateMinutes: null,
+    workedMinutes: null,
+    leavePart: null,
+    ...overrides,
+  };
+}
+
+describe('AttendanceDashboardScreen — the Live Team Pulse wiring (2026-10)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    consumedFocusCalls = 0;
+    officesListMock.mockResolvedValue([]);
+  });
+
+  it('an employees-bearing envelope renders the pulse; an EMPTY one renders nothing', async () => {
+    fetchMock.mockResolvedValue(
+      envelope({
+        employees: [
+          pulseRow(),
+          pulseRow({ employeeId: 'e2', employeeName: 'Priya Sharma', status: 'on_leave', checkInAt: null, leavePart: 'full_day' }),
+        ],
+      }),
+    );
+    const { renderer } = renderScreen();
+    await fireFocus();
+    expect(texts(renderer)).toContain('Live Team Pulse');
+    expect(texts(renderer)).toContain('Showing all 2');
+    expect(texts(renderer)).toContain('Rahul Verma');
+
+    fetchMock.mockResolvedValue(envelope({ employees: [] }));
+    const { renderer: empty } = renderScreen();
+    await fireFocus();
+    expect(texts(empty)).not.toContain('Live Team Pulse');
+  });
+
+  it('an OLDER BE (no employees key at all) renders no pulse and no crash', async () => {
+    const bare = envelope() as unknown as Record<string, unknown>;
+    delete bare.employees;
+    fetchMock.mockResolvedValue(bare);
+    const { renderer } = renderScreen();
+    await fireFocus();
+    expect(texts(renderer)).not.toContain('Live Team Pulse');
+    // The tiles still render (the page is unharmed).
+    expect(texts(renderer)).toContain('On attendance');
+  });
+
+  it('a pulse-row press navigates to the month view with the echo-derived params', async () => {
+    fetchMock.mockResolvedValue(
+      envelope({ employees: [pulseRow({ employeeId: 'e9', employeeName: 'Amit Patel' })] }),
+    );
+    const { renderer, navigation } = renderScreen();
+    await fireFocus();
+    // The row's label may sit on the host mirror while the handler sits on
+    // the composite (the house idiom) — find the label, walk up to onPress.
+    const labelled = renderer.root.findAll(
+      node =>
+        typeof node.props.accessibilityLabel === 'string' &&
+        node.props.accessibilityLabel.startsWith('Amit Patel ('),
+    );
+    expect(labelled.length).toBeGreaterThanOrEqual(1);
+    let pressable: typeof labelled[number] | null = labelled[0];
+    while (pressable != null && typeof pressable.props.onPress !== 'function') {
+      pressable = pressable.parent;
+    }
+    expect(pressable).not.toBeNull();
+    act(() => {
+      pressable!.props.onPress();
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith('AttendanceEmployeeMonth', {
+      employeeId: 'e9',
+      employeeName: 'Amit Patel',
+      yearMonth: '2026-09',
+      focusDate: '2026-09-30',
+    });
   });
 });
 
@@ -762,5 +851,24 @@ describe('AttendanceDashboardScreen — AppState-active refetch (19-4)', () => {
       await flush();
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AttendanceDashboardScreen — embedded pane chrome (the tab host)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    consumedFocusCalls = 0;
+    officesListMock.mockResolvedValue([]);
+  });
+
+  it('embedded: the pushed back header and the top SafeArea edge stay behind', () => {
+    const { renderer } = renderScreen({ embedded: true });
+
+    expect(renderer.root.findAllByType(DashboardHeader as never)).toHaveLength(0);
+    // The composite SafeAreaView carries the array prop as passed (the
+    // native host normalises it to an object — not matched here).
+    const safeAreas = renderer.root.findAllByType(SafeAreaView as never);
+    expect(safeAreas).toHaveLength(1);
+    expect(safeAreas[0].props.edges).toEqual([]);
   });
 });

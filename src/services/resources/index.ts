@@ -88,6 +88,8 @@ export { fetchDashboard } from './attendanceDashboard';
 export type {
   AttendanceDashboardCounts,
   AttendanceDashboardData,
+  DashboardEmployeeStat,
+  DashboardEmployeeStatus,
   CheckoutMissingRow,
   DashboardOfficeStat,
   FakeLocationRow,

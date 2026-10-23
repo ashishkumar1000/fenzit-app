@@ -1,11 +1,12 @@
 /**
  * Tests for EmployeesStep (Story 15-8, guarded by 15-9; 20-1 gate): the
- * roster rows render raw truth, and the 15-9 guard — an UPCOMING
- * (future-dated) row's switch is DISABLED with a "tracking begins then"
- * hint, because a bare enable PUT clamps the start date to today and
- * DELETES the future period (AD-8). Toggling it must be impossible from the
- * wizard; adjusting an upcoming enrolment is the Team enrolment screen's
- * job (spec-15-9).
+ * roster rows render raw truth — avatar, ONE status chip and a BARE switch
+ * (the 2026-10 owner redesign; the chip carries what the old per-row hint
+ * used to say) — and the 15-9 guard: an UPCOMING (future-dated) row's
+ * switch is DISABLED, because a bare enable PUT clamps the start date to
+ * today and DELETES the future period (AD-8). Toggling it must be
+ * impossible from the wizard; adjusting an upcoming enrolment is the Team
+ * enrolment screen's job (spec-15-9).
  *
  * The 20-1 gate: turning a covered row's switch OFF asks through the shared
  * ConfirmDialog FIRST — the DELETE fires only after "Turn off tracking"
@@ -13,8 +14,9 @@
  * shimmer; a capped failure shows the error + Retry.
  */
 import { act, create } from 'react-test-renderer';
-import { Text } from 'react-native';
-import { Button, ConfirmDialog, Skeleton } from '../../../components/ui';
+import type { ReactTestInstance } from 'react-test-renderer';
+import { ActivityIndicator, Switch, Text } from 'react-native';
+import { Button, ConfirmDialog, Input, Skeleton } from '../../../components/ui';
 import { EmployeesStep } from './EmployeesStep';
 import type { ApiError, EnrolmentOverview } from '../../../services';
 
@@ -71,6 +73,33 @@ function baseProps(): Props {
   };
 }
 
+/** The row's Switch, located by the employee's name Text — the bare
+ *  switch carries no label (the 2026-10 redesign moved the status onto
+ *  the chip); the nearest ancestor holding exactly one Switch is the row. */
+function rowSwitch(
+  root: ReactTestInstance,
+  name: string,
+): ReactTestInstance {
+  const nameText = root.findAll(
+    (n) => n.type === Text && n.props.children === name,
+  );
+  expect(nameText).toHaveLength(1);
+  let node = nameText[0];
+  while (node.parent) {
+    node = node.parent;
+    const switches = node.findAll((m) => m.type === Switch);
+    if (switches.length === 1) return switches[0];
+  }
+  throw new Error(`no Switch found in the row for ${name}`);
+}
+
+/** All string Texts (the chips, tags, names). */
+function stringTexts(root: ReactTestInstance): string[] {
+  return root
+    .findAll((n) => n.type === Text && typeof n.props.children === 'string')
+    .map((n) => n.props.children as string);
+}
+
 describe('EmployeesStep — the 15-9 upcoming-row guard', () => {
   it('an upcoming row renders a DISABLED switch with the tracking-begins hint; toggling it PUTs nothing', async () => {
     const onEnable = jest.fn();
@@ -81,16 +110,9 @@ describe('EmployeesStep — the 15-9 upcoming-row guard', () => {
       );
     });
 
-    const texts = renderer.root
-      .findAll((n) => n.type === Text && typeof n.props.children === 'string')
-      .map((n) => n.props.children as string);
-    expect(texts).toContain(
-      `Starts 2026-11-01 \u00B7 tracking begins then \u2014 adjust from Team attendance`,
-    );
+    expect(stringTexts(renderer.root)).toContain('Starts 2026-11-01');
 
-    const sw = renderer.root.find(
-      (n) => n.props?.label === `Starts 2026-11-01 \u00B7 tracking begins then \u2014 adjust from Team attendance`,
-    );
+    const sw = rowSwitch(renderer.root, 'Arjun');
     expect(sw.props.disabled).toBe(true);
 
     // Even a forced toggle fires no enable (the model-level invariant).
@@ -107,10 +129,7 @@ describe('EmployeesStep — the 15-9 upcoming-row guard', () => {
         <EmployeesStep {...baseProps()} roster={[NEVER]} />,
       );
     });
-    const sw = renderer.root.find(
-      (n) => n.props?.label === 'Track attendance for Priya',
-    );
-    expect(sw.props.disabled).toBe(false);
+    expect(rowSwitch(renderer.root, 'Priya').props.disabled).toBe(false);
   });
 
   it('the covering-row switch stays enabled', () => {
@@ -120,10 +139,7 @@ describe('EmployeesStep — the 15-9 upcoming-row guard', () => {
         <EmployeesStep {...baseProps()} roster={[COVERING]} />,
       );
     });
-    const sw = renderer.root.find(
-      (n) => n.props?.label === 'Track attendance for Ramesh',
-    );
-    expect(sw.props.disabled).toBe(false);
+    expect(rowSwitch(renderer.root, 'Ramesh').props.disabled).toBe(false);
   });
 });
 
@@ -157,7 +173,7 @@ describe('EmployeesStep — invited employees cannot be tracked yet', () => {
         />,
       );
     });
-    const sw = renderer.root.find((n) => n.props?.label === 'Track attendance for Suresh');
+    const sw = rowSwitch(renderer.root, 'Suresh');
     expect(sw.props.disabled).toBe(false);
 
     await act(async () => {
@@ -189,16 +205,9 @@ describe('EmployeesStep — invited employees cannot be tracked yet', () => {
       );
     });
 
-    const texts = renderer.root
-      .findAll((n) => n.type === Text && typeof n.props.children === 'string')
-      .map((n) => n.props.children as string);
-    expect(texts).toContain(
-      "Hasn't signed in yet. Tracking can start after their first sign-in.",
-    );
+    expect(stringTexts(renderer.root)).toContain("Hasn't signed in yet");
 
-    const sw = renderer.root.find(
-      (n) => n.props?.label === 'Track attendance for Suresh',
-    );
+    const sw = rowSwitch(renderer.root, 'Suresh');
     expect(sw.props.disabled).toBe(true);
 
     await act(async () => {
@@ -217,10 +226,7 @@ describe('EmployeesStep — invited employees cannot be tracked yet', () => {
         />,
       );
     });
-    const sw = renderer.root.find(
-      (n) => n.props?.label === 'Track attendance for Suresh',
-    );
-    expect(sw.props.disabled).toBe(false);
+    expect(rowSwitch(renderer.root, 'Suresh').props.disabled).toBe(false);
   });
 });
 
@@ -264,9 +270,7 @@ describe('EmployeesStep — the 20-1 switch-off gate', () => {
     const { root } = renderRoster({ onDisable });
     expect(upDialog(root)).toBeNull(); // nothing asks until the switch moves
 
-    const sw = root.find(
-      (n) => n.props?.label === 'Track attendance for Ramesh',
-    );
+    const sw = rowSwitch(root, 'Ramesh');
     await act(async () => {
       sw.props.onValueChange(false);
     });
@@ -283,9 +287,7 @@ describe('EmployeesStep — the 20-1 switch-off gate', () => {
   it('"Keep tracking" files NOTHING — the ask closes and the tracking stays', async () => {
     const onDisable = jest.fn(async () => true);
     const { root } = renderRoster({ onDisable });
-    const sw = root.find(
-      (n) => n.props?.label === 'Track attendance for Ramesh',
-    );
+    const sw = rowSwitch(root, 'Ramesh');
     await act(async () => {
       sw.props.onValueChange(false);
     });
@@ -296,20 +298,70 @@ describe('EmployeesStep — the 20-1 switch-off gate', () => {
     expect(onDisable).not.toHaveBeenCalled();
   });
 
-  it('a mid-flight row cannot even OPEN the ask (the switch-off guard bails on pending)', async () => {
+  it('a mid-flight row has NO switch at all — the spinner replaces it, so no ask can even open', async () => {
     const onDisable = jest.fn(async () => true);
     const isRowPending = jest.fn((id: string) => id === 'e2');
     const { root } = renderRoster({ isRowPending });
     expect(upDialog(root)).toBeNull();
 
-    const sw = root.find(
-      (n) => n.props?.label === 'Track attendance for Ramesh',
-    );
-    await act(async () => {
-      sw.props.onValueChange(false);
-    });
-    expect(upDialog(root)).toBeNull(); // never popped a second ask mid-flight
+    // The structural lock: the row renders the action spinner INSTEAD of
+    // the switch — there is nothing to toggle, so the ask is unreachable.
+    expect(root.findAll((n) => n.type === Switch)).toHaveLength(0);
+    expect(root.findAllByType(ActivityIndicator as never).length).toBeGreaterThan(0);
     expect(onDisable).not.toHaveBeenCalled();
+  });
+});
+
+describe('EmployeesStep — the 2026-10 redesign (search, count tags, chips)', () => {
+  it('a roster of six or fewer hides the search; seven shows it and it narrows by name', () => {
+    const six = Array.from({ length: 6 }, (_, i) =>
+      row({ employeeId: `e${i}`, employeeName: `Member ${i}` }),
+    );
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<EmployeesStep {...baseProps()} roster={six} />);
+    });
+    expect(renderer.root.findAll((n) => n.type === Input)).toHaveLength(0);
+
+    const seven = [...six, row({ employeeId: 'e9', employeeName: 'Zoya' })];
+    act(() => {
+      renderer.update(<EmployeesStep {...baseProps()} roster={seven} />);
+    });
+    const input = renderer.root.findAll((n) => n.type === Input);
+    expect(input).toHaveLength(1);
+    act(() => {
+      input[0].props.onChangeText('zoy');
+    });
+    const t = stringTexts(renderer.root);
+    expect(t).toContain('1 Member found');
+    expect(t).toContain('Zoya');
+    expect(t.some((x) => x === 'Member 0')).toBe(false);
+  });
+
+  it('the count tags: every member counts, and rows that cannot enable get the amber tag', () => {
+    const roster = [
+      COVERING,
+      NEVER,
+      UPCOMING,
+      row({ employeeId: 'e4', employeeName: 'Suresh', memberStatus: 'invited' }),
+    ];
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<EmployeesStep {...baseProps()} roster={roster} />);
+    });
+    const t = stringTexts(renderer.root);
+    expect(t).toContain('4 Members found');
+    expect(t).toContain('2 not enabled'); // upcoming Arjun + invited Suresh
+  });
+
+  it('a row shows the phone tag inline after the name, wrapping never truncating', () => {
+    let renderer!: ReturnType<typeof create>;
+    act(() => {
+      renderer = create(<EmployeesStep {...baseProps()} roster={[COVERING]} />);
+    });
+    const t = stringTexts(renderer.root);
+    expect(t).toContain('+919000000000');
+    expect(t).toContain('HQ assigned'); // the one status chip carries the office
   });
 });
 

@@ -18,6 +18,9 @@ import { colors, radius, shadow, spacing, typography } from '../../theme';
 export type EmptyStateProps = {
   /** Icon rendered inside the medallion (e.g. a lucide icon). */
   icon: ReactNode;
+  /** A full illustration rendered INSTEAD of the medallion (the attendance
+   *  empty scenes). Additive — every default render is unchanged. */
+  illustration?: ReactNode;
   title: string;
   description?: string;
   /** When both ctaLabel and onPressCta are set, a button is shown. */
@@ -37,6 +40,7 @@ export type EmptyStateProps = {
 
 export function EmptyState({
   icon,
+  illustration = null,
   title,
   description,
   ctaLabel,
@@ -50,14 +54,18 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <View style={[styles.root, style]}>
-      <View
-        style={[
-          styles.medallion,
-          medallionShape === 'square' && styles.medallionSquare,
-        ]}>
-        {icon}
-        {badge != null ? <View style={styles.badge}>{badge}</View> : null}
-      </View>
+      {illustration != null ? (
+        illustration
+      ) : (
+        <View
+          style={[
+            styles.medallion,
+            medallionShape === 'square' && styles.medallionSquare,
+          ]}>
+          {icon}
+          {badge != null ? <View style={styles.badge}>{badge}</View> : null}
+        </View>
+      )}
 
       <Text style={styles.title}>{title}</Text>
 

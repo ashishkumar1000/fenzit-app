@@ -156,7 +156,10 @@ export function weeklyOffSaveHint({
   if (!dateValid) return 'Pick a valid start date to save.';
   return isAdd
     ? 'Change the days off to save.'
-    : 'Change a day or the date to save.';
+    // The remaining disabled case is a PRISTINE form — the working copy
+    // equals the saved rule (the seed guarantees it), so nothing needs
+    // saving and the copy must not send the owner hunting for a change.
+    : 'This schedule is already saved — change a day or the date to edit it.';
 }
 
 /**

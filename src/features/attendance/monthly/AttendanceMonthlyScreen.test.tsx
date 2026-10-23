@@ -5,16 +5,20 @@
  *
  *  - ONE fetch per appearance: the first focus IS the initial load (the
  *    useFocusEffect contract); no mount fetch ever runs.
- *  - the device-seeded LAST month is the bootstrap (its plain window — no
- *    clamp: the device clock never draws a fetch boundary); the skeleton
- *    stands in labelled "Loading attendance", then the rows swap in.
- *  - the echo-correction fires ONCE when the echo's last month differs
- *    and no navigation happened; a user navigation stands it down.
+ *  - the device-seeded CURRENT month is the bootstrap (owner ruling
+ *    2026-10-23): before the echo lands its end clamps to the DEVICE date
+ *    (the seeded month reaches into the future); the skeleton stands in
+ *    labelled "Loading attendance", then the rows swap in.
+ *  - the echo-correction fires ONCE when the echo's current month differs
+ *    (device vs server drift) and no navigation happened; a user
+ *    navigation stands it down.
  *  - rows render name/office/chips with per-chip family colours; a tap
  *    navigates with {employeeId, employeeName, yearMonth}.
- *  - › is disabled-until-known and disabled AT the current month
- *    (accessibilityState pinned), enabled one month earlier; BOTH
- *    chevrons render disabled while a load is in flight.
+ *  - month nav is the chip strip (2026-10 owner redesign): a sticky year
+ *    tag for the SELECTED month's year, month-name-only chips, the
+ *    selected chip highlighted, chips past the real current month
+ *    disabled — and the WHOLE strip locks while a parameter load is in
+ *    flight.
  *  - a month switch fetches the CLAMPED window and a failure reverts the
  *    {month, office} PAIR; the seq-guard drops older-resolves-late
  *    responses (never commit, never revert).
@@ -37,6 +41,7 @@ jest.mock('../../../services', () => ({
 }));
 
 import type ReactTestRenderer from 'react-test-renderer';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { act, create } from 'react-test-renderer';
 import { AppState, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -45,7 +50,8 @@ import { monthRange } from '../../../services/resources/attendanceDayStatus';
 import type { AttendanceMonthlyData } from '../../../services';
 import { colors } from '../../../theme';
 import AttendanceMonthlyScreen from './AttendanceMonthlyScreen';
-import { shiftYearMonth, monthTitle } from './monthlyModel';
+import ScreenHeader from '../offices/ScreenHeader';
+import { shiftYearMonth } from './monthlyModel';
 import { MONTHLY_ERROR_COPY } from './useMonthlyData';
 import { LoadErrorRetry } from '../dashboard/LoadErrorRetry';
 import { OfficeFilterSheet } from '../dashboard/OfficeFilterSheet';
@@ -55,16 +61,59 @@ const fetchMock = fetchMonthly as jest.Mock;
 const officesListMock = officesService.list as jest.Mock;
 
 /** The device clock seeds which month to LOOK at first (declared
- *  scaffolding, D4) — the tests derive the SAME seed from the clock. */
+ *  scaffolding, D4) — and since the owner ruling 2026-10-23 that seed is
+ *  THE CURRENT MONTH. The tests derive the SAME seed from the clock. */
 function deviceThisMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
-const SEED = shiftYearMonth(deviceThisMonth(), -1);
+function deviceToday(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+const SEED = deviceThisMonth();
+const PREV_MONTH = shiftYearMonth(SEED, -1);
+const NEXT_MONTH = shiftYearMonth(SEED, 1);
 /** An echo whose canonical default equals the seed → the bootstrap
  *  correction must NOT fire (mid-device-month, so the clamp is real). */
-const ECHO_TODAY = `${deviceThisMonth()}-15`;
-const NEXT_MONTH = shiftYearMonth(deviceThisMonth(), 1);
+const ECHO_TODAY = `${SEED}-15`;
+
+const MONTH_ABBR: Record<number, string> = {
+  1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
+  7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec',
+};
+/** The strip chip's accessible name ('Oct 2026') for a 'YYYY-MM'. */
+function chipLabel(ym: string): string {
+  return `${MONTH_ABBR[Number(ym.slice(5, 7))]} ${ym.slice(0, 4)}`;
+}
+
+/** The strip chip for a month — the composite Pressable is mirrored by a
+ *  host View carrying the same label; the Pressable owns the onPress. */
+function chip(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  ym: string,
+): ReactTestRenderer.ReactTestInstance {
+  const matches = renderer.root.findAll(
+    node =>
+      node.props.accessibilityLabel === chipLabel(ym) &&
+      typeof node.props.onPress === 'function',
+  );
+  expect(matches).toHaveLength(1);
+  return matches[0];
+}
+
+/** Every strip chip Pressable (the strip is static chrome — it renders
+ *  in every posture). */
+function chips(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+): ReactTestRenderer.ReactTestInstance[] {
+  return renderer.root.findAll(
+    node =>
+      typeof node.props.accessibilityLabel === 'string' &&
+      /^\w{3} \d{4}$/.test(node.props.accessibilityLabel) &&
+      typeof node.props.onPress === 'function',
+  );
+}
 
 /** A wire-valid employee row. */
 function employee(
@@ -149,11 +198,27 @@ function texts(renderer: ReactTestRenderer.ReactTestRenderer): string[] {
     );
 }
 
-/** The screen's error compositions — their onRetry callables. */
+/** The screen's refetch-error banner — its onRetry callables. */
 function retries(renderer: ReactTestRenderer.ReactTestRenderer): Array<() => void> {
   return renderer.root
     .findAllByType(LoadErrorRetry as never)
     .map(block => block.props.onRetry as () => void);
+}
+
+/** The EmptyState's Retry CTA (the first-load failure's retry): the
+ *  'Retry' Text walked up to its onPress-carrying ancestor. */
+function retryPress(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+): ReactTestRenderer.ReactTestInstance {
+  const text = renderer.root.find(
+    node => node.type === Text && node.props.children === 'Retry',
+  );
+  let node = text.parent;
+  while (node != null && typeof node.props.onPress !== 'function') {
+    node = node.parent;
+  }
+  expect(node).not.toBeNull();
+  return node!;
 }
 
 /** A chip Text's applied colour (the atomic chip's family fg). */
@@ -176,7 +241,7 @@ function chipColor(
   return style?.color as string | undefined;
 }
 
-function renderScreen() {
+function renderScreen(opts: { embedded?: boolean } = {}) {
   const navigation = {
     navigate: jest.fn(),
     goBack: jest.fn(),
@@ -189,11 +254,29 @@ function renderScreen() {
       <AttendanceMonthlyScreen
         navigation={navigation as never}
         route={{} as never}
+        embedded={opts.embedded}
       />,
     );
   });
   return { renderer, navigation };
 }
+
+describe('AttendanceMonthlyScreen — embedded pane chrome (the tab host)', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
+  it('embedded: the pushed back header and the top SafeArea edge stay behind', () => {
+    const { renderer } = renderScreen({ embedded: true });
+
+    expect(renderer.root.findAllByType(ScreenHeader as never)).toHaveLength(0);
+    // The composite SafeAreaView carries the array prop as passed (the
+    // native host normalises it to an object — not matched here).
+    const safeAreas = renderer.root.findAllByType(SafeAreaView as never);
+    expect(safeAreas).toHaveLength(1);
+    expect(safeAreas[0].props.edges).toEqual([]);
+  });
+});
 
 describe('AttendanceMonthlyScreen — bootstrap + loading postures', () => {
   beforeEach(() => {
@@ -210,15 +293,23 @@ describe('AttendanceMonthlyScreen — bootstrap + loading postures', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('fetches the device-seeded LAST month with its plain (unclamped) window', async () => {
+  it('fetches the device-seeded CURRENT month, its end clamped to the device date pre-echo', async () => {
     fetchMock.mockResolvedValue(envelope());
     const { renderer } = renderScreen();
     await fireFocus();
+    // The seeded month reaches into the future; before any wire echo the
+    // window ends at the device date (never a full future range).
     expect(fetchMock.mock.calls[0].slice(0, 2)).toEqual([
       `${SEED}-01`,
-      monthRange(SEED).to,
+      deviceToday(),
     ]);
-    expect(texts(renderer)).toContain(monthTitle(SEED));
+    // The month shows through the strip: the sticky year tag + the
+    // selected chip.
+    expect(texts(renderer)).toContain(SEED.slice(0, 4));
+    expect(chip(renderer, SEED).props.accessibilityState).toMatchObject({
+      selected: true,
+      disabled: false,
+    });
   });
 
   it('shows the labelled Skeleton BEFORE the fetch settles, then the rows', async () => {
@@ -268,31 +359,39 @@ describe('AttendanceMonthlyScreen — bootstrap + loading postures', () => {
     expect(texts(renderer)).toContain('Asha');
   });
 
-  it('the echo-correction fires ONCE when the echo last-month differs (no navigation)', async () => {
-    // The echo says NEXT month is "today" → the canonical default is THIS
-    // month, which differs from the device-seeded last month.
+  it('the echo-correction fires ONCE when the echo current-month differs (device vs server drift)', async () => {
+    // The echo says NEXT month is "today" (a server clock ahead across a
+    // month boundary) → the canonical default NEXT month differs from the
+    // device-seeded current month.
     const laterEcho = `${NEXT_MONTH}-10`;
+    // The ongoing wire speaks with the server's clock: every later
+    // envelope carries the NEXT-month echo (that IS the drift).
     fetchMock
       .mockResolvedValueOnce(envelope({ today: laterEcho }))
-      .mockResolvedValue(envelope());
+      .mockResolvedValue(envelope({ today: laterEcho, from: `${NEXT_MONTH}-01` }));
     const { renderer } = renderScreen();
     await fireFocus();
     await flush();
 
-    // The month corrected to the canonical default and REFETCHED it —
-    // the canonical default is a PAST month relative to that echo, so
-    // the window is its full range (no clamp).
+    // The month corrected to the canonical default and REFETCHED it as a
+    // PARAMETER load — the echo's today sits INSIDE that month, so the
+    // window clamps to the echo's date (the server's clock draws it now).
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1].slice(0, 2)).toEqual([
-      `${deviceThisMonth()}-01`,
-      monthRange(deviceThisMonth()).to,
+      `${NEXT_MONTH}-01`,
+      laterEcho,
     ]);
-    expect(texts(renderer)).toContain(monthTitle(deviceThisMonth()));
+    expect(chip(renderer, NEXT_MONTH).props.accessibilityState).toMatchObject({
+      selected: true,
+    });
 
     // A later focus refetch must NOT re-correct (computed once).
     await fireFocus();
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(texts(renderer)).toContain(monthTitle(deviceThisMonth()));
+    expect(fetchMock.mock.calls[2].slice(0, 2)).toEqual([
+      `${NEXT_MONTH}-01`,
+      laterEcho,
+    ]);
   });
 
   it('a USER navigation stands the echo-correction down', async () => {
@@ -306,42 +405,45 @@ describe('AttendanceMonthlyScreen — bootstrap + loading postures', () => {
     await fireFocus();
     await flush();
 
-    // First load failed → the owner navigates ‹ (their choice); that
-    // load IS the retry.
+    // First load failed → the owner taps a month chip (their choice);
+    // that load IS the retry.
     await act(async () => {
-      findButton(renderer, 'Previous month').props.onPress();
+      chip(renderer, PREV_MONTH).props.onPress();
       await flush();
     });
 
-    const navigated = shiftYearMonth(SEED, -1);
     expect(fetchMock.mock.calls[1].slice(0, 2)).toEqual([
-      `${navigated}-01`,
-      monthRange(navigated).to,
+      `${PREV_MONTH}-01`,
+      monthRange(PREV_MONTH).to,
     ]);
-    expect(texts(renderer)).toContain(monthTitle(navigated));
+    expect(chip(renderer, PREV_MONTH).props.accessibilityState).toMatchObject({
+      selected: true,
+    });
     // No correction refetch followed (their choice stands).
-    expect(texts(renderer)).not.toContain(monthTitle(deviceThisMonth()));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('a first-load failure renders the composition with the MONTHLY message', async () => {
+  it('a first-load failure renders the centered EmptyState with the MONTHLY copy and its Retry CTA', async () => {
     fetchMock.mockRejectedValueOnce(new Error('boom: developer-shaped'));
     const { renderer } = renderScreen();
     await fireFocus();
     const shown = texts(renderer);
-    expect(shown).toContain(MONTHLY_ERROR_COPY);
-    expect(shown).not.toContain(
-      "Couldn't load the dashboard. Check your connection and try again.",
-    );
-    expect(retries(renderer)).toHaveLength(1);
+    // The 2026-10-23 owner pattern: art + copy + Retry in one centered
+    // block — title and description are separate Texts of the same copy.
+    expect(shown).toContain("Couldn't load the monthly view");
+    expect(shown).toContain('Check your connection and try again.');
+    expect(shown).not.toContain("Couldn't load the dashboard");
+    // No LoadErrorRetry banner — the EmptyState's CTA is the retry.
+    expect(retries(renderer)).toHaveLength(0);
 
-    // Retry succeeds → the rows render, the banner leaves.
+    // Retry succeeds → the rows render, the block leaves.
     fetchMock.mockResolvedValueOnce(envelope());
     await act(async () => {
-      retries(renderer)[0]();
+      retryPress(renderer).props.onPress();
       await flush();
     });
     expect(texts(renderer)).toContain('Asha');
-    expect(texts(renderer)).not.toContain(MONTHLY_ERROR_COPY);
+    expect(texts(renderer)).not.toContain("Couldn't load the monthly view");
   });
 
   it('empty → the EmptyState copy inside the plain ScrollView (no "yet")', async () => {
@@ -450,44 +552,56 @@ describe('AttendanceMonthlyScreen — rows', () => {
   });
 });
 
-describe('AttendanceMonthlyScreen — month nav', () => {
+describe('AttendanceMonthlyScreen — the month chip strip (the 2026-10 owner redesign)', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     consumedFocusCalls = 0;
     officesListMock.mockResolvedValue([]);
   });
 
-  it('› is disabled-until-known (accessibilityState pinned), ‹ unbounded past', async () => {
-    let resolve!: (v: AttendanceMonthlyData) => void;
-    fetchMock.mockReturnValue(
-      new Promise<AttendanceMonthlyData>(r => {
-        resolve = r;
-      }),
-    );
-    const { renderer } = renderScreen();
-    await fireFocus();
-    const next = findButton(renderer, 'Next month');
-    expect(next.props.disabled).toBe(true);
-    expect(next.props.accessibilityState).toEqual({ disabled: true });
-
-    await act(async () => {
-      resolve(envelope());
-      await flush();
-    });
-    // One month earlier than today → › enabled, ‹ enabled.
-    const settledNext = findButton(renderer, 'Next month');
-    expect(settledNext.props.disabled).toBe(false);
-    expect(settledNext.props.accessibilityState).toEqual({ disabled: false });
-    expect(findButton(renderer, 'Previous month').props.disabled).toBe(false);
-  });
-
-  it('› is disabled AT the current month; the switch fetches the CLAMPED window', async () => {
+  it('renders the sticky year tag, month-name-only chips, the selected chip highlighted and future chips disabled', async () => {
     fetchMock.mockResolvedValue(envelope());
     const { renderer } = renderScreen();
     await fireFocus();
 
-    // Seed (last month) → › enabled. Press it → the clamped current-month
-    // window (to = the echo's today), "so far" is the honest reading.
+    // The sticky tag shows the SELECTED month's year.
+    expect(texts(renderer)).toContain(SEED.slice(0, 4));
+    // The chips print the month only — no 'Oct 2026' chip TEXT (the year
+    // lives in the tag and the accessible names).
+    const chipTexts = renderer.root
+      .findAllByType(Text)
+      .map(t =>
+        Array.isArray(t.props.children)
+          ? t.props.children.join('')
+          : String(t.props.children ?? ''),
+      )
+      .filter(t => /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)$/.test(t));
+    expect(chipTexts.length).toBeGreaterThanOrEqual(3);
+
+    const seedChip = chip(renderer, SEED);
+    expect(seedChip.props.accessibilityState).toMatchObject({
+      selected: true,
+      disabled: false,
+    });
+    // One month earlier: enabled, unselected (unbounded past).
+    expect(chip(renderer, PREV_MONTH).props.accessibilityState).toMatchObject({
+      selected: false,
+      disabled: false,
+    });
+    // The real future is NEVER pressable (the old ›'s clamp, kept).
+    expect(chip(renderer, NEXT_MONTH).props.accessibilityState).toMatchObject({
+      selected: false,
+      disabled: true,
+    });
+  });
+
+  it('a chip tap is a PARAMETER load: the fetch is the CLAMPED window, the whole strip locks, the skeleton stands', async () => {
+    fetchMock.mockResolvedValue(envelope());
+    const { renderer } = renderScreen();
+    await fireFocus();
+
+    // Tap the viewed (current) month's chip — a delta-0 reselect still
+    // goes through the parameter load (the strip's only entry point).
     let resolveRefetch!: (v: AttendanceMonthlyData) => void;
     fetchMock.mockReturnValue(
       new Promise<AttendanceMonthlyData>(r => {
@@ -495,42 +609,38 @@ describe('AttendanceMonthlyScreen — month nav', () => {
       }),
     );
     await act(async () => {
-      findButton(renderer, 'Next month').props.onPress();
+      chip(renderer, SEED).props.onPress();
       await flush();
     });
+    // The echo is known by now → the window clamps to the echo's date.
     expect(fetchMock.mock.calls[1].slice(0, 2)).toEqual([
-      `${deviceThisMonth()}-01`,
+      `${SEED}-01`,
       ECHO_TODAY,
     ]);
 
-    // In flight: BOTH chevrons disabled (Q5) with the state pinned...
-    const next = findButton(renderer, 'Next month');
-    expect(next.props.disabled).toBe(true);
-    expect(next.props.accessibilityState).toEqual({ disabled: true });
-    const prev = findButton(renderer, 'Previous month');
-    expect(prev.props.disabled).toBe(true);
-    expect(prev.props.accessibilityState).toEqual({ disabled: true });
-
-    // ...and the parameter load answers with the row Skeleton (the
-    // user's 2026-09-30 loader direction) — the stale rows stand down
-    // while it fetches. (The labelled query scopes to the SCREEN's
-    // skeleton: the closed filter sheet's own in-flight skeleton is
-    // mounted-but-hidden and must not count.)
-    // The preset's mock wrapper duplicates the labelled View node — the
-    // bootstrap test's >=1 idiom; exactness comes from the ZERO pins.
+    // In flight: EVERY chip renders disabled (the acknowledgment AND the
+    // race guard) and the row skeleton stands in.
+    for (const c of chips(renderer)) {
+      expect(c.props.accessibilityState).toMatchObject({ disabled: true });
+    }
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Loading attendance',
       ).length,
     ).toBeGreaterThanOrEqual(1);
 
-    // ...and AT the current month › stays disabled after it lands.
+    // ...and the strip unlocks when the load lands.
     await act(async () => {
-      resolveRefetch(envelope({ from: `${deviceThisMonth()}-01` }));
+      resolveRefetch(envelope({ from: `${SEED}-01` }));
       await flush();
     });
-    expect(findButton(renderer, 'Next month').props.disabled).toBe(true);
-    expect(texts(renderer)).toContain(monthTitle(deviceThisMonth()));
+    expect(chip(renderer, SEED).props.accessibilityState).toMatchObject({
+      selected: true,
+      disabled: false,
+    });
+    expect(chip(renderer, PREV_MONTH).props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
     expect(
       renderer.root.findAll(
         node => node.props.accessibilityLabel === 'Loading attendance',
@@ -559,10 +669,13 @@ describe('AttendanceMonthlyScreen — month nav', () => {
     // The month switch FAILS → both axes revert to the last-good pair.
     fetchMock.mockRejectedValueOnce(new Error('network down'));
     await act(async () => {
-      findButton(renderer, 'Previous month').props.onPress();
+      chip(renderer, PREV_MONTH).props.onPress();
       await flush();
     });
-    expect(texts(renderer)).toContain(monthTitle(SEED));
+    // The selected chip is BACK to the seed month.
+    expect(chip(renderer, SEED).props.accessibilityState).toMatchObject({
+      selected: true,
+    });
     expect(texts(renderer)).toContain('Hero wala');
     expect(texts(renderer)).toContain(MONTHLY_ERROR_COPY);
     expect(retries(renderer)).toHaveLength(1);
@@ -575,9 +688,9 @@ describe('AttendanceMonthlyScreen — month nav', () => {
     const { renderer } = renderScreen();
     await fireFocus();
 
-    // ‹ starts a month load; while it is in flight a focus refetch starts
-    // (the non-chevron entry points are not loading-gated — a real
-    // interleaving). The refetch is the LATEST request.
+    // A chip tap starts a month load; while it is in flight a focus
+    // refetch starts (the non-chip entry points are not loading-gated — a
+    // real interleaving). The refetch is the LATEST request.
     const resolvers: Array<(v: AttendanceMonthlyData) => void> = [];
     fetchMock
       .mockImplementationOnce(
@@ -593,7 +706,7 @@ describe('AttendanceMonthlyScreen — month nav', () => {
           }),
       );
     await act(async () => {
-      findButton(renderer, 'Previous month').props.onPress();
+      chip(renderer, PREV_MONTH).props.onPress();
     });
     await fireFocus();
     expect(resolvers).toHaveLength(2);
@@ -637,12 +750,10 @@ describe('AttendanceMonthlyScreen — month nav', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
-    // Navigate › to the current month (settled).
-    fetchMock.mockResolvedValueOnce(
-      envelope({ from: `${deviceThisMonth()}-01` }),
-    );
+    // Navigate to the previous month via its chip (settled).
+    fetchMock.mockResolvedValueOnce(envelope({ from: `${PREV_MONTH}-01` }));
     await act(async () => {
-      findButton(renderer, 'Next month').props.onPress();
+      chip(renderer, PREV_MONTH).props.onPress();
       await flush();
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -661,7 +772,10 @@ describe('AttendanceMonthlyScreen — month nav', () => {
     const post = fetchMock.mock.calls.slice(3);
     expect(post.length).toBeGreaterThanOrEqual(1);
     for (const call of post) {
-      expect(call.slice(0, 2)).toEqual([`${deviceThisMonth()}-01`, ECHO_TODAY]);
+      expect(call.slice(0, 2)).toEqual([
+        `${PREV_MONTH}-01`,
+        monthRange(PREV_MONTH).to,
+      ]);
       expect(call[2]).toBe('o1');
     }
     expect(texts(renderer)).toContain('Asha'); // last-good, not cleared
@@ -709,7 +823,7 @@ describe('AttendanceMonthlyScreen — office filter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1].slice(0, 3)).toEqual([
       `${SEED}-01`,
-      monthRange(SEED).to,
+      ECHO_TODAY,
       'o1',
     ]);
     expect(texts(renderer)).toContain('Hero wala');

@@ -48,23 +48,28 @@ export const MONTHLY_ERROR_COPY =
 /** The office pick payload the filter sheet commits — null = All offices. */
 export type MonthlyOfficePick = { id: string; name: string } | null;
 
-/** The device-seeded bootstrap month: LAST month (UJ-4 — the owner opens
- *  for last month), so the first fetch needs no clamp. Scaffolding only. */
+/** The device-seeded bootstrap month: THE CURRENT MONTH (owner ruling
+ *  2026-10-23 — the pane opens on today's month, not last month's). */
 function initialYearMonth(): string {
   const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return shiftYearMonth(thisMonth, -1);
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /** The fetch window for a load: echo-derived when the wire today is known
- *  (the clamp); before the first echo the seeded past month takes its
- *  plain range (never a device-derived clamp — the device clock never
- *  draws a fetch boundary). */
+ *  (the clamp). Before the first echo, a PAST month takes its plain range
+ *  (never a device-derived clamp — the device clock never draws a fetch
+ *  boundary for months that are already over) — but the CURRENT-month seed
+ *  reaches into the future, so its end clamps to the device date; the wire
+ *  echo re-clamps on the server's clock when it lands. */
 function windowFor(
   yearMonth: string,
   today: string | null,
 ): { from: string; to: string } {
-  return today === null ? monthRange(yearMonth) : monthlyWindow(yearMonth, today);
+  if (today !== null) return monthlyWindow(yearMonth, today);
+  const range = monthRange(yearMonth);
+  const now = new Date();
+  const deviceToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return range.to > deviceToday ? { from: range.from, to: deviceToday } : range;
 }
 
 /** The last-good pair — what the on-screen rows actually came from. */
@@ -184,6 +189,12 @@ export function useMonthlyData() {
           officeName: officeNameRef.current,
         };
         setData(res);
+        // Mirror at commit, not just in the effect below: the echo-
+        // correction's follow-up fetch (this same settle path) reads the
+        // ref SYNCHRONOUSLY — pre-effect — and without this it would see
+        // the stale/null echo and clamp a future correction month to the
+        // device date (an inverted window).
+        dataRef.current = res;
         setFirstLoadError(null);
         setRefetchError(false);
         setHasSettled(true);
@@ -195,7 +206,12 @@ export function useMonthlyData() {
         // re-arms the correction instead of burning the one shot.
         if (!correctedRef.current && !navigatedRef.current) {
           correctedRef.current = true;
-          const canonical = shiftYearMonth(res.today.slice(0, 7), -1);
+          // The canonical default: the wire echo's CURRENT month (owner
+          // ruling 2026-10-23) — correct only when it differs AND the
+          // owner has not navigated. With the seed already current this
+          // normally stands down immediately; it still catches a device
+          // clock vs. server drift around a month boundary.
+          const canonical = res.today.slice(0, 7);
           if (canonical !== fetchYearMonth) {
             applyYearMonth(canonical);
             correctionMonthRef.current = canonical;

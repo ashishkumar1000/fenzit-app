@@ -8,6 +8,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { CalendarX2 } from 'lucide-react-native';
 import { Button, Card, EmptyState, InlineError, Skeleton } from '../../../components/ui';
+import { HolidaysEmptyArt } from './HolidaysEmptyArt';
 import { colors, spacing, typography } from '../../../theme';
 import type { ApiError, Holiday } from '../../../services';
 
@@ -63,6 +64,7 @@ export function HolidaysStep({
     return (
       <View style={styles.stack}>
         <EmptyState
+          illustration={<HolidaysEmptyArt />}
           icon={
             <CalendarX2 size={24} color={colors.primary} strokeWidth={1.5} />
           }

@@ -1,15 +1,26 @@
 /**
- * Tests for AttendanceTabHomeScreen — the owner's Attendance tab page
- * (2026-10 footer restructure): the hub's old "Every day" tiles (Today,
- * Monthly, Leave) plus the CAP-3 setup banner. The page is tiles-only —
- * it never embeds attendance content and never auto-redirects.
+ * Tests for AttendanceTabHomeScreen — the owner's Attendance tab page.
  *
- * The banner's GET is the hub's focus gate minus the redirect, so the gate
+ * REQUIREMENT SUPERSEDED (2026-10, CAP-1 of SPEC-attendance-tabs-home-
+ * leave-banner): the page was the hub's "Every day" tiles; it is now a
+ * Today | Monthly | Leave SegmentedControl whose panes are the SAME leaf
+ * screens rendered in place as `embedded` panes — no tiles, no navigation
+ * push. These assertions follow the NEW requirement; the CAP-3 setup
+ * banner conventions below carry over unchanged.
+ *
+ * The three panes are stubbed: each leaf owns its own fetches/postures
+ * (their own suites cover those) — this page only decides WHICH pane
+ * renders and with `embedded` set.
+ *
+ * The gate GET is the hub's focus gate minus the redirect, so the gate
  * conventions transfer: the screen subscribes via
  * `navigation.addListener?.('focus', …)` and the tests simulate a focus by
  * invoking the listener captured from the mock; a failed or forbidden GET
- * is silent (no banner, no redirect), and the latest-wins seq guard drops
- * stale answers.
+ * is silent (no redirect), and the latest-wins seq guard drops stale
+ * answers. REQUIREMENT SUPERSEDED (2026-10-23 owner redesign): the inline
+ * banner became the SetupPending SCREEN — an incomplete setup replaces the
+ * segments entirely (it cannot be skipped); only a focus GET that sees a
+ * completed setup returns the tabbed page.
  */
 jest.mock('../../../services', () => ({
   attendanceSetupService: {
@@ -26,8 +37,61 @@ jest.mock('../../auth/useRole', () => ({
   useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
 }));
 
+// The badge rides the shared /users/me profile store — the real store
+// would fire GET /users/me in these tests, so it is pinned like the role
+// hooks above; a test seeds `mockProfile` for the badge cases (default
+// null → no badge).
+let mockProfile: Record<string, unknown> | null = null;
+jest.mock('../../profile/useMyProfile', () => ({
+  useMyProfile: () => ({ profile: mockProfile }),
+  loadMyProfile: jest.fn(),
+}));
+
+// The panes — stubbed leaves surfacing their host wiring as testID props.
+jest.mock('../dashboard/AttendanceDashboardScreen', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    __esModule: true,
+    default: function MockDashboard(props: { embedded?: boolean }) {
+      return React.createElement(Text, {
+        testID: 'pane-today',
+        embedded: props.embedded,
+      });
+    },
+  };
+});
+jest.mock('../monthly/AttendanceMonthlyScreen', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    __esModule: true,
+    default: function MockMonthly(props: { embedded?: boolean }) {
+      return React.createElement(Text, {
+        testID: 'pane-monthly',
+        embedded: props.embedded,
+      });
+    },
+  };
+});
+jest.mock('../leave/OwnerLeaveScreen', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  return {
+    __esModule: true,
+    default: function MockLeave(props: { embedded?: boolean }) {
+      return React.createElement(Text, {
+        testID: 'pane-leave',
+        embedded: props.embedded,
+      });
+    },
+  };
+});
+
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
+import { Text } from 'react-native';
+import { loadMyProfile } from '../../profile/useMyProfile';
 import AttendanceTabHomeScreen from './AttendanceTabHomeScreen';
 import { attendanceSetupService } from '../../../services';
 import type { SetupState } from '../../../services';
@@ -44,12 +108,15 @@ function setupState(overrides: Partial<SetupState> = {}): SetupState {
   };
 }
 
-function renderTab() {
+function renderTab(params?: { tab?: string }) {
   const navigation = {
     navigate: jest.fn(),
     // The banner must never REPLACE anything — the mock only exists so the
     // no-redirect assertions have something to read.
     replace: jest.fn(),
+    // The Review param is consumed read-once-then-cleared (the Jobs
+    // `scope` convention).
+    setParams: jest.fn(),
     // The real navigator reports focus per screen; true by default (the
     // tab is focused) and flipped in the late-answer race test.
     isFocused: jest.fn(() => true),
@@ -62,7 +129,7 @@ function renderTab() {
     renderer = create(
       <AttendanceTabHomeScreen
         navigation={navigation as never}
-        route={{} as never}
+        route={(params ? { params } : {}) as never}
       />,
     );
   });
@@ -90,11 +157,48 @@ async function fireFocus(addListener: jest.Mock) {
   });
 }
 
+/** The segmented control's segments, in render order — the composite
+ *  Pressable of each (the only node carrying onPress; its host mirror
+ *  carries the accessibility props but not the handler). */
+function segments(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root
+    .findAll(
+      node =>
+        node.props.accessibilityRole === 'button'
+        && node.props.accessibilityState?.selected !== undefined
+        && typeof node.props.onPress === 'function',
+    )
+    .map(node => ({
+      label: node.find(
+        (n: ReactTestRenderer.ReactTestInstance) =>
+          n.type === Text && typeof n.props.children === 'string',
+      ).props.children as string,
+      selected: node.props.accessibilityState.selected as boolean,
+    }));
+}
+
+/** The segment Pressable for a label (the house pressable walk-up: from
+ *  the label Text to its onPress-carrying ancestor). */
+function findSegment(
+  renderer: ReactTestRenderer.ReactTestRenderer,
+  label: string,
+): ReactTestRenderer.ReactTestInstance {
+  const text = renderer.root.find(
+    node => node.type === Text && node.props.children === label,
+  );
+  let node = text.parent;
+  while (node != null && typeof node.props.onPress !== 'function') {
+    node = node.parent;
+  }
+  expect(node).not.toBeNull();
+  return node!;
+}
+
 /**
- * The tile Pressable for a label. `findByProps({ accessibilityLabel })` is
- * ambiguous: react-test-renderer mirrors the composite `Pressable` with its
- * host `View`, and both carry the label. The Pressable is the one with the
- * `onPress` handler.
+ * The setup banner Tile. `findByProps({ accessibilityLabel })` is
+ * ambiguous: react-test-renderer mirrors the composite `Pressable` with
+ * its host `View`, and both carry the label. The Pressable is the one with
+ * the `onPress` handler.
  */
 function findTile(
   renderer: ReactTestRenderer.ReactTestRenderer,
@@ -108,75 +212,99 @@ function findTile(
   return matches[0];
 }
 
-describe('AttendanceTabHomeScreen', () => {
+describe('AttendanceTabHomeScreen — the segmented panes (CAP-1: tabs, not tiles)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanWrite = true;
   });
 
-  it('renders the title-only header, the "Every day" eyebrow and the three tiles', () => {
+  it('renders the title-only header and the three segments with Today active — the tiles are gone', () => {
     const { renderer } = renderTab();
     const texts = renderer.root
       .findAll(node => typeof node.props.children === 'string')
       .map(node => node.props.children as string);
     expect(texts).toContain('Attendance');
-    expect(texts).toContain('Every day');
-    expect(texts).toContain('Today');
-    expect(texts).toContain("Who's in and who's not");
-    expect(texts).toContain('Monthly');
-    expect(texts).toContain("Everyone's month at a glance");
-    expect(texts).toContain('Leave');
-    expect(texts).toContain('Pending requests & history');
+    // Requirement superseded (CAP-1): no "Every day" eyebrow and no tile
+    // copy — the segments ARE the content now.
+    expect(texts).not.toContain('Every day');
+    expect(texts).not.toContain("Who's in and who's not");
+    expect(texts).not.toContain("Everyone's month at a glance");
+    expect(texts).not.toContain('Pending requests & history');
 
-    // The hub's deleted order pin (19-4/19-5 D1): the today snapshot is the
-    // owner's first answer — Today, then Monthly, then Leave.
-    const all = renderer.root
-      .findAll((node) => node.props.accessibilityRole === 'button')
-      .map((node) => node.props.accessibilityLabel as string);
-    expect(all.indexOf('Today')).toBeGreaterThanOrEqual(0);
-    expect(all.indexOf('Today')).toBeLessThan(all.indexOf('Monthly'));
-    expect(all.indexOf('Monthly')).toBeLessThan(all.indexOf('Leave'));
+    // Segment order (the deleted tiles' order pin carries over: the today
+    // snapshot is the owner's first answer — Today, then Monthly, then
+    // Leave) and the entry pane: Today selected.
+    expect(segments(renderer)).toEqual([
+      { label: 'Today', selected: true },
+      { label: 'Monthly', selected: false },
+      { label: 'Leave', selected: false },
+    ]);
+
+    // The Today pane renders embedded, in place — not a push.
+    expect(renderer.root.findByProps({ testID: 'pane-today' }).props.embedded).toBe(true);
+    expect(renderer.root.findAllByProps({ testID: 'pane-monthly' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'pane-leave' })).toHaveLength(0);
   });
 
   it.each([
-    ['Today', 'AttendanceDashboard'],
-    ['Monthly', 'AttendanceMonthly'],
-    ['Leave', 'OwnerLeave'],
-  ])('tapping "%s" opens the existing %s screen', (title, route) => {
+    ['Monthly', 'pane-monthly'],
+    ['Leave', 'pane-leave'],
+  ])('tapping "%s" swaps the pane in place — never a navigation push', (label, paneId) => {
     const { renderer, navigation } = renderTab();
     act(() => {
-      findTile(renderer, title).props.onPress();
+      findSegment(renderer, label).props.onPress();
     });
-    expect(navigation.navigate).toHaveBeenCalledWith(route);
+    expect(renderer.root.findByProps({ testID: paneId }).props.embedded).toBe(true);
+    expect(renderer.root.findAllByProps({ testID: 'pane-today' })).toHaveLength(0);
+    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 });
 
-describe('AttendanceTabHomeScreen — the setup banner (CAP-3: banner, not a redirect)', () => {
+describe('AttendanceTabHomeScreen — the setup pending screen (CAP-3 + the 2026-10 redesign)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanWrite = true;
   });
 
-  it('shows the banner when the setup is incomplete, and nothing auto-redirects', async () => {
+  /** The SetupPending screen's presence: its title + Continue button. */
+  function pendingShown(renderer: ReactTestRenderer.ReactTestRenderer) {
+    return (
+      renderer.root.findAll(
+        node => node.type === Text && node.props.children === 'Continue Setup',
+      ).length > 0
+    );
+  }
+
+  it('an incomplete setup renders the invitation screen INSTEAD of the segments — and nothing auto-redirects', async () => {
     getSetup.mockResolvedValue(setupState({ started: false, currentStep: null }));
     const { renderer, addListener, navigation } = renderTab();
 
     await fireFocus(addListener);
 
-    const banner = findTile(renderer, 'Finish setting up attendance');
-    expect(banner).toBeDefined();
+    expect(pendingShown(renderer)).toBe(true);
+    // The tabbed page is gone entirely — no Today pane, no segments: the
+    // pending screen owns the page.
+    expect(renderer.root.findAllByProps({ testID: 'pane-today' })).toHaveLength(0);
+    expect(segments(renderer)).toHaveLength(0);
     expect(navigation.replace).not.toHaveBeenCalled();
-    expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
-  it('tapping the banner pushes the setup wizard', async () => {
+  it('Continue Setup pushes the setup wizard (the screen cannot be skipped)', async () => {
     getSetup.mockResolvedValue(setupState({ started: false, currentStep: null }));
     const { renderer, addListener, navigation } = renderTab();
 
     await fireFocus(addListener);
 
+    const pressable = renderer.root.find(
+      node =>
+        typeof node.props.onPress === 'function' &&
+        node.findAll(
+          (n) => n.type === Text && n.props.children === 'Continue Setup',
+        ).length > 0,
+    );
     act(() => {
-      findTile(renderer, 'Finish setting up attendance').props.onPress();
+      pressable.props.onPress();
     });
     expect(navigation.navigate).toHaveBeenCalledWith('AttendanceSetupWizard');
   });
@@ -214,8 +342,8 @@ describe('AttendanceTabHomeScreen — the setup banner (CAP-3: banner, not a red
         node => node.props.accessibilityLabel === 'Finish setting up attendance',
       ),
     ).toHaveLength(0);
-    // The page is unblocked — the daily tiles render as usual.
-    expect(findTile(renderer, 'Today')).toBeDefined();
+    // The page is unblocked — the segmented panes render as usual.
+    expect(renderer.root.findByProps({ testID: 'pane-today' })).toBeDefined();
     expect(navigation.replace).not.toHaveBeenCalled();
     expect(navigation.navigate).not.toHaveBeenCalled();
   });
@@ -232,18 +360,12 @@ describe('AttendanceTabHomeScreen — the setup banner (CAP-3: banner, not a red
     const { renderer, addListener } = renderTab();
 
     await fireFocus(addListener);
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Finish setting up attendance',
-      ).length,
-    ).toBeGreaterThan(0);
+    expect(pendingShown(renderer)).toBe(true);
 
     await fireFocus(addListener);
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Finish setting up attendance',
-      ),
-    ).toHaveLength(0);
+    expect(pendingShown(renderer)).toBe(false);
+    // The tabbed page returned with the pending screen gone.
+    expect(segments(renderer)).toHaveLength(3);
   });
 
   it('a slow STALE answer cannot flip the banner after a newer focus decided', async () => {
@@ -269,25 +391,17 @@ describe('AttendanceTabHomeScreen — the setup banner (CAP-3: banner, not a red
       handler();
       await flush();
     });
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Finish setting up attendance',
-      ),
-    ).toHaveLength(0);
+    expect(pendingShown(renderer)).toBe(false);
 
     await act(async () => {
       resolveStale(setupState({ started: false, currentStep: null }));
       await flush();
     });
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Finish setting up attendance',
-      ),
-    ).toHaveLength(0);
+    expect(pendingShown(renderer)).toBe(false);
   });
 
   it('a LATE answer cannot flip the banner while the tab is unfocused', async () => {
-    // The gate GET hangs; the owner pushes a tile (this tab is no longer
+    // The gate GET hangs; the owner switches away (this tab is no longer
     // focused); the answer then lands "not completed". The focused check
     // (the hub gate's guard, verbatim) must swallow it — refocus re-runs
     // the GET anyway.
@@ -302,9 +416,8 @@ describe('AttendanceTabHomeScreen — the setup banner (CAP-3: banner, not a red
       handler();
       await flush();
     });
-    expect(navigation.isFocused).not.toHaveBeenCalled();
 
-    // The owner pushes a tile — this tab is no longer focused.
+    // The owner switches away — this tab is no longer focused.
     act(() => {
       navigation.navigate('AttendanceDashboard');
     });
@@ -315,12 +428,10 @@ describe('AttendanceTabHomeScreen — the setup banner (CAP-3: banner, not a red
       await flush();
     });
 
+    // The gate consults focus at ANSWER time (one call) and the answer
+    // landed on an unfocused screen — it decides nothing.
     expect(navigation.isFocused).toHaveBeenCalledTimes(1);
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Finish setting up attendance',
-      ),
-    ).toHaveLength(0);
+    expect(pendingShown(renderer)).toBe(false);
   });
 
   it('unsubscribes from the focus listener on unmount', () => {
@@ -347,25 +458,153 @@ describe('AttendanceTabHomeScreen — a viewer (read-only)', () => {
     mockCanWrite = false;
   });
 
-  it('keeps Today and Monthly (reads)', () => {
+  it('keeps exactly the Today and Monthly segments, Today active', () => {
     const { renderer } = renderTab();
-    findTile(renderer, 'Today');
-    findTile(renderer, 'Monthly');
+    expect(segments(renderer)).toEqual([
+      { label: 'Today', selected: true },
+      { label: 'Monthly', selected: false },
+    ]);
+    expect(renderer.root.findByProps({ testID: 'pane-today' })).toBeDefined();
   });
 
-  it('hides Leave and the setup banner, and never asks the setup endpoint', async () => {
+  it('hides the Leave segment and the setup banner, and never asks the setup endpoint', async () => {
     getSetup.mockResolvedValue(setupState({ started: false }));
     const { renderer, addListener, navigation } = renderTab();
 
     await fireFocus(addListener);
 
     expect(getSetup).not.toHaveBeenCalled();
+    expect(segments(renderer).map(segment => segment.label)).not.toContain('Leave');
     expect(
       renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Leave'
-          || node.props.accessibilityLabel === 'Finish setting up attendance',
+        node => node.props.accessibilityLabel === 'Finish setting up attendance',
       ),
     ).toHaveLength(0);
     expect(navigation.replace).not.toHaveBeenCalled();
+  });
+});
+
+describe('AttendanceTabHomeScreen — the one-shot Review param (CAP-4 landing)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCanWrite = true;
+    mockProfile = null;
+  });
+  afterEach(() => {
+    mockProfile = null;
+  });
+
+  it('a `tab: leave` arrival pre-selects the Leave pane — no Today flash', () => {
+    const { renderer } = renderTab({ tab: 'leave' });
+
+    expect(renderer.root.findByProps({ testID: 'pane-leave' })).toBeDefined();
+    expect(renderer.root.findAllByProps({ testID: 'pane-today' })).toHaveLength(0);
+  });
+
+  it('a `tab: monthly` arrival pre-selects Monthly the same way', () => {
+    const { renderer } = renderTab({ tab: 'monthly' });
+
+    expect(renderer.root.findByProps({ testID: 'pane-monthly' })).toBeDefined();
+    expect(renderer.root.findAllByProps({ testID: 'pane-leave' })).toHaveLength(0);
+  });
+
+  it('the param is consumed read-once: cleared via setParams on entry', () => {
+    const { navigation } = renderTab({ tab: 'leave' });
+
+    expect(navigation.setParams).toHaveBeenCalledTimes(1);
+    expect(navigation.setParams).toHaveBeenCalledWith({ tab: undefined });
+  });
+
+  it('no param: Today renders and setParams is untouched', () => {
+    const { renderer, navigation } = renderTab();
+
+    expect(renderer.root.findByProps({ testID: 'pane-today' })).toBeDefined();
+    expect(navigation.setParams).not.toHaveBeenCalled();
+  });
+
+  it('a garbage param is ignored: Today renders, nothing is cleared', () => {
+    const { renderer, navigation } = renderTab({ tab: 'yesterday' });
+
+    expect(renderer.root.findByProps({ testID: 'pane-today' })).toBeDefined();
+    expect(navigation.setParams).not.toHaveBeenCalled();
+  });
+
+  it('a demoted viewer clamps a seeded Leave choice to Today (live role change)', () => {
+    mockCanWrite = false;
+    const { renderer } = renderTab({ tab: 'leave' });
+
+    expect(renderer.root.findByProps({ testID: 'pane-today' })).toBeDefined();
+    expect(renderer.root.findAllByProps({ testID: 'pane-leave' })).toHaveLength(0);
+  });
+
+  it('a NEW param while mounted re-seeds the pane (the second Review)', async () => {
+    const { renderer, navigation } = renderTab();
+    expect(renderer.root.findByProps({ testID: 'pane-today' })).toBeDefined();
+
+    await act(async () => {
+      renderer.update(
+        <AttendanceTabHomeScreen
+          navigation={navigation as never}
+          route={{ params: { tab: 'monthly' } } as never}
+        />,
+      );
+    });
+
+    expect(renderer.root.findByProps({ testID: 'pane-monthly' })).toBeDefined();
+    expect(navigation.setParams).toHaveBeenCalledWith({ tab: undefined });
+  });
+});
+
+describe('AttendanceTabHomeScreen — the Leave badge (CAP-3)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCanWrite = true;
+    mockProfile = null;
+  });
+  afterEach(() => {
+    mockProfile = null;
+  });
+
+  /** The badge pill's numeric Text — the only numeric Text child on the
+   *  page (labels are strings, the pane stubs render no children). */
+  function badgeCount(renderer: ReactTestRenderer.ReactTestRenderer): number | null {
+    const matches = renderer.root.findAll(
+      node => node.type === Text && typeof node.props.children === 'number',
+    );
+    expect(matches.length).toBeLessThanOrEqual(1);
+    return matches.length ? (matches[0].props.children as number) : null;
+  }
+
+  it('badges Leave with the mirror count while the tenant is enrolled', () => {
+    mockProfile = {
+      attendance: { attendanceEnabled: true, pendingLeaveRequests: 2 },
+    };
+    const { renderer } = renderTab();
+
+    expect(badgeCount(renderer)).toBe(2);
+  });
+
+  it('no badge at a zero count (fail-hidden, not "0")', () => {
+    mockProfile = {
+      attendance: { attendanceEnabled: true, pendingLeaveRequests: 0 },
+    };
+    const { renderer } = renderTab();
+
+    expect(badgeCount(renderer)).toBeNull();
+  });
+
+  it('fails HIDDEN without the attendance mirror (older backend)', () => {
+    mockProfile = {};
+    const { renderer } = renderTab();
+
+    expect(badgeCount(renderer)).toBeNull();
+  });
+
+  it('every focus loads the mirror — a decision made elsewhere reaches the badge', async () => {
+    const { addListener } = renderTab();
+
+    await fireFocus(addListener);
+
+    expect(loadMyProfile).toHaveBeenCalled();
   });
 });

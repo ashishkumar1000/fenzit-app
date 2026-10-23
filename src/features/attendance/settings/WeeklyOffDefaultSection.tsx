@@ -30,7 +30,6 @@ import { WeeklyOffDayPicker } from './WeeklyOffDayPicker';
 import WeeklyOffEveryoneBackdrop from './WeeklyOffEveryoneBackdrop';
 import { WeeklyOffUpcomingPanel } from './WeeklyOffUpcomingPanel';
 import {
-  describeDaysOff,
   formatLongDate,
   saveFailureMessage,
   weeklyOffSaveHint,
@@ -100,11 +99,7 @@ export function WeeklyOffDefaultSection({
                 ? "No weekly off set yet. By default Sunday is shown off — pick the days you'd like off. Save to apply for everyone."
                 : 'Pick the days everyone is off. Days not picked count as working days.'}
             </Text>
-            {neverConfigured ? null : (
-              <Text style={styles.rightNow}>
-                {`Right now: ${describeDaysOff(currentDays)}`}
-              </Text>
-            )}
+
           </View>
 
           <View style={styles.group}>
@@ -147,7 +142,6 @@ export function WeeklyOffDefaultSection({
               onChange={onEffectiveFromChange}
               placeholder={formatLongDate(today)}
               subtitle="Starts from the beginning of this day"
-              helper="Choose today or a later date"
             />
           </View>
 
@@ -166,7 +160,11 @@ export function WeeklyOffDefaultSection({
               fullWidth>
               Save schedule
             </Button>
-            {saveHint ? <Text style={styles.hint}>{saveHint}</Text> : null}
+            {saveHint ? (
+              <View style={styles.hintPill}>
+                <Text style={styles.hintPillText}>{saveHint}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Card>
@@ -189,13 +187,21 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.textMuted,
   },
-  rightNow: {
-    ...typography.label,
-    color: colors.textStrong,
+  // The save hint is a highlighted pill — it explains why Save is
+  // disabled (or that nothing needs saving), so it must be seen.
+  hintPill: {
+    alignSelf: 'center',
+    backgroundColor: colors.status.warning.bg,
+    borderColor: colors.status.warning.border,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.s3,
+    paddingVertical: spacing.s1,
+    maxWidth: 320,
   },
-  hint: {
-    ...typography.bodySm,
-    color: colors.textMuted,
+  hintPillText: {
+    ...typography.caption,
+    color: colors.status.warning.fg,
     textAlign: 'center',
   },
   divider: {

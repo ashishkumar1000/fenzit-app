@@ -38,7 +38,8 @@ type Props = { pulse: Ready; onPress: () => void };
 
 export function TodayPulseCard({ pulse, onPress }: Props) {
   const { counts, date } = pulse;
-  // Nobody tracked → no share to compute; the card still shows 0%.
+  // Nobody tracked → no share to compute; the card still shows 0% — the
+  // exact progress, always (owner: the pulse never inflates).
   const pct = checkedInPct(counts) ?? 0;
   const chips = [
     { label: 'Present', value: counts.checkedIn },

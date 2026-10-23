@@ -73,11 +73,43 @@ export interface DashboardOfficeStat {
   checkedIn: number;
 }
 
-/** The FR-24 envelope — fail-closed on every scalar. */
+/** One tracked employee's today row — the Live Team Pulse list (2026-10).
+ *  `status` mirrors the tile buckets (`late` is a qualifier of checked_in,
+ *  exactly like the count). `checkInAt` is the effective check-in instant
+ *  (ISO) for presence rows and null otherwise. */
+export type DashboardEmployeeStatus =
+  | 'checked_in'
+  | 'late'
+  | 'on_leave'
+  | 'short_day'
+  | 'not_checked_in';
+
+export interface DashboardEmployeeStat {
+  employeeId: string;
+  employeeName: string;
+  phone: string | null;
+  officeName: string | null;
+  status: DashboardEmployeeStatus;
+  checkInAt: string | null;
+  /** ISO check-out instant — present once they've checked out. */
+  checkoutAt: string | null;
+  /** How far past the office's late cutoff the check-in landed (late). */
+  lateMinutes: number | null;
+  /** Engine-computed worked minutes (short-day / checked-out rows). */
+  workedMinutes: number | null;
+  /** The covering approved leave's part (on-leave rows). */
+  leavePart: 'full_day' | 'first_half' | 'second_half' | null;
+}
+
+/** The FR-24 envelope — fail-closed on every scalar. `employees` is
+ *  OPTIONAL on the wire: the currently deployed BE predates it, so absence
+ *  reads as "no per-employee feed available" (null) — the same rule the
+ *  `offices` field follows; present-but-malformed still fails closed. */
 export interface AttendanceDashboardData {
   date: string;
   counts: AttendanceDashboardCounts;
   offices: DashboardOfficeStat[] | null;
+  employees: DashboardEmployeeStat[] | null;
   flags: {
     checkoutMissing: CheckoutMissingRow[];
     fakeLocationAttempt: FakeLocationRow[];
@@ -198,6 +230,95 @@ function normalizeOffices(raw: unknown): DashboardOfficeStat[] | null {
   });
 }
 
+const PULSE_STATUSES: ReadonlySet<string> = new Set([
+  'checked_in',
+  'late',
+  'on_leave',
+  'short_day',
+  'not_checked_in',
+]);
+
+/** The Live Team Pulse rows — validated only when PRESENT (the older
+ *  deployed BE omits `employees` entirely; absence is an older API
+ *  version, not a malformed response). */
+function normalizeEmployees(raw: unknown): DashboardEmployeeStat[] | null {
+  if (raw === undefined) return null;
+  if (!Array.isArray(raw)) {
+    fail('`employees` is not a list');
+  }
+  return (raw as unknown[]).map((item) => {
+    if (!isObject(item)) {
+      fail('an `employees` row is not an object');
+    }
+    const row = item as Record<string, unknown>;
+    if (typeof row.employeeId !== 'string' || row.employeeId.length === 0) {
+      fail('an `employees` row is missing its employeeId');
+    }
+    if (typeof row.employeeName !== 'string' || row.employeeName.length === 0) {
+      fail('an `employees` row is missing its employeeName');
+    }
+    if (
+      row.phone !== null &&
+      (typeof row.phone !== 'string' || row.phone.length === 0)
+    ) {
+      fail('an `employees` row carries a malformed phone');
+    }
+    if (
+      row.officeName !== null &&
+      (typeof row.officeName !== 'string' || row.officeName.length === 0)
+    ) {
+      fail('an `employees` row carries a malformed officeName');
+    }
+    if (
+      typeof row.status !== 'string' ||
+      !PULSE_STATUSES.has(row.status)
+    ) {
+      fail(`an \`employees\` row carries an unknown status ${JSON.stringify(row.status ?? null)}`);
+    }
+    if (
+      row.checkInAt !== null &&
+      (typeof row.checkInAt !== 'string' || Number.isNaN(Date.parse(row.checkInAt)))
+    ) {
+      fail('an `employees` row carries a malformed checkInAt');
+    }
+    if (
+      row.checkoutAt !== null &&
+      (typeof row.checkoutAt !== 'string' || Number.isNaN(Date.parse(row.checkoutAt)))
+    ) {
+      fail('an `employees` row carries a malformed checkoutAt');
+    }
+    for (const field of ['lateMinutes', 'workedMinutes'] as const) {
+      const value = row[field];
+      if (
+        value !== null &&
+        (typeof value !== 'number' || !Number.isInteger(value) || value < 0)
+      ) {
+        fail(`an \`employees\` row carries a malformed ${field} ${JSON.stringify(value)}`);
+      }
+    }
+    if (
+      row.leavePart !== null &&
+      row.leavePart !== 'full_day' &&
+      row.leavePart !== 'first_half' &&
+      row.leavePart !== 'second_half'
+    ) {
+      fail(`an \`employees\` row carries an unknown leavePart ${JSON.stringify(row.leavePart)}`);
+    }
+    return {
+      employeeId: row.employeeId as string,
+      employeeName: row.employeeName as string,
+      phone: row.phone as string | null,
+      officeName: row.officeName as string | null,
+      status: row.status as DashboardEmployeeStatus,
+      checkInAt: row.checkInAt as string | null,
+      checkoutAt: row.checkoutAt as string | null,
+      lateMinutes: row.lateMinutes as number | null,
+      workedMinutes: row.workedMinutes as number | null,
+      leavePart: row.leavePart as DashboardEmployeeStat['leavePart'],
+    };
+  });
+}
+
 /** Fail-closed the whole envelope (fetch-level rule). */
 export function normalizeDashboard(raw: unknown): AttendanceDashboardData {
   if (!isObject(raw)) {
@@ -226,6 +347,7 @@ export function normalizeDashboard(raw: unknown): AttendanceDashboardData {
     },
     flags: normalizeFlags(record.flags),
     offices: normalizeOffices(record.offices),
+    employees: normalizeEmployees(record.employees),
   };
 }
 

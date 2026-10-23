@@ -40,17 +40,27 @@ jest.mock('../../auth/useRole', () => ({
   useSessionRole: () => (mockCanWrite ? 'company_admin' : 'viewer'),
 }));
 
+// Write successes refresh the shared /users/me mirror (the Attendance tab's
+// badge and Home's banner read it) — pin the store so the tests never fire
+// a real GET.
+jest.mock('../../profile/useMyProfile', () => ({
+  loadMyProfile: jest.fn(),
+}));
+
 import type ReactTestRenderer from 'react-test-renderer';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { act, create } from 'react-test-renderer';
 import { AccessibilityInfo, AppState, FlatList, Text } from 'react-native';
 import { Button, Input, SegmentedControl, Sheet } from '../../../components/ui';
 import { InlineNotice } from '../../../components/ui';
 import { colors } from '../../../theme';
 import { attendanceLeaveService } from '../../../services';
+import { loadMyProfile } from '../../profile/useMyProfile';
 import type { LeaveActionPreview, LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import { LeaveDetailSheet } from './LeaveDetailSheet';
 import { LeaveRequestRow as LeaveRequestRowView } from './LeaveRequestRow';
 import OwnerLeaveScreen from './OwnerLeaveScreen';
+import ScreenHeader from '../offices/ScreenHeader';
 
 const listOwnerLeave = attendanceLeaveService.listOwnerLeave as jest.Mock;
 const approveLeave = attendanceLeaveService.approveLeave as jest.Mock;
@@ -132,7 +142,10 @@ type Nav = ReturnType<typeof makeNavigation>;
 // (found as moving uncaught-error failures across unrelated suites).
 let lastRenderer: ReactTestRenderer.ReactTestRenderer | null = null;
 
-async function renderScreen(params: { tab?: 'pending' | 'all' } = {}): Promise<{
+async function renderScreen(
+  params: { tab?: 'pending' | 'all' } = {},
+  opts: { embedded?: boolean } = {},
+): Promise<{
   renderer: ReactTestRenderer.ReactTestRenderer;
   root: ReactTestRenderer.ReactTestInstance;
   navigation: Nav;
@@ -144,6 +157,7 @@ async function renderScreen(params: { tab?: 'pending' | 'all' } = {}): Promise<{
       <OwnerLeaveScreen
         navigation={navigation as never}
         route={{ params } as never}
+        embedded={opts.embedded}
       />,
     );
   });
@@ -333,6 +347,9 @@ describe('approve (spec D2 lifecycle)', () => {
       findButtonByText(root, 'Approve')!.props.onPress();
     });
     expect(approveLeave).toHaveBeenCalledWith('r1');
+    // The decision must reach the shared /users/me mirror past the focus
+    // throttle — the tab-page badge and Home's banner read it.
+    expect(loadMyProfile).toHaveBeenCalledWith({ force: true });
     expect(announce).toHaveBeenCalledWith('Leave approved');
     const ids = (root.findByType(FlatList).props.data as LeaveRequestRow[]).map(r => r.id);
     expect(ids).toEqual(['r2']); // the approved row left the filtered list
@@ -715,6 +732,8 @@ describe('revoke — the owner stage inside the detail sheet (17-7 spec D3)', ()
       confirm.props.onPress();
     });
     expect(revokeLeave).toHaveBeenCalledWith('a1', 'Policy violation');
+    // Same mirror contract as approve/reject: the badge and banner read it.
+    expect(loadMyProfile).toHaveBeenCalledWith({ force: true });
   });
 
   it('success morphs back to the refreshed detail; the row is replaced and BOTH tabs go stale', async () => {
@@ -960,5 +979,22 @@ describe('a viewer (read-only)', () => {
       back[0].props.onPress();
     });
     expect(navigation.goBack).toHaveBeenCalled();
+  });
+});
+
+describe('OwnerLeaveScreen — embedded pane chrome (the tab host)', () => {
+  beforeEach(() => {
+    mockCanWrite = true;
+  });
+
+  it('embedded: the pushed back header and the top SafeArea edge stay behind', async () => {
+    await renderScreen({}, { embedded: true });
+
+    expect(lastRenderer!.root.findAllByType(ScreenHeader as never)).toHaveLength(0);
+    // The composite SafeAreaView carries the array prop as passed (the
+    // native host normalises it to an object — not matched here).
+    const safeAreas = lastRenderer!.root.findAllByType(SafeAreaView as never);
+    expect(safeAreas).toHaveLength(1);
+    expect(safeAreas[0].props.edges).toEqual([]);
   });
 });

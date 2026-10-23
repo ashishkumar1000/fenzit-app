@@ -54,7 +54,7 @@ jest.mock('../../../services', () => ({
 
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
-import { Text } from 'react-native';
+import { Switch, Text } from 'react-native';
 import {
   attendanceSetupService,
   enrolmentsService,
@@ -208,6 +208,26 @@ function hasText(root: ReactTestRenderer.ReactTestInstance, value: string) {
     root.findAll((n) => n.type === Text && n.props.children === value).length >
     0
   );
+}
+
+/** The bare Switch in the employee's row — located by the name Text up to
+ *  the nearest ancestor holding exactly one Switch (the 2026-10 redesign's
+ *  row anatomy; the chip carries the status, the switch carries no label). */
+function bareSwitch(
+  root: ReactTestRenderer.ReactTestInstance,
+  name: string,
+): ReactTestRenderer.ReactTestInstance {
+  const nameTexts = root.findAll(
+    (n) => n.type === Text && n.props.children === name,
+  );
+  expect(nameTexts.length).toBeGreaterThan(0);
+  let node = nameTexts[0];
+  while (node.parent) {
+    node = node.parent;
+    const switches = node.findAll((m) => m.type === Switch);
+    if (switches.length === 1) return switches[0];
+  }
+  throw new Error(`No Switch found in the row for "${name}"`);
 }
 
 /** The Pressable behind the Button whose visible label is `label`. */
@@ -458,6 +478,19 @@ describe('the per-step Continue gate', () => {
 });
 
 describe('Holidays — the only skippable step', () => {
+  it('holidays has NO primary Continue at all (owner 2026-10-23: Skip for now is the only forward action)', async () => {
+    getSetup.mockResolvedValue(setupState({ currentStep: 'holidays' }));
+    mockStepData({ holidays: [] });
+    const wizard = await renderLoaded();
+
+    const continues = wizard.root.findAll(
+      (n) =>
+        n.type === Text &&
+        n.props.children === 'Continue',
+    );
+    expect(continues).toHaveLength(0);
+  });
+
   it('Skip for now PATCHes Employees with NO holiday data and moves on', async () => {
     getSetup.mockResolvedValue(setupState({ currentStep: 'holidays' }));
     mockStepData({ holidays: [] });
@@ -488,22 +521,22 @@ describe('the Employees step (enrolment-lite)', () => {
     // The picker is closed: it names no employee yet.
     expect(hasText(wizard.root, 'Where does Priya work?')).toBe(false);
 
-    // The DS Switch's accessible name is its visible label text (the
-    // Pressable carries role/state but no accessibilityLabel), so the
-    // toggle is reached from the label Text up to the pressable ancestor.
-    const switchPressable = [findButton(wizard.root, 'Track attendance for Priya')];
-    expect(
-      switchPressable[0].findAll((n) => n.props.accessibilityRole === 'switch').length,
-    ).toBeGreaterThan(0);
+    // The 2026-10 redesign: the switch is BARE (the chip carries the
+    // status), so the toggle is reached from the name Text up to the row
+    // ancestor holding exactly one Switch.
+    const switchNode = [bareSwitch(wizard.root, 'Priya')];
+    expect(switchNode[0].props.value).toBe(false);
 
     await act(async () => {
-      switchPressable[0].props.onPress();
+      switchNode[0].props.onValueChange(true);
       await flush();
     });
 
     // The picker opened INLINE, named for this employee, and the switch did
-    // NOT commit — no PUT exists until an office is chosen.
+    // NOT commit — its value is still the server's row state, and no PUT
+    // exists until an office is chosen.
     expect(hasText(wizard.root, 'Where does Priya work?')).toBe(true);
+    expect(switchNode[0].props.value).toBe(false);
     expect(enable).not.toHaveBeenCalled();
 
     // The BE write response: the access state WITHOUT identity fields;
@@ -532,8 +565,8 @@ describe('the Employees step (enrolment-lite)', () => {
 
     expect(enable).toHaveBeenCalledTimes(1);
     expect(enable).toHaveBeenCalledWith('e1', 'o1', undefined);
-    // The row shows the server's returned assignment.
-    expect(hasText(wizard.root, 'Office: HQ')).toBe(true);
+    // The row shows the server's returned assignment (the 2026-10 chip).
+    expect(hasText(wizard.root, 'HQ assigned')).toBe(true);
     expect(hasText(wizard.root, 'Where does Priya work?')).toBe(false);
   });
 
@@ -581,8 +614,9 @@ describe('completion', () => {
     const wizard = await renderLoaded();
 
     // The row renders its assignment straight from the GET — the gated
-    // module flag is false, the raw enrolment truth is what shows.
-    expect(hasText(wizard.root, 'Office: HQ')).toBe(true);
+    // module flag is false, the raw enrolment truth is what shows (the
+    // 2026-10 chip wording).
+    expect(hasText(wizard.root, 'HQ assigned')).toBe(true);
 
     const enableButton = findButton(wizard.root, 'Enable attendance');
     expect(enableButton.props.disabled).toBe(false);

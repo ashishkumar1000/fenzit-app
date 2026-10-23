@@ -32,6 +32,9 @@ type Props = {
   banner?: ReactNode;
   /** Pinned above the bottom edge — buttons + the gate caption. */
   footer: ReactNode;
+  /** False when the step owns its own scrolling (a FlatList roster) — the
+   *  frame then renders a plain flex container so the list virtualizes. */
+  scrolls?: boolean;
   children: ReactNode;
 };
 
@@ -44,10 +47,11 @@ export function WizardStepFrame({
   onBack,
   banner,
   footer,
+  scrolls = true,
   children,
 }: Props) {
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.header}>
         <IconButton variant="ghost" size="md" label={backLabel} onPress={onBack}>
           <ChevronLeft size={22} color={colors.textStrong} strokeWidth={2} />
@@ -64,15 +68,21 @@ export function WizardStepFrame({
 
       {banner}
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.body}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
-        {children}
-      </ScrollView>
+      {scrolls ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.body}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled">
+          {children}
+        </ScrollView>
+      ) : (
+        // The non-scrolling branch carries the SAME body padding — a step
+        // that owns its list still sits inside the frame's margins.
+        <View style={[styles.scroll, styles.body]}>{children}</View>
+      )}
 
-      <View style={styles.footer}>{footer}</View>
+      {footer != null ? <View style={styles.footer}>{footer}</View> : null}
     </SafeAreaView>
   );
 }

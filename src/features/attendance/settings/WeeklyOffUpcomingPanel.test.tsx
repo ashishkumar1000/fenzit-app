@@ -90,12 +90,12 @@ describe('WeeklyOffDefaultSection states', () => {
     currentDays: [] as IsoWeekday[],
   };
 
-  it('cleared rule (configured, no day off) shows the configured copy and "Right now: No day off"', () => {
+  it('cleared rule (configured, no day off) shows the configured copy and no "Right now" line (owner 2026-10-23)', () => {
     const t = texts(mount(<WeeklyOffDefaultSection {...props} />));
     expect(t).toContain(
       'Pick the days everyone is off. Days not picked count as working days.',
     );
-    expect(t).toContain('Right now: No day off');
+    expect(t.some((x) => x.startsWith('Right now'))).toBe(false);
     expect(t).toContain('0 days off, 7 working days');
   });
 
@@ -104,7 +104,7 @@ describe('WeeklyOffDefaultSection states', () => {
       mount(<WeeklyOffDefaultSection {...props} neverConfigured selectedDays={[7]} noWorkingDays={false} />),
     );
     expect(t.some((x) => x.startsWith('No weekly off set yet.'))).toBe(true);
-    expect(t.some((x) => x.startsWith('Right now:'))).toBe(false);
+    expect(t.some((x) => x.startsWith('Right now'))).toBe(false);
     expect(t).toContain('1 day off, 6 working days');
   });
 

@@ -22,6 +22,12 @@
  *
  * The wire's `date` echo is consumed by the fail-closed normalizer only —
  * the screen IS today, so the echo renders nowhere.
+ *
+ * Dual-hosting (CAP-1): the screen stays a pushed root-stack route AND
+ * embeds as the Attendance tab page's Today pane. `embedded` drops the
+ * pushed-screen chrome the pane host already provides — the back/refresh
+ * header (pull-to-refresh still covers the manual refresh, 20-1 AC 15)
+ * and the top SafeArea inset.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -54,12 +60,22 @@ import { FLAG_STRIP_VISUALS, FlagStrip } from './FlagStrip';
 import { FlagListSheet } from './FlagListSheet';
 import { OfficeFilterSheet } from './OfficeFilterSheet';
 import { DashboardHeader } from './DashboardHeader';
+import { AttendanceEmptyArt } from './AttendanceEmptyArt';
+import { LiveTeamPulse } from './LiveTeamPulse';
 import { WorkspaceSelector } from './WorkspaceSelector';
 import { PresentCard } from './PresentCard';
 import { LoadErrorRetry } from './LoadErrorRetry';
 import { useDashboardData } from './useDashboardData';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'AttendanceDashboard'>;
+type StackProps = NativeStackScreenProps<RootStackParamList, 'AttendanceDashboard'>;
+
+type Props = Omit<StackProps, 'route'> & {
+  /** The navigator's route — absent when hosted as a tab pane (the page
+   *  owns the route; embedded panes never read its params). */
+  route?: StackProps['route'];
+  /** Tab-pane hosting: no pushed-screen header, no top SafeArea inset. */
+  embedded?: boolean;
+};
 
 const TILE_MARGINS = spacing.s4;
 const TILE_GAP = spacing.s3;
@@ -70,7 +86,7 @@ const KpiTileSkeletonHeight = 158;
  *  skeleton pulses the SAME ragged 2/2/2/1 rows the settled content has. */
 const SkeletonCardCount = 7;
 
-export default function AttendanceDashboardScreen({ navigation }: Props) {
+export default function AttendanceDashboardScreen({ navigation, embedded }: Props) {
   const { width } = useWindowDimensions();
   // Two columns (the redesign's grid): floored to whole dp — the exact
   // division can round up at the pixel grid and tip the pair over,
@@ -163,21 +179,27 @@ export default function AttendanceDashboardScreen({ navigation }: Props) {
   const strips = data ? flagStrips(data.flags) : [];
   const showEmptyState = data !== null && isTrackedEmpty(data.counts);
   // The present-share card (the grid's sixth cell) — same number the
-  // Checked-in pill shows; hidden in the tracked-empty posture.
+  // Checked-in pill shows; hidden in the tracked-empty posture. Exact
+  // progress, always (owner: the pulse never inflates).
   const presentPct = data !== null && !showEmptyState ? checkedInPct(data.counts) : null;
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <DashboardHeader
-        onBack={goBackSafely}
-        onRefresh={refresh}
-        // EVERY in-flight fetch dims/disables it (not just the first —
-        // a refetch pressed with unchanged numbers must visibly work).
-        refreshing={refetching || (data === null && !hasSettled)}
-      />
+    <SafeAreaView style={styles.root} edges={embedded ? [] : ['top']}>
+      {embedded ? null : (
+        <DashboardHeader
+          onBack={goBackSafely}
+          onRefresh={refresh}
+          // EVERY in-flight fetch dims/disables it (not just the first —
+          // a refetch pressed with unchanged numbers must visibly work).
+          refreshing={refetching || (data === null && !hasSettled)}
+        />
+      )}
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          showEmptyState && styles.contentCentered,
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}>
         {/* The office filter — static chrome, renders in every posture. */}
@@ -224,6 +246,11 @@ export default function AttendanceDashboardScreen({ navigation }: Props) {
               </View>
             ) : (
               <EmptyState
+                illustration={
+                  <View style={styles.emptyArtGap}>
+                    <AttendanceEmptyArt />
+                  </View>
+                }
                 icon={
                   <Users size={26} color={colors.status.neutral.fg} strokeWidth={1.5} />
                 }
@@ -264,6 +291,23 @@ export default function AttendanceDashboardScreen({ navigation }: Props) {
               // The last-good render stays above; this explains why it may
               // be stale (the InlineError contract) — BELOW the content.
               <LoadErrorRetry onRetry={() => void load()} />
+            ) : null}
+
+            {data !== null && data.employees != null && data.employees.length > 0 ? (
+              // The per-employee pulse (2026-10) — the tiles' counts,
+              // broken out per person. Only when the deployed BE carries
+              // the feed (absence = older API, the offices-field rule).
+              <LiveTeamPulse
+                employees={data.employees}
+                onOpenEmployee={(row) =>
+                  navigation.navigate('AttendanceEmployeeMonth', {
+                    employeeId: row.employeeId,
+                    employeeName: row.employeeName,
+                    yearMonth: data.date.slice(0, 7),
+                    focusDate: data.date,
+                  })
+                }
+              />
             ) : null}
           </>
         ) : null}
@@ -320,6 +364,14 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.s4,
     gap: spacing.s3,
+  },
+  // The empty posture centers in the pane (owner mockup 2026-10-23):
+  // flexGrow lets the flex:1 EmptyState own the viewport height.
+  contentCentered: {
+    flexGrow: 1,
+  },
+  emptyArtGap: {
+    marginBottom: spacing.s5,
   },
   tileGrid: {
     flexDirection: 'row',

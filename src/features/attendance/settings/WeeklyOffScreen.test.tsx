@@ -946,14 +946,15 @@ describe('WeeklyOffScreen per-employee overrides', () => {
 });
 
 describe('WeeklyOffScreen redesign — plain-words summaries', () => {
-  it('shows "Right now" for a configured default, and hides it on first use', async () => {
+  it('no "Right now" line in either posture (owner 2026-10-23: the live days render as the summary, the hint pill explains Save)', async () => {
     getDefaultMock.mockResolvedValue({
       default: view([6, 7]),
       next: null,
       history: [],
     });
     const configured = await renderLoaded();
-    expect(hasText(configured.root, 'Right now: Sat & Sun off')).toBe(true);
+    expect(hasText(configured.root, '2 days off, 5 working days')).toBe(true);
+    expect(hasTextContaining(configured.root, 'Right now:')).toBe(false);
 
     getDefaultMock.mockResolvedValue({ default: null, next: null, history: [] });
     const fresh = await renderLoaded();

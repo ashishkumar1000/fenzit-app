@@ -10,7 +10,8 @@
  * as "filter", while this control's raised-card active segment reads as
  * "you are here".
  *
- * Options are caller-supplied `{ value, label }` pairs, so the control stays
+ * Options are caller-supplied `{ value, label }` pairs (plus an optional
+ * count `badge` and leading `icon`), so the control stays
  * vocabulary-free — it renders whatever enum the caller owns. `value`s must
  * be unique (they're React keys and the selection identity); 2–5 options.
  *
@@ -20,10 +21,18 @@
  * alone doesn't. Pressing the already-active segment is a no-op (no
  * redundant `onChange`).
  */
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, radius, shadow, spacing, touch, weight } from '../../theme';
 
-export type SegmentOption<V extends string> = { value: V; label: string; badge?: number };
+export type SegmentOption<V extends string> = {
+  value: V;
+  label: string;
+  badge?: number;
+  /** Optional leading glyph (the attendance page's calendar glyphs) —
+   *  rendered before the label, in caller-chosen colors. */
+  icon?: ReactNode;
+};
 
 type Props<V extends string> = {
   options: ReadonlyArray<SegmentOption<V>>;
@@ -53,6 +62,7 @@ export function SegmentedControl<V extends string>({ options, value, onChange }:
               pressed ? styles.segmentPressed : null,
             ]}>
             <View style={styles.labelContainer}>
+              {option.icon}
               <Text
                 numberOfLines={1}
                 style={[styles.label, active ? styles.labelActive : null]}>

@@ -14,6 +14,7 @@ import {
   InlineError,
   Skeleton,
 } from '../../../components/ui';
+import { OfficesEmptyArt } from './OfficesEmptyArt';
 import { colors, spacing, typography } from '../../../theme';
 import type { ApiError } from '../../../services';
 import type { Office } from '../../../types/office';
@@ -65,6 +66,7 @@ export function OfficesStep({
     return (
       <View style={styles.stack}>
         <EmptyState
+          illustration={<OfficesEmptyArt />}
           icon={<MapPin size={24} color={colors.primary} strokeWidth={1.5} />}
           title="No offices yet"
           description="Add your first office to set where staff can check in and their shift timings."
@@ -126,7 +128,8 @@ export function OfficesStep({
       <Button
         variant="secondary"
         leadingIcon={<Plus size={16} color={colors.primary} strokeWidth={2} />}
-        onPress={onAddOffice}>
+        onPress={onAddOffice}
+        style={styles.addOffice}>
         Add office
       </Button>
     </View>
@@ -136,6 +139,11 @@ export function OfficesStep({
 const styles = StyleSheet.create({
   stack: {
     gap: spacing.s3,
+  },
+  // Shrink-wrapped and centered under the office cards (owner ruling
+  // 2026-10-23).
+  addOffice: {
+    alignSelf: 'center',
   },
   skeleton: {
     paddingVertical: spacing.s8,

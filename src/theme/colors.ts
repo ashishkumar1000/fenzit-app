@@ -160,6 +160,15 @@ export const colors = {
       solid: palette.amber500,
       border: palette.amber200,
     },
+    // The generic warning family (additive 2026-10, setup gate warning) —
+    // same amber values the scheduled entry carries; a distinct key so the
+    // scheduled vocabulary stays semantic.
+    warning: {
+      fg: palette.amber700,
+      bg: palette.amber50,
+      solid: palette.amber500,
+      border: palette.amber200,
+    },
     cancelled: {
       fg: palette.red700,
       bg: palette.red50,

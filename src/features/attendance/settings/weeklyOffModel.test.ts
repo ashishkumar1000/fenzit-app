@@ -266,8 +266,10 @@ describe('weeklyOffSaveHint — why Save is greyed out (UX finding 18)', () => {
     expect(weeklyOffSaveHint({ ...base, isAdd: true })).toBe('Change the days off to save.');
   });
 
-  it('on Edit, says a day or the date must change', () => {
-    expect(weeklyOffSaveHint({ ...base })).toBe('Change a day or the date to save.');
+  it('on Edit, says the saved schedule needs a change to edit', () => {
+    expect(weeklyOffSaveHint({ ...base })).toBe(
+      'This schedule is already saved — change a day or the date to edit it.',
+    );
   });
 
   it('never returns a hint for an enabled button, whatever the other inputs', () => {
