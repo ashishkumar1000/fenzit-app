@@ -36,8 +36,16 @@ jest.mock('../src/features/auth', () => {
   };
 });
 jest.mock('../src/features/onboarding', () => ({
-  OnboardingScreen: () => null,
-  useOnboarding: () => ({ status: 'done', complete: jest.fn() }),
+  WelcomeFlow: () => null,
+  FirstRunFlow: () => null,
+  mismatchNotice: () => null,
+  useOnboarding: () => ({
+    welcomeDone: true,
+    intent: null,
+    firstRunDone: true,
+    completeWelcome: jest.fn(),
+    completeFirstRun: jest.fn(),
+  }),
 }));
 jest.mock('../src/features/splash', () => ({ AnimatedBootSplash: () => null }));
 jest.mock('../src/services', () => ({

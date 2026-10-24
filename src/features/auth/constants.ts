@@ -10,14 +10,11 @@
  */
 export const OTP_LENGTH = 4;
 
-/** Seconds before "Resend code" becomes available again. */
-export const RESEND_SECONDS = 45;
+/** Seconds before "Resend SMS" becomes available again. */
+export const RESEND_SECONDS = 90;
 
 /** Re-exported app-wide, so every feature agrees on them. */
 export { DIAL_CODE, PHONE_LENGTH } from '../../constants/phone';
-
-/** Total steps in the setup flow — drives the 1—2—3 indicator. */
-export const TOTAL_STEPS = 3;
 
 /**
  * Business types offered in step 3. Tailored to the small field-service

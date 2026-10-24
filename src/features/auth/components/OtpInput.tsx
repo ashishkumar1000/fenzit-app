@@ -19,7 +19,7 @@ import {
   View,
   type TextInputInstance,
 } from 'react-native';
-import {colors, radius, spacing, typography} from '../../../theme';
+import {colors, palette, radius, shadow, typography} from '../../../theme';
 
 type Props = {
   value: string;
@@ -31,7 +31,7 @@ type Props = {
   onFilled?: (code: string) => void;
 };
 
-const BOX = 46;
+const BOX = 62;
 
 export function OtpInput({
   value,
@@ -50,6 +50,21 @@ export function OtpInput({
   const firedFor = useRef<string | null>(null);
 
   const focus = () => inputRef.current?.focus();
+
+  // Android's back gesture hides the keyboard WITHOUT blurring the field —
+  // the box would keep its caret/"selected" look while nothing can be typed.
+  // When the keyboard hides, drop the active state (blur only if THIS input
+  // still holds focus, never stealing it from another field).
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (inputRef.current?.isFocused()) {
+        inputRef.current.blur();
+        setFocused(false);
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // R-09: when sign-in succeeds the auth screens unmount while this input is
   // still focused; on Android the keyboard can outlive it and cover the home
@@ -84,12 +99,16 @@ export function OtpInput({
   };
 
   const cells = Array.from({ length }, (_, i) => i);
+  const activeIndex = Math.min(value.length, length - 1);
 
   return (
     <Pressable onPress={focus} style={styles.wrap}>
       {cells.map(i => {
         const char = value[i] ?? '';
-        const isActive = focused && i === Math.min(value.length, length - 1);
+        const isActive = focused && i === activeIndex;
+        // The design's box states: a filled box shows its digit over a
+        // primary underline; the active box is white (lifted) with a dark
+        // caret/underline; an untouched box shows a quiet dot.
         return (
           <View
             key={i}
@@ -98,7 +117,23 @@ export function OtpInput({
               isActive ? styles.boxActive : null,
               error ? styles.boxError : null,
             ]}>
-            <Text style={styles.digit}>{char}</Text>
+            {char ? (
+              <Text style={[styles.digit, error ? styles.digitError : null]}>
+                {char}
+              </Text>
+            ) : isActive ? (
+              <View style={[styles.caret, error ? styles.caretError : null]} />
+            ) : (
+              <View style={styles.dot} />
+            )}
+            <View
+              style={[
+                styles.underline,
+                char ? styles.underlineFilled : null,
+                isActive ? styles.underlineActive : null,
+                error ? styles.underlineError : null,
+              ]}
+            />
           </View>
         );
       })}
@@ -129,27 +164,62 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    width: '100%',
   },
   box: {
     width: BOX,
     height: BOX,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.borderDefault,
-    backgroundColor: colors.surfaceCard,
+    borderRadius: radius.lg,
+    backgroundColor: palette.blue50,
     alignItems: 'center',
     justifyContent: 'center',
   },
   boxActive: {
-    borderColor: colors.borderFocus,
-    borderWidth: 2,
+    backgroundColor: colors.surfaceCard,
+    ...shadow.sm,
   },
   boxError: {
-    borderColor: colors.danger,
+    backgroundColor: palette.red50,
   },
   digit: {
-    ...typography.heading,
+    ...typography.display,
+    fontSize: 26,
     color: colors.textStrong,
+  },
+  digitError: {
+    color: colors.danger,
+  },
+  caret: {
+    width: 2,
+    height: 26,
+    borderRadius: 1,
+    backgroundColor: colors.textStrong,
+  },
+  caretError: {
+    backgroundColor: colors.danger,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: palette.gray300,
+  },
+  underline: {
+    position: 'absolute',
+    bottom: 10,
+    width: 26,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: palette.blue200,
+  },
+  underlineFilled: {
+    backgroundColor: colors.primary,
+  },
+  underlineActive: {
+    backgroundColor: colors.textStrong,
+  },
+  underlineError: {
+    backgroundColor: colors.danger,
   },
   // Invisible but present in the layout so the keyboard targets it.
   hiddenInput: {

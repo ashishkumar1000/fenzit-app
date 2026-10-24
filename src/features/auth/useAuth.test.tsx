@@ -19,7 +19,10 @@ import {
   expireSession,
   clearSessionExpired,
   parseSession,
+  markReturningUser,
+  isReturningUser,
 } from './useAuth';
+import { storage } from '../../services/storage';
 
 // One probe reading both halves of the store — the same shapes App.tsx's
 // gate and PhoneScreen's banner consume.
@@ -105,6 +108,37 @@ describe('session expiry (story 5.3)', () => {
     });
     expect(probe.expired).toBe(true);
     expect(probe.status).toBe('pending');
+  });
+});
+
+describe('the returning-device flag (login greeting)', () => {
+  // The flag is persisted and the mock store outlives a single test — drop
+  // it first so the tests stay order-free whatever a previous test did.
+  beforeEach(() => {
+    storage.remove('fenzit.auth.returning');
+  });
+
+  it('a fresh device is not returning', () => {
+    expect(isReturningUser()).toBe(false);
+  });
+
+  it('a completed login marks the device returning', () => {
+    act(() => {
+      probe.complete({ role: 'company_admin', tenantId: 't1', platformAdmin: false });
+    });
+
+    expect(isReturningUser()).toBe(true);
+  });
+
+  it('the flag survives a session expiry — a logged-out person is still returning', () => {
+    markReturningUser();
+
+    act(() => {
+      expireSession();
+    });
+
+    expect(probe.status).toBe('pending'); // logged out
+    expect(isReturningUser()).toBe(true); // …but the device remembers them
   });
 });
 

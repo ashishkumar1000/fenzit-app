@@ -13,7 +13,8 @@ import type { AuthResult, AuthStep, BusinessProfile } from './types';
 import { PhoneScreen } from './screens/PhoneScreen';
 import { OtpScreen } from './screens/OtpScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
-import { clearSessionExpired, useSessionExpired } from './useAuth';
+import { NotOnTeamScreen } from './screens/NotOnTeamScreen';
+import { clearSessionExpired, isReturningUser, useSessionExpired } from './useAuth';
 import { authApi, setAuthToken } from '../../services';
 import type { ApiError, VerifiedUser } from '../../services';
 import { isUserRole } from './roles';
@@ -21,6 +22,12 @@ import { NO_COMPANY_MESSAGE } from './noAccessCopy';
 
 type Props = {
   onComplete: (result: AuthResult) => void;
+  /**
+   * The "How will you use Fenzit?" answer from the pre-login stage. An
+   * INTENT only — the phone number decides the real role at verify time
+   * (routeAfterVerify). `null`/undefined = skipped, fully neutral path.
+   */
+  intent?: 'owner' | 'staff' | null;
 };
 
 const EMPTY_PROFILE: BusinessProfile = {
@@ -36,7 +43,7 @@ const EMPTY_PROFILE: BusinessProfile = {
 function sendOtpErrorMessage(err: ApiError): string {
 
   if (err.code === 'VALIDATION_ERROR') {
-    return 'That doesn\u2019t look like a valid mobile number.';
+    return 'That mobile number doesn\u2019t look right.';
   }
   if (err.code === 'RATE_LIMIT_EXCEEDED') {
     return 'Too many attempts. Please wait a few minutes and try again.';
@@ -51,15 +58,21 @@ function sendOtpErrorMessage(err: ApiError): string {
 
 /**
  * Decides where a verified login goes next. Returns `'setup'` for a brand-new
- * person (no company AND no role), otherwise the session to store:
+ * person (no company AND no role) — unless they said they work in the field
+ * (`intent: 'staff'`), who gets `'notOnTeam'` instead of an owner company
+ * they never asked for. Otherwise the session to store:
  *
  *   - Fenzit staff           -> no company screens, a plain message
  *   - company role + company -> the matching side of the app
  *   - anything else          -> a plain "not part of a company" message (a
  *     removed person, or half-filled data that must never open company data)
  */
-export function routeAfterVerify(user: VerifiedUser):
+export function routeAfterVerify(
+  user: VerifiedUser,
+  intent?: 'owner' | 'staff' | null,
+):
   | 'setup'
+  | 'notOnTeam'
   | Pick<AuthResult, 'role' | 'tenantId' | 'platformAdmin'> {
   if (user.platformAdmin || user.role === 'platform_admin') {
     return { role: null, tenantId: null, platformAdmin: true };
@@ -69,7 +82,7 @@ export function routeAfterVerify(user: VerifiedUser):
     if (user.formerMember) {
       return { role: null, tenantId: null, platformAdmin: false };
     }
-    return 'setup';
+    return intent === 'staff' ? 'notOnTeam' : 'setup';
   }
   if (user.tenantId !== null && isUserRole(user.role)) {
     return { role: user.role, tenantId: user.tenantId, platformAdmin: false };
@@ -80,10 +93,10 @@ export function routeAfterVerify(user: VerifiedUser):
 /** Turns a failed `setupCompany` call into a copy the profile screen can show directly. */
 function setupCompanyErrorMessage(err: ApiError): string {
   if (err.code === 'VALIDATION_ERROR') {
-    return 'Check your GSTIN and state — one of them looks invalid.';
+    return 'Check your GST number and state — one of them looks wrong.';
   }
   if (err.status === 403) {
-    return "This account can't set up a company. Contact your company admin.";
+    return 'This account cannot set up a company. Please talk to your company owner.';
   }
   // 409: the person already belongs to (or is invited to) a company.
   if (err.status === 409) {
@@ -92,12 +105,15 @@ function setupCompanyErrorMessage(err: ApiError): string {
   return err.message;
 }
 
-export default function AuthFlow({ onComplete }: Props) {
+export default function AuthFlow({ onComplete, intent = null }: Props) {
   const [step, setStep] = useState<AuthStep>('phone');
   // True right after a forced 401 logout (story 5.3) — PhoneScreen shows a
   // "Session expired" banner until the person dismisses it or logs in again
   // (useAuth's `complete` clears the flag).
   const sessionExpired = useSessionExpired();
+  // Read once at mount: this device's login history decides whether the
+  // Login screen greets with "Welcome back" or the neutral "Login/Signup".
+  const [returningUser] = useState(isReturningUser);
   const [phone, setPhone] = useState('');
 
   const [code, setCode] = useState('');
@@ -150,7 +166,7 @@ export default function AuthFlow({ onComplete }: Props) {
   // The resend POST runs on its own (it can't close the screen) and its
   // only feedback is the link's state — so its `done` callback fires when
   // the request settles, NOT on tap: the countdown lied before this
-  // (showing a fresh 45s window while the POST was still airborne), and
+  // (showing a fresh 90s window while the POST was still airborne), and
   // "Resending…" covers the round trip itself.
   const resendOtp = useCallback(async (done?: () => void) => {
     setCode('');
@@ -164,7 +180,7 @@ export default function AuthFlow({ onComplete }: Props) {
       // Surface on the OTP screen — the person is already past step 1.
       setOtpError(sendOtpErrorMessage(apiError));
       // A 429 restarts the countdown at the server's window remainder (the
-      // header is authoritative; without it, fall back to the normal 45s).
+      // header is authoritative; without it, fall back to the normal 90s).
       if (apiError.code === 'RATE_LIMIT_EXCEEDED') {
         setRateLimitSeconds(apiError.retryAfterSeconds ?? RESEND_SECONDS);
       }
@@ -183,11 +199,15 @@ export default function AuthFlow({ onComplete }: Props) {
       const res = await authApi.verifyOtp({ otpSessionId, otpCode: code });
       setAuthToken(res.token);
 
-      const decision = routeAfterVerify(res.user);
+      const decision = routeAfterVerify(res.user, intent);
       if (decision === 'setup') {
         // Brand-new person with no company and no role — company setup
         // (step 3) is next.
         setStep('profile');
+      } else if (decision === 'notOnTeam') {
+        // Said they work in the field, but this number belongs to no
+        // company: help them get invited instead of creating a company.
+        setStep('notOnTeam');
       } else {
         onComplete({
           phone: `${DIAL_CODE}${phone}`,
@@ -207,14 +227,14 @@ export default function AuthFlow({ onComplete }: Props) {
         setStep('phone');
         setPhoneError(
           apiError.code === 'OTP_SESSION_LOCKED'
-            ? 'Too many incorrect attempts. Please request a new code.'
-            : 'That code expired. Please request a new one.',
+            ? 'Too many wrong codes. Please ask for a new one.'
+            : 'That code has expired. Please ask for a new one.',
         );
         return;
       }
 
       if (apiError.code === 'INVALID_OTP') {
-        setOtpError('That code is incorrect. Try again.');
+        setOtpError('Wrong code. Try again.');
         setCode('');
         return;
       }
@@ -225,7 +245,7 @@ export default function AuthFlow({ onComplete }: Props) {
     } finally {
       setVerifying(false);
     }
-  }, [code, otpSessionId, phone, profile, onComplete, verifying]);
+  }, [code, otpSessionId, phone, profile, onComplete, verifying, intent]);
 
   // --- Step 3: finish setup ----------------------------------------------
   const finish = useCallback(async () => {
@@ -291,6 +311,7 @@ export default function AuthFlow({ onComplete }: Props) {
         serverError={phoneError}
         sessionExpired={sessionExpired}
         onDismissSessionExpired={clearSessionExpired}
+        returningUser={returningUser}
       />
     );
   }
@@ -308,6 +329,16 @@ export default function AuthFlow({ onComplete }: Props) {
         resending={resending}
         error={otpError}
         rateLimitSeconds={rateLimitSeconds}
+      />
+    );
+  }
+
+  if (step === 'notOnTeam') {
+    return (
+      <NotOnTeamScreen
+        phone={phone}
+        onSetUpInstead={() => setStep('profile')}
+        onUseAnotherNumber={() => setStep('phone')}
       />
     );
   }

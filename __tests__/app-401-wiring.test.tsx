@@ -48,7 +48,7 @@ import { apiClient } from '../src/services';
   Promise.reject(new Error('no network in tests')),
 );
 import { AuthFlow } from '../src/features/auth';
-import { OnboardingScreen } from '../src/features/onboarding';
+import { WelcomeFlow, FirstRunFlow } from '../src/features/onboarding';
 import { setAuthToken } from '../src/services/authToken';
 import { setProfileFromServer, useMyProfile } from '../src/features/profile/useMyProfile';
 import { upsertCustomer, useCustomers } from '../src/features/customers/useCustomers';
@@ -117,14 +117,18 @@ it('a 401 flips the auth gate, resets the stores, and shows the expiry banner', 
     renderer = create(<App />);
   });
 
-  // First launch → complete onboarding → the auth gate (AuthFlow) shows.
+  // First launch → complete the pre-login welcome flow (neutral intent) →
+  // the auth gate (AuthFlow) shows.
   await act(async () => {
-    renderer.root.findByType(OnboardingScreen).props.onDone();
+    renderer.root.findByType(WelcomeFlow).props.onDone(null);
   });
   // Sign in through App's own completion callback (the store, not the
-  // network): the owner tree mounts.
+  // network): the first-run stage shows, then the owner tree mounts.
   await act(async () => {
     renderer.root.findByType(AuthFlow).props.onComplete({ role: 'company_admin', tenantId: 't1' });
+  });
+  await act(async () => {
+    renderer.root.findByType(FirstRunFlow).props.onDone();
   });
   // Post-login data the next session must NOT inherit (AC 5).
   await act(async () => {

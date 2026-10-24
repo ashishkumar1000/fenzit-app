@@ -1,6 +1,8 @@
 /**
  * Onboarding feature — public surface.
  */
-export { default as OnboardingScreen } from './OnboardingScreen';
+export { default as WelcomeFlow } from './WelcomeFlow';
+export { default as FirstRunFlow } from './FirstRunFlow';
 export { useOnboarding } from './useOnboarding';
-export type { OnboardingStatus } from './useOnboarding';
+export type { OnboardingIntent } from './intent';
+export { mismatchNotice } from './intent';

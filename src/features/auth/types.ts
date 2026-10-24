@@ -6,8 +6,9 @@
  */
 import type { UserRole } from '../../services';
 
-/** The three steps of first-time account setup. */
-export type AuthStep = 'phone' | 'otp' | 'profile';
+/** The steps of first-time account setup. `notOnTeam`: staff intent but the
+ *  number belongs to no company — helped instead of pushed into setup. */
+export type AuthStep = 'phone' | 'otp' | 'profile' | 'notOnTeam';
 
 /** Business profile captured in step 3. */
 export type BusinessProfile = {

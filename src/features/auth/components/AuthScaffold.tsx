@@ -1,10 +1,11 @@
 /**
- * AuthScaffold — shared shell for every account-setup step.
+ * AuthScaffold — shared shell for the auth screens.
  *
- * Layout (top → bottom): brand mark, the 1—2—3 step indicator, then a white
- * Card holding the step's content (passed as children). Handles safe areas,
- * keyboard avoidance, and scrolling so each screen only has to describe its
- * own fields.
+ * Layout: an optional header row (the OTP screen's back + title), then the
+ * screen's content passed as children. Screens compose their own Cards —
+ * the phone/OTP designs stack several white cards on the page, so the
+ * scaffold doesn't own one. Handles safe areas, keyboard avoidance, and
+ * scrolling so each screen only describes its own fields.
  */
 import type { ReactNode } from 'react';
 import {
@@ -16,20 +17,16 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card } from '../../../components/ui';
 import { colors, spacing } from '../../../theme';
-import { TOTAL_STEPS } from '../constants';
-import { BrandMark } from './BrandMark';
-import { StepIndicator } from './StepIndicator';
 
 type Props = {
-  /** 1-based current step, drives the indicator. */
-  step: number;
-  /** Card body for this step. */
+  /** Row above the content — the OTP screen's back + title. */
+  header?: ReactNode;
+  /** The screen's cards/content. */
   children: ReactNode;
 };
 
-export function AuthScaffold({ step, children }: Props) {
+export function AuthScaffold({ header, children }: Props) {
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       {/* RN 0.87 removed StatusBar backgroundColor — the root View paints it. */}
@@ -41,17 +38,9 @@ export function AuthScaffold({ step, children }: Props) {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <View style={styles.brand}>
-            <BrandMark size={64} />
-          </View>
+          {header ? <View style={styles.header}>{header}</View> : null}
 
-          <View style={styles.indicator}>
-            <StepIndicator current={step} total={TOTAL_STEPS} />
-          </View>
-
-          <Card padding="lg" style={styles.card}>
-            {children}
-          </Card>
+          {children}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -69,17 +58,10 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.s5,
-    paddingTop: spacing.s8,
+    paddingTop: spacing.s6,
     paddingBottom: spacing.s8,
   },
-  brand: {
-    alignItems: 'center',
-  },
-  indicator: {
-    marginTop: spacing.s6,
-    marginBottom: spacing.s6,
-  },
-  card: {
-    width: '100%',
+  header: {
+    marginBottom: spacing.s5,
   },
 });

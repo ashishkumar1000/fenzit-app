@@ -17,7 +17,12 @@ import { AnimatedBootSplash } from './features/splash';
 import RootNavigator from './navigation/RootNavigator';
 import TechnicianRootNavigator from './navigation/TechnicianRootNavigator';
 import { navigationRef } from './navigation/navigationRef';
-import { OnboardingScreen, useOnboarding } from './features/onboarding';
+import {
+  WelcomeFlow,
+  FirstRunFlow,
+  mismatchNotice,
+  useOnboarding,
+} from './features/onboarding';
 import {
   AuthFlow,
   NoAccessScreen,
@@ -46,7 +51,8 @@ import { syncSessionFromServer } from './features/auth/sessionSync';
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [splashVisible, setSplashVisible] = useState(true);
-  const { status: onboardingStatus, complete: completeOnboarding } = useOnboarding();
+  const { welcomeDone, intent, firstRunDone, completeWelcome, completeFirstRun } =
+    useOnboarding();
   const { status: authStatus, session, complete: completeAuth } = useAuth();
   const config = useRemoteConfig();
   const updateRequired = isVersionUnsupported(config.min_supported_version);
@@ -105,17 +111,19 @@ function App() {
     return () => subscription.remove();
   }, [authStatus]);
 
-  // First launch: onboarding tour → account setup → main app. The
+  // First launch: welcome + intent (pre-login) → account setup → first-run
+  // tour & primer (post-login, keyed by the REAL role) → main app. The
   // force-update gate dominates the whole chain — an app older than the
   // server's minimum must not reach login or data, whatever its state.
   let content;
   if (updateRequired) {
     content = <ForcedUpdateScreen message={config.force_update_message} />;
-  } else if (onboardingStatus !== 'done') {
-    content = <OnboardingScreen onDone={completeOnboarding} />;
+  } else if (!welcomeDone) {
+    content = <WelcomeFlow onDone={completeWelcome} />;
   } else if (authStatus !== 'done') {
     content = (
       <AuthFlow
+        intent={intent}
         onComplete={result => {
           // Gating fields only — name/phone/company come from `GET /users/me`
           // via `useMyProfile`, so there's one authoritative copy of them.
@@ -131,8 +139,20 @@ function App() {
     // No company (removed person, half-set-up account) or Fenzit staff: one
     // plain message and a Log out button — no navigation tree, no data
     // stores, no Realtime bridge. (A brand-new person with no company never
-    // gets here: AuthFlow sends them to company setup instead.)
+    // gets here: AuthFlow sends them to company setup — or, with a staff
+    // intent, to the "get invited" help screen — instead.)
     content = <NoAccessScreen platformAdmin={session?.platformAdmin ?? false} />;
+  } else if (!firstRunDone) {
+    // Role tour + permissions primer, once per install. The slide set and
+    // primer copy follow the session's REAL role; `notice` is the one-line
+    // correction when the picked intent differs from it.
+    content = (
+      <FirstRunFlow
+        role={session?.role ?? null}
+        notice={mismatchNotice(intent, session?.role ?? null)}
+        onDone={completeFirstRun}
+      />
+    );
   } else if (isEmployeeRole(session?.role)) {
     // Separate nav tree from the admin side — an employee never needs
     // MainTabs' Jobs/Attendance/More routes or RootNavigator's Technicians stack.

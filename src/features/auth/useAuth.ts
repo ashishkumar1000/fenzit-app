@@ -27,6 +27,24 @@ import { isUserRole } from './roles';
 
 const KEY = 'fenzit.session';
 
+/**
+ * Whether THIS device has ever completed a login. Persisted (MMKV) and kept
+ * on logout — someone who signed out is still returning. The Login screen
+ * reads it to greet the person: "Welcome back" vs the neutral
+ * "Login/Signup". Deliberately not synced to the backend: it answers a
+ * device-local question ("have I been here before?"), and a fresh install
+ * of a real account saying "Login/Signup" is fine.
+ */
+const RETURNING_KEY = 'fenzit.auth.returning';
+
+export function markReturningUser(): void {
+  storage.set(RETURNING_KEY, true);
+}
+
+export function isReturningUser(): boolean {
+  return storage.getBoolean(RETURNING_KEY) ?? false;
+}
+
 export type AuthStatus = 'pending' | 'done';
 
 /** The gating bits — set once, by `AuthFlow`, on `complete()`. Nothing here is rendered. */
@@ -174,6 +192,7 @@ export function useAuth() {
     // A fresh login also closes out any lingering expiry notice — even a
     // re-login triggered by an expiry is a new, explained-none session.
     clearSessionExpired();
+    markReturningUser();
     setSession(next);
   }, []);
 

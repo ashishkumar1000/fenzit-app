@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArrowRight } from 'lucide-react-native';
 import { Button, Input, MultiSelect, Select } from '../../../components/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { colors, radius, spacing, typography } from '../../../theme';
 import { AuthScaffold } from '../components/AuthScaffold';
 import { BUSINESS_TYPES, INDIA_STATES } from '../constants';
 import type { BusinessProfile } from '../types';
@@ -62,8 +62,8 @@ export function ProfileScreen({
   };
 
   return (
-    <AuthScaffold step={3}>
-      <Text style={styles.eyebrow}>Step 3 of 3</Text>
+    <AuthScaffold>
+      <View style={styles.card}>
       <Text style={styles.heading}>Tell us about your business</Text>
 
       <View style={styles.field}>
@@ -172,23 +172,22 @@ export function ProfileScreen({
         style={styles.cta}>
         {submitting ? 'Setting up…' : 'Start using Fenzit'}
       </Button>
+      </View>
     </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  eyebrow: {
-    ...typography.caption,
-
-    color: colors.textMuted,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    fontWeight: '600',
+  card: {
+    width: '100%',
+    backgroundColor: colors.surfaceCard,
+    borderRadius: radius.xl,
+    padding: spacing.s6,
   },
   heading: {
     ...typography.title,
     color: colors.textStrong,
-    marginTop: spacing.s2,
+    marginBottom: spacing.s2,
   },
   field: {
     marginTop: spacing.s5,
