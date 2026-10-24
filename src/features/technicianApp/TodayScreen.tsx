@@ -1,10 +1,10 @@
 /**
  * TodayScreen — the technician's "Today" tab, the approved redesign:
- * avatar header (WELCOME BACK + greeting + bell), the shift strip, the
- * device clock block, the punch zone, then their assigned jobs under
- * "Today's Schedule & Tasks" — IN PROGRESS / SCHEDULED / DONE TODAY
- * sections (empty sections omitted; Done today stays visible when
- * non-empty — honest day count, deliberate product behaviour).
+ * avatar header (WELCOME + greeting + bell), the punch zone, then their
+ * assigned jobs under "Today's Schedule & Tasks" — IN PROGRESS /
+ * SCHEDULED / DONE TODAY sections (empty sections omitted; Done today
+ * stays visible when non-empty — honest day count, deliberate product
+ * behaviour).
  *
  * Data comes from `useTechnicianJobs` (GET /jobs, server-scoped to the
  * caller) — the same store History reads, so the two tabs can never
@@ -49,8 +49,6 @@ import {
 import { useAttendanceSummary } from '../attendance/me/useAttendanceSummary';
 import { PunchSection } from '../attendance/today/PunchSection';
 import { TodayHeader } from './components/TodayHeader';
-import { TodayClock } from './components/TodayClock';
-import { ShiftStrip } from './components/ShiftStrip';
 import { TodayEmptySchedule } from './components/TodayEmptySchedule';
 import type { ApiJob } from '../jobs/types';
 import { buildTodaySections } from './todaySections';
@@ -136,10 +134,8 @@ export default function TodayScreen() {
   }, [navigation]);
 
   const sections = buildTodaySections(today);
-  // One clock for the whole page — the clock block's minute and the jobs'
-  // urgency rail age together; 30s keeps the displayed minute honest
-  // without a per-second timer.
-  const now = useNow(30_000);
+  // The urgency rail's clock — one 60s tick for the sectioned list.
+  const now = useNow();
   // `name` is nullable on the wire (see `MyProfile`); the greeting falls back
   // to a nameless form when it's missing.
   const name = firstName(profile?.name ?? null);
@@ -198,11 +194,6 @@ export default function TodayScreen() {
             <>
               {punchEnabled ? (
                 <View style={styles.punchWrap}>
-                  <ShiftStrip
-                    startTime={punchSummaryState.summary?.startTime ?? null}
-                    endTime={punchSummaryState.summary?.endTime ?? null}
-                  />
-                  <TodayClock now={now} />
                   <PunchSection
                     summary={{ state: punchSummaryState, refresh: refreshPunchSummary }}
                     refreshSummaryNow={refreshPunchSummaryNow}
@@ -253,12 +244,9 @@ const styles = StyleSheet.create({
   sectionHeaderSpacing: {
     paddingVertical: spacing.s2,
   },
-  // The punch zone's breathing room under the fixed header, and the gaps
-  // between its stacked parts (strip, clock, punch). Children own their
-  // alignment: the strip stretches, the clock centres itself.
+  // The punch zone's breathing room under the fixed header.
   punchWrap: {
     alignSelf: 'stretch',
-    gap: spacing.s4,
     paddingHorizontal: spacing.s4,
     paddingTop: spacing.s2,
     paddingBottom: spacing.s3,
