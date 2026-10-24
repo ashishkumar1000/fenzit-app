@@ -10,19 +10,25 @@
  * already-handled closes the whole sheet and refetches. Embedded in the
  * tab's ScrollView, so pagination is a full-width secondary "Load more"
  * button rendered only while a cursor remains, with a transient spinner
- * while it fetches. Empty renders a single muted line (not an EmptyState —
- * the apply row above is the CTA).
+ * while it fetches.
+ *
+ * The section CHROME (head, apply row — passed in as nodes by the parent,
+ * which no longer owns the data) renders only when there is something to
+ * show: a settled empty list hides the head (owner call, 2026-10-24) —
+ * no "Leave" head, no empty line, no shell over no data. The apply row is
+ * a door, not content: it stays visible whenever the parent passed one,
+ * and a load failure keeps the whole chrome so the error keeps its
+ * context and the apply door survives.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { Button, InlineError, Skeleton } from '../../../components/ui';
-import { colors, spacing, typography } from '../../../theme';
+import { colors, spacing } from '../../../theme';
 import { attendanceLeaveService } from '../../../services';
 import type { ApiError } from '../../../services/api/apiError';
 import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
@@ -34,7 +40,15 @@ import {
 import { classifyLeaveWriteFailure } from './ownerLeaveModel';
 import { useMyLeaveHistory } from './useMyLeaveHistory';
 
-export function LeaveHistorySection() {
+export function LeaveHistorySection({
+  head = null,
+  applyRow = null,
+}: {
+  /** The section head — hidden with everything else on a settled empty list. */
+  head?: ReactNode;
+  /** The apply entry row (parent's CTA node) — same visibility rule. */
+  applyRow?: ReactNode;
+}) {
   const history = useMyLeaveHistory();
   const [detail, setDetail] = useState<LeaveRequestRow | null>(null);
   // The cancel write's state (17-7 D4) — the sheet never calls the API.
@@ -100,15 +114,29 @@ export function LeaveHistorySection() {
   };
 
   if (history.error && history.items.length === 0) {
+    // A load failure keeps the chrome: the error needs its section context,
+    // and in the upcoming posture this apply row is the only apply door.
     return (
       <View style={styles.block}>
+        {head}
+        {applyRow}
         <InlineError message="Couldn't load leave requests. Check your connection and try again." />
       </View>
     );
   }
 
+  // A settled empty list hides the head — the section only exists when
+  // there is (or may be) content. Keyed on `loaded` (not `!loadingFirst`)
+  // so a focus refetch over a settled-empty list can't flash it back in.
+  const settledEmpty = history.items.length === 0 && history.loaded;
+
   return (
     <View style={styles.block}>
+      {!settledEmpty ? head : null}
+      {/* A door, not content: the apply row survives an empty history —
+          in the upcoming posture it is the only apply entry. */}
+      {applyRow}
+
       {history.items.map(request => (
         <LeaveRequestRowView
           key={request.id}
@@ -118,11 +146,7 @@ export function LeaveHistorySection() {
         />
       ))}
 
-      {history.items.length === 0 && history.loaded && !history.loadingFirst ? (
-        <Text style={styles.empty}>No leave requests yet</Text>
-      ) : null}
-
-      {history.loadingFirst && history.items.length === 0 ? (
+      {!settledEmpty && history.loadingFirst && history.items.length === 0 ? (
         // First load: a history-shaped shimmer, labelled (the 19-5 idiom);
         // the load-more append below keeps its inline spinner.
         <View accessibilityLabel="Loading attendance" style={styles.skeletonRow}>
@@ -130,7 +154,7 @@ export function LeaveHistorySection() {
         </View>
       ) : null}
 
-      {history.hasCursor ? (
+      {!settledEmpty && history.hasCursor ? (
         history.loadingMore ? (
           <View style={styles.spinnerRow} accessibilityLiveRegion="polite">
             <ActivityIndicator size="small" color={colors.primary} />
@@ -167,10 +191,6 @@ export function LeaveHistorySection() {
 const styles = StyleSheet.create({
   block: {
     gap: spacing.s2,
-  },
-  empty: {
-    ...typography.bodySm,
-    color: colors.textMuted,
   },
   skeletonRow: {
     paddingVertical: spacing.s2,

@@ -58,19 +58,20 @@ export function PunchStatusCard({ model }: { model: PunchStatusCardModel }) {
       style={[styles.card, { backgroundColor: t.bg, borderColor: t.border }]}
       accessibilityLabel={model.announce}
       accessibilityRole="text">
-      <View style={[styles.iconWell, { backgroundColor: t.solid }]}>
-        <MapPin size={14} color={colors.surfaceCard} strokeWidth={2.2} />
+      <View style={styles.iconWell}>
+        <MapPin size={18} color={t.solid} strokeWidth={2} />
       </View>
       <View style={styles.body}>
         <View style={styles.headRow}>
           {model.title ? (
-            <Text style={[styles.title, { color: t.fg }]} numberOfLines={1}>
+            <Text style={styles.title} numberOfLines={1}>
               {model.title}
             </Text>
           ) : null}
           {model.chip ? (
-            <View style={[styles.chip, { backgroundColor: t.solid }]}>
-              <Text style={styles.chipLabel}>{model.chip}</Text>
+            <View style={styles.chip}>
+              <View style={[styles.chipDot, { backgroundColor: t.solid }]} />
+              <Text style={[styles.chipLabel, { color: t.fg }]}>{model.chip}</Text>
             </View>
           ) : null}
         </View>
@@ -107,9 +108,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.s3,
   },
   iconWell: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    // The redesign's soft tile: white squircle, outline pin in the tone's
+    // solid — calmer than the old solid disc.
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 1,
@@ -125,20 +129,29 @@ const styles = StyleSheet.create({
     gap: spacing.s2,
   },
   title: {
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
     fontWeight: '800',
+    color: colors.textStrong,
     flexShrink: 1,
   },
   chip: {
-    borderRadius: radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 9,
+    backgroundColor: colors.surfaceCard,
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  chipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   chipLabel: {
     fontSize: fontSize.xs,
     fontWeight: '800',
     letterSpacing: 0.5,
-    color: colors.surfaceCard,
   },
   bodyText: {
     fontSize: fontSize.sm,

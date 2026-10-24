@@ -10,6 +10,12 @@
  * the fence"); the permission postures stay interactive and route to the
  * caller's remediation; everything else behaves exactly as the old flat
  * button did — same press contract, same a11y vocabulary, new skin.
+ *
+ * The ready faces are STICKY (product decision, 2026-10-24): a stale or
+ * missing prescreen fix never dims them — the button reads "ready" from
+ * the moment the day facts land, and stays that way. A failed press
+ * repaints the ready face red (`failed`) until the next tap; the error
+ * message under the button carries the why.
  */
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
@@ -36,35 +42,37 @@ interface Scheme {
 }
 
 /** Pill + face + sub-label per posture — the mockup state table verbatim
- *  (row 5 postures share the dim skeleton; the pill drops rather than
- *  inventing copy for it). */
-function schemeFor(state: TodayButtonState): Scheme {
+ *  (blocked postures share the dim skeleton; the pill drops rather than
+ *  inventing copy for them). The ready faces never dim on a stale fix. */
+function schemeFor(state: TodayButtonState, failed: boolean): Scheme {
   switch (state.kind) {
     case 'readyIn':
-      // Without a fresh in-fence distance this is the row-5 fallback — the
-      // dimmed skeleton, never the inviting ready face.
-      if (state.distanceM == null) return dimAction('Tap to check in');
-      return {
-        face: colors.punch.in,
-        ring: colors.punch.ringIn,
-        pill: { bg: colors.punch.pillReady, label: 'READY', dot: null, lock: false },
-        dot: colors.punch.dotIn,
-        sub: 'Tap to check in',
-      };
-    case 'readyOut':
-      if (state.distanceM == null) return dimAction('Tap to check out');
-      return {
-        face: colors.punch.out,
-        ring: colors.punch.ringOut,
-        pill: {
-          bg: colors.punch.pillShiftActive,
-          label: 'ON SHIFT',
-          dot: null,
-          lock: false,
+      return maybeFailed(
+        {
+          face: colors.punch.in,
+          ring: colors.punch.ringIn,
+          pill: { bg: colors.punch.pillReady, label: 'READY', dot: null, lock: false },
+          dot: colors.punch.dotIn,
+          sub: 'Tap to check in',
         },
-        dot: colors.punch.dotOut,
-        sub: 'Tap to check out',
-      };
+        failed,
+      );
+    case 'readyOut':
+      return maybeFailed(
+        {
+          face: colors.punch.out,
+          ring: colors.punch.ringOut,
+          pill: {
+            bg: colors.punch.pillShiftActive,
+            label: 'ON SHIFT',
+            dot: null,
+            lock: false,
+          },
+          dot: colors.punch.dotOut,
+          sub: 'Tap to check out',
+        },
+        failed,
+      );
     case 'locked':
       return {
         face: colors.punch.dim,
@@ -121,6 +129,20 @@ function dimAction(sub: string | null): Scheme {
   };
 }
 
+/** A failed press repaints the ready face red — still interactive, still
+ *  ready (the next tap may well succeed); the pill and dot drop rather
+ *  than contradicting the red, and the message below explains. */
+function maybeFailed(base: Scheme, failed: boolean): Scheme {
+  if (!failed) return base;
+  return {
+    ...base,
+    face: colors.punch.fail,
+    ring: colors.punch.ringFail,
+    pill: null,
+    dot: null,
+  };
+}
+
 /** The action this posture would fire — the label under the fingerprint
  *  and the a11y vocabulary. The rate-limited action reflects the PENDING
  *  action (the old button's rule). */
@@ -152,11 +174,14 @@ interface Props {
   state: TodayButtonState;
   /** Whether the primary action may fire at all (facts known). */
   enabled: boolean;
+  /** The last press was rejected — repaint the ready face red until the
+   *  next press (the hook resets its message when a press starts). */
+  failed?: boolean;
   onPress: () => void;
 }
 
-export function PunchButton({ state, enabled, onPress }: Props) {
-  const scheme = schemeFor(state);
+export function PunchButton({ state, enabled, failed = false, onPress }: Props) {
+  const scheme = schemeFor(state, failed);
   const action = actionFor(state);
   const interactive = enabled && isInteractive(state);
   const blocked = !interactive;
@@ -182,7 +207,19 @@ export function PunchButton({ state, enabled, onPress }: Props) {
                 <Stop offset="0" stopColor={scheme.face.top} />
                 <Stop offset="1" stopColor={scheme.face.bottom} />
               </RadialGradient>
+              {/* The redesign's halo — tinted by the posture's own ink so a
+                  red failure or a dim posture never glows blue. */}
+              <RadialGradient id="punchGlow" cx="50%" cy="50%" r="50%">
+                <Stop offset="0.55" stopColor={scheme.face.bottom} stopOpacity={0.28} />
+                <Stop offset="1" stopColor={scheme.face.bottom} stopOpacity={0} />
+              </RadialGradient>
             </Defs>
+            <Circle
+              cx={RING_SIZE / 2}
+              cy={RING_SIZE / 2}
+              r={RING_SIZE / 2 - 2}
+              fill="url(#punchGlow)"
+            />
             <Circle
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
@@ -285,7 +322,8 @@ const styles = StyleSheet.create({
   fpWell: {
     width: FP_WELL_SIZE,
     height: FP_WELL_SIZE,
-    borderRadius: FP_WELL_SIZE / 2,
+    // The mockup's squircle well, not a circle.
+    borderRadius: 20,
     backgroundColor: colors.punch.fingerWell,
     alignItems: 'center',
     justifyContent: 'center',

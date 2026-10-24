@@ -100,10 +100,21 @@ function texts(root: ReactTestRenderer.ReactTestInstance): string[] {
   return root.findAll(n => n.type === Text).map(flatText);
 }
 
-async function renderSection(): Promise<ReactTestRenderer.ReactTestRenderer> {
+async function renderSection(
+  props: Partial<React.ComponentProps<typeof LeaveHistorySection>> = {},
+): Promise<ReactTestRenderer.ReactTestRenderer> {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await act(async () => {
-    renderer = create(<LeaveHistorySection />);
+    // The chrome sentinels let the settled-empty pin observe the head and
+    // apply row the real consumer passes — without them the guard would be
+    // unobservable (found by the 2026-10-24 review: deleting it passed).
+    renderer = create(
+      <LeaveHistorySection
+        head={<Text>LEAVE-HEAD-SENTINEL</Text>}
+        applyRow={<Text>APPLY-ROW-SENTINEL</Text>}
+        {...props}
+      />,
+    );
   });
   lastRenderer = renderer;
   return renderer;
@@ -171,10 +182,40 @@ describe('the compact rows (spec D3)', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('the empty history renders the single muted line (no EmptyState)', async () => {
+  it('the settled empty history hides the head but keeps the apply door (owner call, 2026-10-24)', async () => {
     const { root } = await renderSection();
-    expect(texts(root)).toContain('No leave requests yet');
+    expect(texts(root)).not.toContain('No leave requests yet');
+    expect(texts(root)).not.toContain('LEAVE-HEAD-SENTINEL');
+    // The apply row is a door, not content: it survives an empty history
+    // (in the upcoming posture it is the only apply entry).
+    expect(texts(root)).toContain('APPLY-ROW-SENTINEL');
     expect(root.findAllByType(InlineError)).toHaveLength(0);
+  });
+
+  it('the first load in flight still renders the chrome with its shimmer', async () => {
+    listMyLeave.mockReturnValueOnce(new Promise(() => undefined));
+    const { root } = await renderSection();
+    expect(texts(root)).toContain('LEAVE-HEAD-SENTINEL');
+    expect(texts(root)).toContain('APPLY-ROW-SENTINEL');
+  });
+
+  it('rows render under the chrome; a load failure keeps the head and apply row', async () => {
+    listMyLeave.mockResolvedValueOnce(
+      page([compactRow()], null),
+    );
+    const withRows = await renderSection();
+    expect(texts(withRows.root)).toContain('LEAVE-HEAD-SENTINEL');
+    expect(texts(withRows.root)).toContain('APPLY-ROW-SENTINEL');
+
+    listMyLeave.mockRejectedValueOnce({
+      status: 0,
+      code: 'NETWORK_ERROR',
+      message: 'x',
+    });
+    const failed = await renderSection();
+    expect(texts(failed.root)).toContain('LEAVE-HEAD-SENTINEL');
+    expect(texts(failed.root)).toContain('APPLY-ROW-SENTINEL');
+    expect(texts(failed.root).join(' ')).toContain("Couldn't load leave requests");
   });
 
   it('a load failure with nothing loaded shows the inline error', async () => {

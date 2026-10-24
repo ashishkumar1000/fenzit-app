@@ -25,6 +25,7 @@ import { formatOffsetInstantTime } from '../../../utils/offsetInstant';
 import {
   buildTodayTiles,
   deriveTodayButtonState,
+  freshDistanceM,
   punchStatusCard,
   type PunchOffice,
 } from './attendanceTodayModel';
@@ -176,6 +177,32 @@ export function PunchSection({
   // the check-in instant formatted.
   const checkinTimeText = check.record ? formatTime(check.record.checkinAt) : null;
 
+  // The status card's anti-flap latch (mirrors the sticky-ready button):
+  // the last CONFIRMED in-fence distance is held here, and a stale fix
+  // re-renders the confirmed card instead of flapping to "Getting your
+  // location…" — the stream/30s re-probe stays silent in the background
+  // until it has news. FRESH SPEAKS: any fresh fix updates an in-fence
+  // claim or overturns it (even while rate-limit/dialog postures mask the
+  // lock — those outrank the geofence in the button state, so clearing is
+  // keyed on the fix, not the posture). The latch also dies at midnight —
+  // a confirmed verdict is about THAT day. Idempotent per render.
+  const latchRef = useRef<{ day: string; distanceM: number } | null>(null);
+  const freshDistance = freshDistanceM(fix, office, now);
+  const latchDay = new Date(now).toDateString();
+  const latch =
+    latchRef.current && latchRef.current.day === latchDay
+      ? latchRef.current.distanceM
+      : null;
+  if (
+    freshDistance != null &&
+    office?.radiusM != null &&
+    freshDistance <= office.radiusM
+  ) {
+    latchRef.current = { day: latchDay, distanceM: freshDistance };
+  } else if (freshDistance != null || buttonState.kind === 'done') {
+    latchRef.current = null;
+  }
+
   // Card-vs-message precedence: a settled server message outranks the card
   // (the server copy is the authoritative explanation) — EXCEPT the locked
   // postures: when the fence verdict is on screen, the approved card is the
@@ -192,6 +219,7 @@ export function PunchSection({
           office,
           now,
           checkinTimeText,
+          latchedDistanceM: latch,
         })
       : null;
 
@@ -230,6 +258,12 @@ export function PunchSection({
               <PunchButton
                 state={buttonState}
                 enabled={factsKnown}
+                // Red face = the last press didn't take. The message — and
+                // with it the red — persists until the next press that
+                // actually SUBMITS (dialog-cancel and offline taps keep the
+                // last outcome on screen). The lock postures carry their
+                // own visuals, so this only shows on the ready rungs.
+                failed={check.message?.tone === 'error'}
                 onPress={onPress}
               />
               {statusCard ? (

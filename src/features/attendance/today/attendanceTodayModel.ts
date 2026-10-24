@@ -58,11 +58,12 @@ export type TodayButtonState =
   | { kind: 'dialogPending' }
   | { kind: 'resolving' }
   | { kind: 'done' }
-  /** `distanceM` present ONLY when the prescreen fix is fresh and inside
-   *  the fence — its absence is the no-fix fallback (the mockup's dimmed
-   *  row-5 posture, never the inviting ready face). */
-  | { kind: 'readyOut'; distanceM?: number }
-  | { kind: 'readyIn'; distanceM?: number }
+  /** The ready rungs are STICKY (product decision, 2026-10-24): a stale or
+   *  missing fix never dims them — once ready, the face stays coloured, and
+   *  staleness only quiets the status card. No distance rides these rungs:
+   *  the card computes its own, the lock carries its own. */
+  | { kind: 'readyOut' }
+  | { kind: 'readyIn' }
   | { kind: 'locked'; distanceM: number }
   | { kind: 'lockedOut'; distanceM: number };
 
@@ -157,23 +158,9 @@ export function deriveTodayButtonState(input: TodayModelInput): TodayButtonState
     // Facts unknown (first load in flight or failed) — the button is not
     // interactive until the holiday gate COULD fire. Rendered as readyIn
     // but disabled via factsKnown by the caller.
-    return withDistance({ kind: 'readyIn' }, input);
+    return { kind: 'readyIn' };
   }
-  return input.record
-    ? withDistance({ kind: 'readyOut' }, input)
-    : withDistance({ kind: 'readyIn' }, input);
-}
-
-/** Attach the fresh in-fence distance to a ready posture when the prescreen
- *  knows it — the button's ready-vs-fallback visual discriminator. Absent
- *  keeps the field out of the object entirely, so exact-shape pins on the
- *  plain rungs stay valid. */
-function withDistance(
-  state: { kind: 'readyIn' } | { kind: 'readyOut' },
-  input: TodayModelInput,
-): TodayButtonState {
-  const distanceM = freshDistanceM(input.fix, input.office, input.now);
-  return distanceM != null ? { ...state, distanceM } : state;
+  return input.record ? { kind: 'readyOut' } : { kind: 'readyIn' };
 }
 
 /** The PRD's rate window (16-1 D6) — the fallback when the Retry-After
@@ -389,29 +376,36 @@ export function punchStatusCard(input: {
   office: PunchOffice | null | undefined;
   now: number;
   checkinTimeText: string | null;
+  /** The last CONFIRMED in-fence distance, held by the caller: when the fix
+   *  has gone stale, a ready card re-renders from this instead of flapping
+   *  to "Getting your location…" — the background re-probe stays silent
+   *  until it has news. Absent until the first in-fence verdict, so the
+   *  true first load still explains itself. */
+  latchedDistanceM?: number | null;
 }): PunchStatusCardModel | null {
   const { state, fix, office, now } = input;
   const distance = freshDistanceM(fix, office, now);
   const officeName = office?.name ?? 'your office';
-  const inRadius = distance !== null && office != null && office.radiusM !== null;
+  // A fresh fix speaks; past it, the last confirmed verdict stands.
+  const known = distance ?? input.latchedDistanceM ?? null;
 
   switch (state.kind) {
     case 'readyIn': {
-      if (!inRadius || distance === null || office?.radiusM == null) {
-        // No fresh fix (or no fence to judge against): today's fallback —
-        // the punch stays available, the card explains what's missing.
+      if (known == null || office?.radiusM == null) {
+        // No fix yet at all (or no fence to judge against): the punch stays
+        // available, the card explains what's missing — once, not always.
         return card('neutral', 'Getting your location…', null, []);
       }
-      return card('done', 'At your office', 'READY TO CHECK IN', [
+      return card('done', 'At your office', 'GEOFENCE MATCHED', [
         seg('You are at '),
         seg(officeName, 'strong'),
         seg(' ('),
-        seg(formatMetresGrouped(distance), 'danger'),
+        seg(formatMetresGrouped(known), 'danger'),
         seg(' away). Location checked.'),
       ]);
     }
     case 'readyOut': {
-      if (!inRadius) {
+      if (known == null) {
         return card('neutral', 'Getting your location…', null, []);
       }
       return card('progress', 'On shift · At your office', 'READY TO CHECK OUT', [

@@ -242,6 +242,9 @@ export const colors = {
     in: { top: palette.blue400, bottom: palette.blue700 },
     // Shift active, ready to check out — amber-to-crimson.
     out: { top: palette.amber400, bottom: palette.red500 },
+    // The last press was rejected — the failure face. Still interactive:
+    // the next tap returns to the ready colour.
+    fail: { top: palette.red400, bottom: palette.red600 },
     // Every blocked/dimmed posture (locked, offline, rate-limited, …).
     dim: { top: palette.gray300, bottom: palette.gray500 },
     // Concentric dashed ring, per posture.
@@ -249,6 +252,7 @@ export const colors = {
     ringOut: palette.amber400,
     ringLockedIn: palette.red300,
     ringLockedOut: palette.amber300,
+    ringFail: palette.red300,
     // Top status pills (solid fills, white label).
     pillReady: palette.green500,
     pillShiftActive: palette.amber500,

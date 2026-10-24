@@ -425,12 +425,11 @@ describe('deriveTodayButtonState — the geofence rungs (20-3 prescreen)', () =>
     });
   });
 
-  it('a fresh IN-fence fix carries the distance on the ready rungs (the ready-vs-fallback discriminator)', () => {
+  it('a fresh IN-fence fix stays a PLAIN ready rung — the ready faces are sticky, no distance rides them', () => {
     expect(
       deriveTodayButtonState({ ...base, fix: IN_FIX, office: OFFICE }),
     ).toEqual({
       kind: 'readyIn',
-      distanceM: haversineMetres(IN_FIX, OFFICE),
     });
     expect(
       deriveTodayButtonState({
@@ -441,7 +440,6 @@ describe('deriveTodayButtonState — the geofence rungs (20-3 prescreen)', () =>
       }),
     ).toEqual({
       kind: 'readyOut',
-      distanceM: haversineMetres(IN_FIX, OFFICE),
     });
   });
 
@@ -537,7 +535,7 @@ describe('punchStatusCard — the approved mockup table, copy verbatim', () => {
 
   it('readyIn in-fence → the green card (row 1)', () => {
     const card = punchStatusCard({
-      state: { kind: 'readyIn', distanceM: 28 },
+      state: { kind: 'readyIn' },
       fix: IN_FIX,
       office: OFFICE,
       now: base.now,
@@ -546,7 +544,7 @@ describe('punchStatusCard — the approved mockup table, copy verbatim', () => {
     expect(card).toMatchObject({
       tone: 'done',
       title: 'At your office',
-      chip: 'READY TO CHECK IN',
+      chip: 'GEOFENCE MATCHED',
     });
     expect(flat(card!)).toBe(
       `You are at Hero wala (${formatMetresGrouped(
@@ -557,7 +555,7 @@ describe('punchStatusCard — the approved mockup table, copy verbatim', () => {
 
   it('readyOut in-fence → the BLUE card, the check-in time and the next step (row 2)', () => {
     const card = punchStatusCard({
-      state: { kind: 'readyOut', distanceM: 28 },
+      state: { kind: 'readyOut' },
       fix: IN_FIX,
       office: OFFICE,
       now: base.now,
