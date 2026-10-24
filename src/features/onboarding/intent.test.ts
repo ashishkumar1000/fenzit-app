@@ -1,8 +1,9 @@
 /**
  * mismatchNotice — the intent-vs-role correction (login redesign). The
  * picker is an INTENT; the phone number decides the real role. The tests
- * pin all four outcomes: two correction lines, and null for a matching or
- * absent intent — a wrong line here would address the wrong person.
+ * pin all four outcomes: the employee-side correction line, and null for
+ * a matching or absent intent — and for the owner-side mismatch, which
+ * routes silently by product decision (no "runs a company" line).
  */
 import { mismatchNotice } from './intent';
 
@@ -13,10 +14,8 @@ describe('mismatchNotice', () => {
     );
   });
 
-  it('staff intent + an owner number → the owner correction', () => {
-    expect(mismatchNotice('staff', 'company_admin')).toBe(
-      'This number runs a company on Fenzit \u2014 here\u2019s the owner app.',
-    );
+  it('staff intent + an owner number routes silently (no line)', () => {
+    expect(mismatchNotice('staff', 'company_admin')).toBeNull();
   });
 
   it('a matching intent says nothing', () => {
