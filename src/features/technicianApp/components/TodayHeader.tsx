@@ -1,15 +1,14 @@
 /**
  * TodayHeader — the Today tab's header (the approved redesign): the
  * initials avatar (the DS Avatar's onColor variant, squared to the
- * mockup's chip) with the connectivity dot, the WELCOME BACK eyebrow
- * over the time-of-day greeting, and the notifications bell on a card
- * chip. The dot is REAL state, not decoration — green when NetInfo
- * reports a connection, gray when not, hidden until the first read so
- * it never lies on launch.
+ * mockup's chip) with the connectivity dot, the time-of-day greeting,
+ * and the notifications bell on a card chip. The dot is REAL state, not
+ * decoration — green when NetInfo reports a connection, gray when not,
+ * hidden until the first read so it never lies on launch.
  */
 import { StyleSheet, Text, View } from 'react-native';
 import { Bell } from 'lucide-react-native';
-import { Avatar, Eyebrow, IconButton } from '../../../components/ui';
+import { Avatar, IconButton } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { greetingForNow } from '../../../utils';
 import { bellBadgeLabel } from '../../notifications/bellBadge';
@@ -43,7 +42,6 @@ export function TodayHeader({ name, online, unreadCount, onPressBell }: Props) {
       </View>
 
       <View style={styles.titles}>
-        <Eyebrow>WELCOME</Eyebrow>
         <Text style={styles.greeting} numberOfLines={1}>
           {name ? `${greetingForNow()}, ${name}` : greetingForNow()}
         </Text>

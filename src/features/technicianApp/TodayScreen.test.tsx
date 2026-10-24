@@ -30,7 +30,7 @@ jest.mock('../profile', () => ({
 
 /** Swappable jobs fixture — the bell tests only need the list to be quiet. */
 let mockJobsStore: {
-  today: never[];
+  today: ApiJob[];
   isLoadingToday: boolean;
   errorToday: string | null;
   hasLoadedToday: boolean;
@@ -84,10 +84,14 @@ jest.mock('../attendance/today/PunchSection', () => ({
 
 let mockLastPunchProps: Record<string, unknown> | null = null;
 
-jest.mock('../../hooks', () => ({ useNow: () => 0 }));
+jest.mock('../../hooks', () => ({
+  useNow: () => mockUseNow(),
+}));
+const mockUseNow = jest.fn(() => 0);
 
 import TodayScreen from './TodayScreen';
 import { EmptyState } from '../../components/ui';
+import type { ApiJob } from '../jobs/types';
 
 type Renderer = ReactTestRenderer.ReactTestRenderer;
 
@@ -159,6 +163,63 @@ it("the badge shows the unread count, capped at 99+ (the shared bell's own vocab
 it('an empty day still renders the empty state (the bell changes nothing else)', async () => {
   const renderer = await mountScreen();
   expect(renderer.root.findByType(EmptyState).props.title).toBe('No job assigned yet');
+});
+
+// The urgency rail's caller-side wiring — the card and hook tests never
+// mount this screen, so deleting the `urgencyNow={now}` pass-through would
+// silently strip every rail off the technician's primary tab (the
+// TodaysJobsSection.urgency idiom, 2026-10-24 review).
+function techJob(minutesUntilStart: number): ApiJob {
+  const now = Date.now();
+  return {
+    id: 'job-1',
+    jobNumber: 'JB-2026-0042',
+    tenantId: 'tenant-1',
+    customerId: 'cust-1',
+    technicianId: 'tech-1',
+    serviceLocation: 'Home',
+    skill: { id: 'skill-1', name: 'AC service' },
+    scheduledStart: new Date(now + minutesUntilStart * 60_000).toISOString(),
+    scheduledEnd: null,
+    status: 'scheduled',
+    completedAt: null,
+    currentStep: null,
+    priority: 'normal',
+    requireCompletionPhoto: false,
+    requireCompletionSignature: false,
+    description: null,
+    notesForTechnician: null,
+    createdAt: new Date(now).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+  };
+}
+
+function railCount(root: ReactTestRenderer.ReactTestInstance): number {
+  const found: unknown[] = [];
+  root.findAll(node => {
+    const style = (node.props as { style?: unknown }).style;
+    const flat = Array.isArray(style) ? style : [style];
+    for (const s of flat) {
+      if (s && typeof s === 'object' && 'borderLeftWidth' in s) {
+        found.push(s);
+      }
+    }
+    return false;
+  });
+  return found.length;
+}
+
+it('feeds the screen clock to the urgency rails (deleting the pass-through strips them)', async () => {
+  mockUseNow.mockReturnValue(Date.now());
+  mockJobsStore = {
+    today: [techJob(30)],
+    isLoadingToday: false,
+    errorToday: null,
+    hasLoadedToday: true,
+    refreshToday: jest.fn().mockResolvedValue(undefined),
+  };
+  const renderer = await mountScreen();
+  expect(railCount(renderer.root)).toBeGreaterThan(0);
 });
 
 describe('the 20-3 punch hosting gate', () => {

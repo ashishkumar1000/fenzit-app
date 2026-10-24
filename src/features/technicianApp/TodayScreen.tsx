@@ -185,11 +185,10 @@ export default function TodayScreen() {
           )}
           // The punch zone rides ABOVE the job sections (the 20-3 AC) — as
           // the list header it scrolls with the day, and its loading/error
-          // postures are the section's own. The clock and shift strip live
-          // inside it (both need the summary/attendance context). The
-          // schedule title labels the populated list here; on an empty day
-          // the title lives INSIDE the schedule card instead (the mockup's
-          // one-card render), so it never shows twice.
+          // postures are the section's own. The schedule title labels the
+          // populated list here; on an empty day the title lives INSIDE
+          // the schedule card instead (the mockup's one-card render), so
+          // it never shows twice.
           ListHeaderComponent={
             <>
               {punchEnabled ? (
