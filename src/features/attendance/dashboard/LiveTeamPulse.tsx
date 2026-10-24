@@ -112,6 +112,7 @@ export function LiveTeamPulse({ employees, onOpenEmployee }: Props) {
         const [bg, fg, dot] = CHIP_TINTS[row.status];
         const detail =
           row.checkInAt !== null ? formatTime(row.checkInAt) : null;
+        const detailText = detailFor(row);
         // The phone is the row's identity when names collide (owner ask) —
         // screen readers get it too.
         const a11yName = row.phone
@@ -155,7 +156,7 @@ export function LiveTeamPulse({ employees, onOpenEmployee }: Props) {
                     {chipLabel(row)}
                   </Text>
                 </View>
-                {detailFor(row) ? (
+                {detailText ? (
                   <View
                     style={[
                       styles.detailTag,
@@ -166,7 +167,7 @@ export function LiveTeamPulse({ employees, onOpenEmployee }: Props) {
                         styles.detailTagText,
                         row.status === 'late' && styles.detailTagTextWarn,
                       ]}>
-                      {detailFor(row)}
+                      {detailText}
                     </Text>
                   </View>
                 ) : null}

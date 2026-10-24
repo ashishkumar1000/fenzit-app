@@ -17,7 +17,7 @@
 import { act, create } from 'react-test-renderer';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { FlatList, Text } from 'react-native';
-import { shiftYearMonth } from './monthlyModel';
+import { monthAbbr, shiftYearMonth } from './monthlyModel';
 import { MonthChipStrip } from './MonthChipStrip';
 
 /** The device's real current month — the future-clamp line the component
@@ -52,7 +52,7 @@ function chips(renderer: ReturnType<typeof create>['root']): ReactTestInstance[]
 }
 
 function chip(renderer: ReturnType<typeof create>['root'], ym: string) {
-  const label = `${/^(\w{3})/.exec(monthName(ym))![1]} ${ym.slice(0, 4)}`;
+  const label = `${monthAbbr(ym)} ${ym.slice(0, 4)}`;
   const matches = chips(renderer).filter(
     node => node.props.accessibilityLabel === label,
   );
@@ -60,13 +60,9 @@ function chip(renderer: ReturnType<typeof create>['root'], ym: string) {
   return matches[0];
 }
 
-const MONTH_ABBR = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-function monthName(ym: string): string {
-  return MONTH_ABBR[Number(ym.slice(5, 7)) - 1];
-}
+// The month names the chips may print — derived from the ONE canonical
+// table (monthlyModel), so the finder follows the contract, not a copy.
+const MONTH_ABBRS = Array.from({ length: 12 }, (_, i) => monthAbbr(`2026-${String(i + 1).padStart(2, '0')}`));
 
 describe('MonthChipStrip — the fare-strip redesign', () => {
   it('chips print the month name ONLY — the year lives in the sticky tag, never on a chip', () => {
@@ -79,7 +75,7 @@ describe('MonthChipStrip — the fare-strip redesign', () => {
           : String(t.props.children ?? ''),
       );
     // Month-only chip texts render…
-    expect(texts.filter(t => MONTH_ABBR.includes(t)).length).toBeGreaterThanOrEqual(
+    expect(texts.filter(t => MONTH_ABBRS.includes(t)).length).toBeGreaterThanOrEqual(
       10,
     );
     // …and no chip TEXT repeats the year (only the sticky tag does).

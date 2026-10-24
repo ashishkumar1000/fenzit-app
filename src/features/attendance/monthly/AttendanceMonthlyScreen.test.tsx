@@ -51,7 +51,7 @@ import type { AttendanceMonthlyData } from '../../../services';
 import { colors } from '../../../theme';
 import AttendanceMonthlyScreen from './AttendanceMonthlyScreen';
 import ScreenHeader from '../offices/ScreenHeader';
-import { shiftYearMonth } from './monthlyModel';
+import { monthAbbr, shiftYearMonth } from './monthlyModel';
 import { MONTHLY_ERROR_COPY } from './useMonthlyData';
 import { LoadErrorRetry } from '../dashboard/LoadErrorRetry';
 import { OfficeFilterSheet } from '../dashboard/OfficeFilterSheet';
@@ -78,13 +78,10 @@ const NEXT_MONTH = shiftYearMonth(SEED, 1);
  *  correction must NOT fire (mid-device-month, so the clamp is real). */
 const ECHO_TODAY = `${SEED}-15`;
 
-const MONTH_ABBR: Record<number, string> = {
-  1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-  7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec',
-};
-/** The strip chip's accessible name ('Oct 2026') for a 'YYYY-MM'. */
+/** The strip chip's accessible name ('Oct 2026') for a 'YYYY-MM' — the
+ *  month short name from the ONE canonical table. */
 function chipLabel(ym: string): string {
-  return `${MONTH_ABBR[Number(ym.slice(5, 7))]} ${ym.slice(0, 4)}`;
+  return `${monthAbbr(ym)} ${ym.slice(0, 4)}`;
 }
 
 /** The strip chip for a month — the composite Pressable is mirrored by a

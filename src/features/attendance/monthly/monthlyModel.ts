@@ -56,6 +56,19 @@ export function formatHolidayShortDate(holidayDate: string): string {
   ].slice(0, 3)}`;
 }
 
+/** 'YYYY-MM' → "Oct" — the short name from the ONE month table (the
+ *  strip's chips print the month only; the sticky tag owns the year). */
+export function monthAbbr(yearMonth: string): string {
+  return MONTH_NAMES[Number(yearMonth.slice(5, 7)) - 1].slice(0, 3);
+}
+
+/** The device's current month ('YYYY-MM') — the ONE clock-line the strip's
+ *  future clamp and the hook's bootstrap seed must agree on. */
+export function deviceThisMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 /** 'YYYY-MM' → the month's day count (UTC math on the month's 0th day —
  *  zone-free like shiftYearMonth; 0 on malformed input, when the summary
  *  card simply renders no length chip). */

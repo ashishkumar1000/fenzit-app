@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, radius, spacing, typography } from '../../../theme';
-import { shiftYearMonth } from './monthlyModel';
+import { deviceThisMonth, monthAbbr, shiftYearMonth } from './monthlyModel';
 
 const CHIP_W = 72;
 const CHIP_GAP = spacing.s2;
@@ -35,25 +35,10 @@ function monthRange(start: string, end: string): string[] {
   return out;
 }
 
-const MONTH_ABBR: Record<number, string> = {
-  1: 'Jan', 2: 'Feb', 3: 'Mar', 4: 'Apr', 5: 'May', 6: 'Jun',
-  7: 'Jul', 8: 'Aug', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dec',
-};
-
-/** The chip prints the month name only — the sticky tag owns the year. */
-function chipLabel(ym: string): string {
-  return MONTH_ABBR[Number(ym.slice(5, 7))];
-}
-
-/** Screen-reader context: the bare month alone is ambiguous. */
+/** Screen-reader context: the chip prints the month only, the bare name
+ *  alone is ambiguous — the label adds the year. */
 function chipA11yLabel(ym: string): string {
-  return `${MONTH_ABBR[Number(ym.slice(5, 7))]} ${ym.slice(0, 4)}`;
-}
-
-/** The device's real current month — the future-clamp line. */
-function deviceThisMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return `${monthAbbr(ym)} ${ym.slice(0, 4)}`;
 }
 
 type Props = {
@@ -139,7 +124,7 @@ export function MonthChipStrip({ value, disabled = false, onSelect }: Props) {
                   selected && styles.chipTextSelected,
                   (disabled || isFuture) && styles.chipTextDisabled,
                 ]}>
-                {chipLabel(ym)}
+                {monthAbbr(ym)}
               </Text>
             </Pressable>
           );

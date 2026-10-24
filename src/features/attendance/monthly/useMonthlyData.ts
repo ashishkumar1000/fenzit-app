@@ -38,7 +38,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchMonthly } from '../../../services';
 import type { AttendanceMonthlyData } from '../../../services';
 import { monthRange } from '../../../services/resources/attendanceDayStatus';
-import { monthlyWindow, shiftYearMonth } from './monthlyModel';
+import { deviceThisMonth, monthlyWindow, shiftYearMonth } from './monthlyModel';
 
 /** The fixed error copy (spec copy table) — never err.message (the
  *  normalizer's throw strings are developer-shaped). */
@@ -49,10 +49,10 @@ export const MONTHLY_ERROR_COPY =
 export type MonthlyOfficePick = { id: string; name: string } | null;
 
 /** The device-seeded bootstrap month: THE CURRENT MONTH (owner ruling
- *  2026-10-23 — the pane opens on today's month, not last month's). */
+ *  2026-10-23 — the pane opens on today's month, not last month's). The
+ *  SAME clock-line the strip clamps with — they must agree. */
 function initialYearMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return deviceThisMonth();
 }
 
 /** The fetch window for a load: echo-derived when the wire today is known

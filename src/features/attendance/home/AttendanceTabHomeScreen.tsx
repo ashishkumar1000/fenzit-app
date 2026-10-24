@@ -175,7 +175,7 @@ export default function AttendanceTabHomeScreen({ navigation, route }: Props) {
   // tabbed page. A viewer and a failed GET render the tabbed page.
   const setupIncomplete =
     setupState !== null && setupState.setupCompletedAt === null;
-  const showSetupPending = canWrite && setupIncomplete && setupState !== null;
+  const showSetupPending = canWrite && setupIncomplete;
 
   if (showSetupPending) {
     return (
