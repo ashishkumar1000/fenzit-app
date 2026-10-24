@@ -1,6 +1,8 @@
 /**
- * TodayScreen — the technician's "Today" tab: greeting + their assigned
- * jobs for the day, grouped into IN PROGRESS / SCHEDULED / DONE TODAY
+ * TodayScreen — the technician's "Today" tab, the approved redesign:
+ * avatar header (WELCOME BACK + greeting + bell), the shift strip, the
+ * device clock block, the punch zone, then their assigned jobs under
+ * "Today's Schedule & Tasks" — IN PROGRESS / SCHEDULED / DONE TODAY
  * sections (empty sections omitted; Done today stays visible when
  * non-empty — honest day count, deliberate product behaviour).
  *
@@ -16,30 +18,40 @@
  * opening the shared notifications screen. The unread count comes from the
  * same `useNotifications` store, refetched on focus.
  *
- * No earnings card, no jobs-left count, no date strip — those all need
- * backend support (payments, a jobs-left computation, multi-day job data)
- * that doesn't exist yet; adding them now would just be UI over no data.
+ * The header dot is real connectivity (NetInfo, the punch's own source),
+ * never decoration. No earnings card, no jobs-left count — those still
+ * need backend support that doesn't exist; adding them now would just be
+ * UI over no data.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  SectionList,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Bell, CalendarCheck, Plus, RefreshCw } from 'lucide-react-native';
-import { Button, EmptyState, Eyebrow, IconButton, InlineError } from '../../components/ui';
+import NetInfo from '@react-native-community/netinfo';
+import { Button, Eyebrow, InlineError } from '../../components/ui';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
-import { greetingForNow } from '../../utils';
 import { firstName, useMyProfile } from '../profile';
 import { JobCard } from '../jobs/components/JobCard';
 import { loadUnreadCount, useNotifications } from '../notifications';
-import { bellBadgeLabel } from '../notifications/bellBadge';
 import {
   refreshAttendanceAccessNow,
   useAttendanceAccess,
 } from '../attendance/me/attendanceAccessStore';
 import { useAttendanceSummary } from '../attendance/me/useAttendanceSummary';
 import { PunchSection } from '../attendance/today/PunchSection';
+import { TodayHeader } from './components/TodayHeader';
+import { TodayClock } from './components/TodayClock';
+import { ShiftStrip } from './components/ShiftStrip';
+import { TodayEmptySchedule } from './components/TodayEmptySchedule';
 import type { ApiJob } from '../jobs/types';
 import { buildTodaySections } from './todaySections';
 import { loadToday, useTechnicianJobs } from './useTechnicianJobs';
@@ -53,6 +65,21 @@ export default function TodayScreen() {
   const { unreadCount } = useNotifications();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const navigation = useNavigation<NativeStackNavigationProp<TechnicianRootStackParamList>>();
+
+  // The header dot's truth — the same NetInfo source the punch reads.
+  // null until the first read: the dot hides rather than guessing.
+  const [online, setOnline] = useState<boolean | null>(null);
+  useEffect(() => {
+    const sub = NetInfo.addEventListener(state =>
+      setOnline(state.isConnected === true),
+    );
+    // A failed initial read leaves the state null — the dot stays hidden
+    // (unknown), never gray by guesswork.
+    void NetInfo.fetch()
+      .then(state => setOnline(state.isConnected === true))
+      .catch(() => undefined);
+    return () => sub();
+  }, []);
 
   // Story 20-3: the punch lives HERE now. The access store gates it (an
   // employee without `active` sees nothing new on this tab — no header, no
@@ -109,31 +136,22 @@ export default function TodayScreen() {
   }, [navigation]);
 
   const sections = buildTodaySections(today);
-  // The urgency rail's clock — one 60s tick for the sectioned list.
-  const now = useNow();
+  // One clock for the whole page — the clock block's minute and the jobs'
+  // urgency rail age together; 30s keeps the displayed minute honest
+  // without a per-second timer.
+  const now = useNow(30_000);
   // `name` is nullable on the wire (see `MyProfile`); the greeting falls back
   // to a nameless form when it's missing.
   const name = firstName(profile?.name ?? null);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.greeting} numberOfLines={1}>
-          {name ? `${greetingForNow()}, ${name}` : greetingForNow()}
-        </Text>
-        <IconButton
-          variant="ghost"
-          size="md"
-          label="Notifications"
-          onPress={handleOpenNotifications}>
-          <Bell size={22} color={colors.textStrong} strokeWidth={2} />
-          {unreadCount !== null && unreadCount > 0 ? (
-            <View style={styles.bellBadge}>
-              <Text style={styles.bellBadgeText}>{bellBadgeLabel(unreadCount)}</Text>
-            </View>
-          ) : null}
-        </IconButton>
-      </View>
+      <TodayHeader
+        name={name}
+        online={online}
+        unreadCount={unreadCount}
+        onPressBell={handleOpenNotifications}
+      />
 
       {isLoadingToday && !hasLoadedToday ? (
         <View style={styles.centered}>
@@ -169,20 +187,34 @@ export default function TodayScreen() {
               {section.title}
             </Eyebrow>
           )}
-          // The punch rides ABOVE the job sections (the 20-3 AC) — as the
-          // list header it scrolls with the day, and its loading/error
-          // postures are the section's own.
+          // The punch zone rides ABOVE the job sections (the 20-3 AC) — as
+          // the list header it scrolls with the day, and its loading/error
+          // postures are the section's own. The clock and shift strip live
+          // inside it (both need the summary/attendance context). The
+          // schedule title labels the populated list here; on an empty day
+          // the title lives INSIDE the schedule card instead (the mockup's
+          // one-card render), so it never shows twice.
           ListHeaderComponent={
-            punchEnabled ? (
-              <View style={styles.punchWrap}>
-                <PunchSection
-                  summary={{ state: punchSummaryState, refresh: refreshPunchSummary }}
-                  refreshSummaryNow={refreshPunchSummaryNow}
-                  refreshAccessNow={refreshAttendanceAccessNow}
-                  refreshTick={punchRefreshTick}
-                />
-              </View>
-            ) : undefined
+            <>
+              {punchEnabled ? (
+                <View style={styles.punchWrap}>
+                  <ShiftStrip
+                    startTime={punchSummaryState.summary?.startTime ?? null}
+                    endTime={punchSummaryState.summary?.endTime ?? null}
+                  />
+                  <TodayClock now={now} />
+                  <PunchSection
+                    summary={{ state: punchSummaryState, refresh: refreshPunchSummary }}
+                    refreshSummaryNow={refreshPunchSummaryNow}
+                    refreshAccessNow={refreshAttendanceAccessNow}
+                    refreshTick={punchRefreshTick}
+                  />
+                </View>
+              ) : null}
+              {sections.length > 0 ? (
+                <Text style={styles.scheduleTitle}>{"Today's Schedule & Tasks"}</Text>
+              ) : null}
+            </>
           }
           contentContainerStyle={[
             styles.listContent,
@@ -200,25 +232,9 @@ export default function TodayScreen() {
             />
           }
           ListEmptyComponent={
-            <EmptyState
-              icon={<CalendarCheck size={36} color={colors.primary} strokeWidth={1.5} />}
-              title="No job assigned yet"
-              description="Your owner hasn't assigned you any jobs for today. Check back soon."
-              // The 20-3 mockup's empty state: rounded-square medallion with
-              // the + badge, and the sync pill on the screen's own refresh
-              // path. Additive props only — every other screen's render is
-              // untouched.
-              medallionShape="square"
-              badge={
-                <View style={styles.medallionBadge}>
-                  <Plus size={14} color={colors.onPrimary} strokeWidth={2.6} />
-                </View>
-              }
-              ctaShape="pill"
-              ctaLabel="Tap to refresh"
-              ctaIcon={<RefreshCw size={16} color={colors.primary} strokeWidth={2.2} />}
-              onPressCta={() => void handleRefresh()}
-            />
+            // The mockup's empty day: the schedule card holding a dashed
+            // well with the medallion, copy and the refresh pill.
+            <TodayEmptySchedule onRefresh={() => void handleRefresh()} />
           }
         />
         </>
@@ -232,60 +248,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surfacePage,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.s2,
-    paddingHorizontal: spacing.s4,
-    paddingTop: spacing.s2,
-    paddingBottom: spacing.s3,
-  },
-  greeting: {
-    ...typography.title,
-    fontSize: 24,
-    color: colors.textStrong,
-    flexShrink: 1,
-  },
-  // The bell badge — same pill as the owner's Jobs-header bell
-  // (JobsScreen styles are the reference; tokens only).
-  bellBadge: {
-    position: 'absolute',
-    top: 2,
-    right: 0,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 4,
-    backgroundColor: colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  bellBadgeText: {
-    ...typography.captionStrong,
-    color: colors.onPrimary,
-  },
   // The eyebrow treatment itself (type, tracking, caps, muted) lives in the
   // DS `Eyebrow` — this only positions it inside the list.
   sectionHeaderSpacing: {
     paddingVertical: spacing.s2,
   },
-  // The punch block's breathing room between the header and the job list.
+  // The punch zone's breathing room under the fixed header, and the gaps
+  // between its stacked parts (strip, clock, punch). Children own their
+  // alignment: the strip stretches, the clock centres itself.
   punchWrap: {
+    alignSelf: 'stretch',
+    gap: spacing.s4,
+    paddingHorizontal: spacing.s4,
     paddingTop: spacing.s2,
     paddingBottom: spacing.s3,
   },
-  // The empty-state medallion's corner badge (20-3 mockup): blue disc with
-  // a page-coloured ring so it reads as overlaid on the tinted chip.
-  medallionBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: colors.primary,
-    borderWidth: 3,
-    borderColor: colors.surfacePage,
-    alignItems: 'center',
-    justifyContent: 'center',
+  scheduleTitle: {
+    ...typography.title,
+    fontSize: 18,
+    color: colors.textStrong,
+    paddingHorizontal: spacing.s4,
+    paddingTop: spacing.s2,
+    paddingBottom: spacing.s2,
   },
   listContent: {
     padding: spacing.s4,

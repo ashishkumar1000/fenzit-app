@@ -16,8 +16,9 @@ import { Button } from './Button';
 import { colors, radius, shadow, spacing, typography } from '../../theme';
 
 export type EmptyStateProps = {
-  /** Icon rendered inside the medallion (e.g. a lucide icon). */
-  icon: ReactNode;
+  /** Icon rendered inside the medallion (e.g. a lucide icon). Optional —
+   *  when `illustration` is given it replaces the medallion entirely. */
+  icon?: ReactNode;
   /** A full illustration rendered INSTEAD of the medallion (the attendance
    *  empty scenes). Additive — every default render is unchanged. */
   illustration?: ReactNode;
@@ -35,6 +36,9 @@ export type EmptyStateProps = {
   badge?: ReactNode;
   /** CTA silhouette: the DS button, or the outlined pill with brand ink. */
   ctaShape?: 'default' | 'pill';
+  /** Extra style for the CTA button (e.g. `alignSelf: 'stretch'` for a
+   *  full-width pill). Additive — defaults keep every existing render. */
+  ctaStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -50,6 +54,7 @@ export function EmptyState({
   medallionShape = 'circle',
   badge = null,
   ctaShape = 'default',
+  ctaStyle,
   style,
 }: EmptyStateProps) {
   return (
@@ -82,7 +87,10 @@ export function EmptyState({
             shape="pill"
             onPress={onPressCta}
             leadingIcon={ctaIcon}
-            style={styles.pillCta}>
+            // Dark brand ink for label and (caller-coloured) icon — the
+            // ghost variant's blue reads as a link, not a quiet refresh.
+            labelColor={colors.textStrong}
+            style={[styles.pillCta, ctaStyle]}>
             {ctaLabel}
           </Button>
         ) : (
@@ -91,7 +99,7 @@ export function EmptyState({
             size="lg"
             onPress={onPressCta}
             leadingIcon={ctaIcon}
-            style={styles.cta}>
+            style={[styles.cta, ctaStyle]}>
             {ctaLabel}
           </Button>
         )
@@ -144,6 +152,9 @@ const styles = StyleSheet.create({
   pillCta: {
     alignSelf: 'center',
     marginTop: spacing.s6,
+    // The capsule: the wrapper draws the border, so the radius lives here
+    // (Button's shape="pill" token is a 5px rounding, not a capsule).
+    borderRadius: radius['2xl'],
     backgroundColor: colors.surfaceCard,
     borderWidth: 1,
     borderColor: colors.borderSubtle,

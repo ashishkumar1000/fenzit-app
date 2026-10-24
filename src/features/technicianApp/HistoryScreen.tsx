@@ -13,10 +13,10 @@ import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } f
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { History as HistoryIcon } from 'lucide-react-native';
 import { Button, EmptyState, InlineError } from '../../components/ui';
 import { colors, spacing, typography } from '../../theme';
 import { JobCard } from '../jobs/components/JobCard';
+import { HistoryArt } from './components/HistoryArt';
 import type { ApiJob } from '../jobs/types';
 import { loadHistory, loadMoreHistory, useTechnicianJobs } from './useTechnicianJobs';
 import type { TechnicianRootStackParamList } from '../../navigation/types';
@@ -122,7 +122,7 @@ export default function HistoryScreen() {
           }
           ListEmptyComponent={
             <EmptyState
-              icon={<HistoryIcon size={36} color={colors.primary} strokeWidth={1.5} />}
+              illustration={<HistoryArt />}
               title="No past jobs yet"
               description="Completed and cancelled jobs will show up here."
             />
