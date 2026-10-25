@@ -32,9 +32,24 @@ function maxStoreBuild(root) {
     tags = execFileSync('git', ['tag', '--list', 'store-v*'], {
       cwd: root,
       encoding: 'utf8',
+      // Pin git's message language so the not-a-repo detection below is
+      // deterministic on localized machines.
+      env: { ...process.env, LC_ALL: 'C' },
     });
-  } catch {
-    return null; // not a git repo / git unavailable — nothing to compare
+  } catch (e) {
+    const stderr =
+      typeof e.stderr === 'string' ? e.stderr : e.stderr?.toString();
+    if (
+      e.status === 128 &&
+      stderr &&
+      /fatal: not a git repository/i.test(stderr)
+    ) {
+      return null; // genuinely not a git repo — nothing to compare (documented)
+    }
+    // Anything else (spawn failure, broken git, memory pressure) must NOT
+    // read as "no tags yet" — that fails open and would let a store build
+    // number be reused.
+    throw e;
   }
   const builds = [];
   for (const tag of tags.split('\n')) {
@@ -84,8 +99,16 @@ function checkStoreDowngrade(root) {
 
 function main() {
   const root = path.join(__dirname, '..');
-  const { ok, message, version, expectedCode, maxStoreBuild: max } =
-    checkStoreDowngrade(root);
+  let result;
+  try {
+    result = checkStoreDowngrade(root);
+  } catch (e) {
+    // Unexpected git failure rethrown by maxStoreBuild — report it in the
+    // script's own format (not a raw stack trace) and block loudly.
+    console.error(`check-store-downgrade: git failed: ${e.message}`);
+    process.exit(1);
+  }
+  const { ok, message, version, expectedCode, maxStoreBuild: max } = result;
   if (!ok) {
     console.error(`check-store-downgrade: ${message}`);
     process.exit(1);
