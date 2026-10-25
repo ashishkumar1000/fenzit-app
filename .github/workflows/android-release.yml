@@ -9,6 +9,10 @@ on:
   # without an empty commit.
   workflow_dispatch:
 
+# The release-publishing step tags and attaches APKs/AAB to GitHub Releases.
+permissions:
+  contents: write
+
 concurrency:
   group: android-release-${{ github.ref }}
   cancel-in-progress: true
@@ -47,13 +51,26 @@ jobs:
       # mirrors the local workspace shape (workspace/core/{frontend,backend}).
       # Two levels up: the test resolves __dirname up 5 to /home/runner/work
       # (the parent of the checkout dir), not to the checkout's parent.
+      # The sibling is pinned to the commit in .fenzit-be-ref so an unrelated
+      # backend push can't flip this gate — bump that file deliberately.
       - name: Check out sibling fenzit-be
         run: |
           : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE unset}"
-          rm -rf "$GITHUB_WORKSPACE/../../backend/fenzit-be"
-          git clone --depth 1 https://github.com/ashishkumar1000/fenzit-be.git \
-            "$GITHUB_WORKSPACE/../../backend/fenzit-be"
-          git -C "$GITHUB_WORKSPACE/../../backend/fenzit-be" rev-parse HEAD
+          PIN="$(grep -v '^#' "$GITHUB_WORKSPACE/.fenzit-be-ref" | head -1 | tr -d '[:space:]')"
+          if [[ ! "$PIN" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::.fenzit-be-ref must contain a 40-hex commit sha (got: '$PIN')"
+            exit 1
+          fi
+          DEST="$GITHUB_WORKSPACE/../../backend/fenzit-be"
+          rm -rf "$DEST"
+          git init -q "$DEST"
+          git -C "$DEST" fetch -q --depth 1 https://github.com/ashishkumar1000/fenzit-be.git "$PIN"
+          git -C "$DEST" checkout -q FETCH_HEAD
+          echo "fenzit-be pinned at $(git -C "$DEST" rev-parse HEAD)"
+          BE_MAIN="$(git ls-remote https://github.com/ashishkumar1000/fenzit-be main | cut -f1)"
+          if [ "$BE_MAIN" != "$PIN" ]; then
+            echo "::warning::fenzit-be main ($BE_MAIN) has moved past the pin ($PIN) — the drift guard validates the pinned catalog; bump .fenzit-be-ref after intentional backend changes"
+          fi
 
       # JDK 17 — required by android/gradle/gradle-daemon-jvm.properties
       # (JDK 26 breaks AGP's jlink transform). Gradle's daemon JVM criteria
@@ -118,3 +135,34 @@ jobs:
           name: release-aab
           path: android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
+
+      # Publish the build as a GitHub Release tagged v<version> (version
+      # sync is guaranteed by verify:version above). Idempotent per version:
+      # a rebuild of the same version replaces the release's assets instead
+      # of failing — no release spam across repeated runs of one version.
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
+          STAGE="$(mktemp -d)"
+          for f in android/app/build/outputs/apk/release/*.apk; do
+            base="$(basename "$f" .apk | sed -e 's/^app-//' -e 's/-release$//')"
+            cp "$f" "$STAGE/fenzit-$VERSION-$base.apk"
+          done
+          cp android/app/build/outputs/bundle/release/*.aab "$STAGE/fenzit-$VERSION.aab"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$STAGE"/*.apk "$STAGE"/*.aab --clobber
+            # Drop assets a rebuild no longer produces (e.g. a retired ABI) —
+            # --clobber alone would leave stale APKs downloadable.
+            for a in $(gh release view "$TAG" --json assets -q '.assets[].name'); do
+              [ -f "$STAGE/$a" ] || gh release delete-asset "$TAG" "$a" -y
+            done
+          elif git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "::error::tag $TAG exists but has no release — delete the tag or bump the version before publishing"
+            exit 1
+          else
+            gh release create "$TAG" "$STAGE"/*.apk "$STAGE"/*.aab \
+              --target "$GITHUB_SHA" --title "Fenzit $VERSION" --generate-notes
+          fi

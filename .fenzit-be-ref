@@ -1,0 +1,5 @@
+# The fenzit-be commit the SkillIcon catalog drift guard validates against
+# (CI clones exactly this commit — see .github/workflows/android-release.yml).
+# Bump it deliberately after intentional backend changes:
+#   git ls-remote https://github.com/ashishkumar1000/fenzit-be main | cut -f1 > .fenzit-be-ref
+fd614008f91383432bba9fb54e2bc5203031db0a
