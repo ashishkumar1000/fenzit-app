@@ -154,3 +154,37 @@ jest.mock('react-native-device-info', () => ({
 // — assertions like "12 Aug 2026" must not depend on the host TZ. IST is the
 // product's home timezone, so it is the deterministic choice for tests.
 process.env.TZ = 'Asia/Kolkata';
+
+// RN 0.87's jest environment lacks the Fabric private API
+// (getNativeTagFromPublicInstance): any delayed `useNativeDriver: true`
+// animation that actually fires mid-test crashes findNodeHandle
+// (RosterScreen on CI, EmployeesStep locally — timing-sensitive, so it
+// passes on a fast machine and fails under load). Pin every core-Animated
+// factory to JS-driven so nodes never go native in tests, and complete
+// them instantly. No test asserts on native driving, mid-flight values,
+// or destructures these factories at load time.
+const { Animated } = require('react-native');
+for (const factory of ['timing', 'spring', 'decay']) {
+  const original = Animated[factory];
+  Animated[factory] = (value, config) => {
+    const animation = original(value, { ...config, useNativeDriver: false });
+    // Complete instantly: apply the end value and report finished, instead
+    // of driving RAF frames no test observes. Infinite shimmers would
+    // otherwise keep jest's event loop alive to the 5s test timeout.
+    animation.start = (cb) => {
+      if (typeof config?.toValue === 'number') value.setValue(config.toValue);
+      cb?.({ finished: true });
+    };
+    return animation;
+  };
+}
+// Cap loops at one iteration unless the caller asked for a finite count —
+// an instant-finishing child inside an infinite Animated.loop would
+// restart forever.
+const originalLoop = Animated.loop;
+Animated.loop = (animation, config) =>
+  originalLoop(animation, {
+    ...config,
+    iterations:
+      config?.iterations && config.iterations > 0 ? config.iterations : 1,
+  });

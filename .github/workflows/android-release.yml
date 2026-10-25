@@ -67,16 +67,8 @@ jobs:
       # and carries a 133-error backlog. Re-enable after cleaning that up.
 
       # `bun run test`, not `bun test` — bare bun test breaks on RN Flow types.
-      # Advisory for now: pre-existing UI suites (RosterScreen on CI,
-      # EmployeesStep locally) crash mid-test when a delayed useNativeDriver
-      # animation fires — RN 0.87's jest env lacks the Fabric private API
-      # (getNativeTagFromPublicInstance), so the crash is timing-sensitive:
-      # invisible on fast machines, frequent under CI load. Failures still
-      # show as a failed step; they stop blocking artifact builds until
-      # jest.setup.js pins native-driver animations in tests.
-      - name: Tests (advisory)
+      - name: Tests
         run: bun run test
-        continue-on-error: true
 
       # Mirrors the .githooks/pre-commit gates — PR merges and --no-verify
       # commits reach `release` without ever running the hook.
