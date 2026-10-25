@@ -153,6 +153,9 @@ jest.mock('react-native-device-info', () => ({
 // ('en-IN', …) on UTC timestamps, which shifts a day in behind-UTC timezones
 // — assertions like "12 Aug 2026" must not depend on the host TZ. IST is the
 // product's home timezone, so it is the deterministic choice for tests.
+// NOTE: this in-band pin alone is NOT sufficient — V8 caches the zone from
+// process start, so on Linux CI the tests must run with TZ=Asia/Kolkata in
+// the environment (the workflow's Tests step carries it).
 process.env.TZ = 'Asia/Kolkata';
 
 // RN 0.87's jest environment lacks the Fabric private API

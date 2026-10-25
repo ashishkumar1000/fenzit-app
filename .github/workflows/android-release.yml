@@ -42,6 +42,19 @@ jobs:
           fi
           df -h /
 
+      # SkillIcon.catalog.test.ts reads the skills icon catalog straight from
+      # the fenzit-be migration (the two repos cannot drift apart) — this
+      # mirrors the local workspace shape (workspace/core/{frontend,backend}).
+      # Two levels up: the test resolves __dirname up 5 to /home/runner/work
+      # (the parent of the checkout dir), not to the checkout's parent.
+      - name: Check out sibling fenzit-be
+        run: |
+          : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE unset}"
+          rm -rf "$GITHUB_WORKSPACE/../../backend/fenzit-be"
+          git clone --depth 1 https://github.com/ashishkumar1000/fenzit-be.git \
+            "$GITHUB_WORKSPACE/../../backend/fenzit-be"
+          git -C "$GITHUB_WORKSPACE/../../backend/fenzit-be" rev-parse HEAD
+
       # JDK 17 — required by android/gradle/gradle-daemon-jvm.properties
       # (JDK 26 breaks AGP's jlink transform). Gradle's daemon JVM criteria
       # match any installed JDK 17; the foojay resolver provisions one if
@@ -67,8 +80,13 @@ jobs:
       # and carries a 133-error backlog. Re-enable after cleaning that up.
 
       # `bun run test`, not `bun test` — bare bun test breaks on RN Flow types.
+      # TZ from the environment: jest.setup.js's in-band pin cannot retrofit a
+      # started Node process (V8 caches the zone — UTC runners rendered IST
+      # wall clocks as UTC and failed the wall-clock assertions).
       - name: Tests
         run: bun run test
+        env:
+          TZ: Asia/Kolkata
 
       # Mirrors the .githooks/pre-commit gates — PR merges and --no-verify
       # commits reach `release` without ever running the hook.
