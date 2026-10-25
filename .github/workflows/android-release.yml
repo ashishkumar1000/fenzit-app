@@ -25,6 +25,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The runner image ships ~25 GB of preinstalled tooling this pipeline
+      # never uses (dotnet, Haskell, Boost, CodeQL, docker images). The
+      # gradle cache restore, jest workers and the NDK-heavy release build
+      # need that headroom — without it the run dies with ENOSPC mid-tests.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup \
+            /usr/local/share/boost /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift /usr/local/share/chromium
+          sudo docker image prune -af > /dev/null 2>&1 || true
+          avail=$(df --output=avail -B1 / | tail -1)
+          if [ "$avail" -lt $((20 * 1024 * 1024 * 1024)) ]; then
+            echo "::error::only $avail bytes free after cleanup — cleanup paths may have moved on this runner image"
+            exit 1
+          fi
+          df -h /
+
       # JDK 17 — required by android/gradle/gradle-daemon-jvm.properties
       # (JDK 26 breaks AGP's jlink transform). Gradle's daemon JVM criteria
       # match any installed JDK 17; the foojay resolver provisions one if
