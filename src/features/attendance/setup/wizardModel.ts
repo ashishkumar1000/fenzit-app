@@ -23,7 +23,6 @@
  */
 import type {
   EnrolmentOverview,
-  IsoWeekday,
   SetupStep,
 } from '../../../services';
 import type { Office, OfficeRule } from '../../../types/office';
@@ -149,12 +148,15 @@ export interface StepGateSnapshot {
    *  an office is created WITH its rule; the check guards drift). */
   liveOfficesMissingRule: number;
   /**
-   * The saved tenant default's day set, or null when NO default exists
-   * server-side. Identity carries the "saved" meaning — a saved EMPTY set
-   * (`days: []`, the works-all-week rule) is a real saved view and counts
-   * as saved; only a null (never configured, or cleared) gates Continue.
+   * R-11's `configured` — the owner has saved the everyone rule at least
+   * once, including "no day off" (which leaves no row) and a rule whose
+   * only row is future-dated. The gate reads THIS, not the today-valid
+   * `default` view: the wizard's requirement is a SAVED decision, not one
+   * already in force (found on device 2026-10-26: saving Sunday-off from
+   * next Sunday left `default` null and dead-locked step 3 until that
+   * date, even though the save had landed and `configured` was true).
    */
-  weeklyOffDefaultDays: IsoWeekday[] | null;
+  weeklyOffConfigured: boolean;
 }
 
 /**
@@ -178,7 +180,7 @@ export function continueGateReason(
       : 'Every office needs its timings set before you continue.';
   }
   if (step === 'weekly_off') {
-    return snapshot.weeklyOffDefaultDays !== null
+    return snapshot.weeklyOffConfigured
       ? null
       : 'Save your default weekly off first.';
   }

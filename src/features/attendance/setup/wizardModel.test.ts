@@ -151,7 +151,7 @@ describe('continueGateReason', () => {
   const base: StepGateSnapshot = {
     liveOfficeCount: 1,
     liveOfficesMissingRule: 0,
-    weeklyOffDefaultDays: [7],
+    weeklyOffConfigured: true,
   };
 
   it('offices: zero live offices blocks with its caption; one enables', () => {
@@ -171,19 +171,13 @@ describe('continueGateReason', () => {
     expect(continueGateReason('offices', base)).toBeNull();
   });
 
-  it('weekly_off: no saved default blocks with its caption', () => {
+  it('weekly_off: never configured blocks with its caption', () => {
     expect(
-      continueGateReason('weekly_off', { ...base, weeklyOffDefaultDays: null }),
+      continueGateReason('weekly_off', { ...base, weeklyOffConfigured: false }),
     ).toBe('Save your default weekly off first.');
   });
 
-  it('weekly_off: a saved EMPTY default (days: [], works-all-week) counts as saved', () => {
-    expect(
-      continueGateReason('weekly_off', { ...base, weeklyOffDefaultDays: [] }),
-    ).toBeNull();
-  });
-
-  it('weekly_off: a saved non-empty default enables', () => {
+  it('weekly_off: a saved decision with NO rule in force today still enables (future-dated or cleared)', () => {
     expect(continueGateReason('weekly_off', base)).toBeNull();
   });
 
@@ -191,7 +185,7 @@ describe('continueGateReason', () => {
     const empty = {
       liveOfficeCount: 0,
       liveOfficesMissingRule: 0,
-      weeklyOffDefaultDays: null,
+      weeklyOffConfigured: false,
     };
     expect(continueGateReason('holidays', empty)).toBeNull();
     expect(continueGateReason('holidays', base)).toBeNull();
@@ -201,7 +195,7 @@ describe('continueGateReason', () => {
     const empty = {
       liveOfficeCount: 0,
       liveOfficesMissingRule: 0,
-      weeklyOffDefaultDays: null,
+      weeklyOffConfigured: false,
     };
     expect(continueGateReason('employees', empty)).toBeNull();
   });

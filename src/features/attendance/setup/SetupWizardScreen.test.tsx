@@ -139,6 +139,7 @@ function enrolRow(
 
 const LIVE_OFFICE = office('o1', 'HQ');
 const SAVED_WEEKLY_OFF: WeeklyOffDefaultResponse = {
+  configured: true,
   default: { days: [7], validFrom: '2026-01-01', validTo: null },
   next: null,
   history: [],
@@ -422,6 +423,66 @@ describe('the per-step Continue gate', () => {
     expect(findButton(wizard.root, 'Continue').props.disabled).toBe(true);
     expect(hasText(wizard.root, 'Save your default weekly off first.')).toBe(
       true,
+    );
+  });
+
+  it('weekly_off: a SAVED decision with no rule in force today enables Continue (the device dead-lock)', async () => {
+    // Found on device 2026-10-26: a Sunday-off rule saved from next Sunday
+    // left `default` null, and the old `defaultDays !== null` gate kept step
+    // 3 dead-locked until that date. The gate reads R-11's `configured`.
+    getSetup.mockResolvedValue(setupState({ currentStep: 'weekly_off' }));
+    mockStepData({
+      weeklyOff: {
+        configured: true,
+        default: null,
+        next: { days: [7], validFrom: '2027-03-07', validTo: null },
+        history: [{ days: [7], validFrom: '2027-03-07', validTo: null }],
+      },
+    });
+    const wizard = await renderLoaded();
+
+    expect(findButton(wizard.root, 'Continue').props.disabled).toBe(false);
+    expect(hasText(wizard.root, 'Save your default weekly off first.')).toBe(
+      false,
+    );
+    // The card shows the queued first rule, not "Not set yet".
+    expect(hasText(wizard.root, 'Sun only')).toBe(true);
+    expect(
+      hasText(
+        wizard.root,
+        'Starts Sun, 7 Mar, 2027 — everyone works all days until then.',
+      ),
+    ).toBe(true);
+  });
+
+  it('weekly_off: the card lists queued edits behind the live rule, capped at three', async () => {
+    getSetup.mockResolvedValue(setupState({ currentStep: 'weekly_off' }));
+    mockStepData({
+      weeklyOff: {
+        configured: true,
+        default: { days: [7], validFrom: '2026-10-26', validTo: null },
+        next: { days: [2], validFrom: '2027-03-03', validTo: null },
+        history: [
+          { days: [7], validFrom: '2026-10-26', validTo: null },
+          { days: [2], validFrom: '2027-03-03', validTo: null },
+          { days: [4], validFrom: '2027-03-05', validTo: null },
+          { days: [6], validFrom: '2027-03-07', validTo: null },
+          { days: [5, 6, 7], validFrom: '2027-03-09', validTo: null },
+        ],
+      },
+    });
+    const wizard = await renderLoaded();
+
+    expect(findButton(wizard.root, 'Continue').props.disabled).toBe(false);
+    expect(hasText(wizard.root, 'From Wed, 3 Mar, 2027: Tue off.')).toBe(true);
+    expect(hasText(wizard.root, 'From Fri, 5 Mar, 2027: Thu off.')).toBe(true);
+    expect(hasText(wizard.root, 'From Sun, 7 Mar, 2027: Sat off.')).toBe(true);
+    // The fourth hop defers to the editor's Upcoming panel.
+    expect(
+      hasText(wizard.root, '+1 more — see all in Set weekly off.'),
+    ).toBe(true);
+    expect(hasText(wizard.root, 'From Tue, 9 Mar, 2027: Fri, Sat & Sun off.')).toBe(
+      false,
     );
   });
 

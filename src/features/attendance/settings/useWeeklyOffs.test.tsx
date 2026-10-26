@@ -29,6 +29,7 @@ const svc = weeklyOffsService as unknown as {
 const useFocusEffectMock = useFocusEffect as unknown as jest.Mock;
 
 let probe: ReturnType<typeof useWeeklyOffs>;
+const renderers: ReactTestRenderer.ReactTestRenderer[] = [];
 function Probe() {
   probe = useWeeklyOffs();
   return null;
@@ -38,6 +39,7 @@ function renderProbe() {
   act(() => {
     renderer = create(<Probe />);
   });
+  renderers.push(renderer);
   return renderer;
 }
 function fireFocus() {
@@ -229,6 +231,180 @@ describe('saveDefault', () => {
     expect(probe.isSaving).toBe(false);
     // Rows are NOT cleared on a failed save — the form stays populated.
     expect(probe.defaultView).toEqual(view([7], '2026-09-27'));
+  });
+});
+
+describe('SWR snapshot primer', () => {
+  // Fresh module state helper: the snapshot is module-scoped, so these tests
+  // write their own payloads and never rely on earlier tests' rows — except
+  // the last one, which pins the hasLoadedRef guard AGAINST a snapshot that
+  // earlier tests in this file have already written.
+  function savedResponse(days: number[], validFrom: string) {
+    return {
+      default: view(days, validFrom),
+      next: null,
+      history: [view(days, validFrom)],
+    };
+  }
+
+  it('paints the just-saved rows on another instance refocus before its GET resolves', async () => {
+    // The real sequence: the wizard (instance 2) loads its stale view, the
+    // editor (instance 1) then saves — the save's re-fetch writes the
+    // module snapshot — and the wizard's next focus paints the saved rows
+    // before its own GET resolves.
+    svc.getDefault.mockResolvedValueOnce({
+      default: null,
+      next: null,
+      history: [],
+    });
+    renderProbe();
+    const editor = probe;
+    await focusAndFlush();
+
+    svc.getDefault.mockResolvedValueOnce({
+      default: null,
+      next: null,
+      history: [],
+    });
+    renderProbe();
+    await focusAndFlush();
+    expect(probe.defaultView).toBeNull();
+
+    const saved = savedResponse([7], '2027-03-07');
+    svc.setDefault.mockResolvedValueOnce(saved);
+    svc.getDefault.mockResolvedValueOnce(saved);
+    await act(async () => {
+      await editor.saveDefault({ days: [7], effectiveFrom: '2027-03-07' });
+    });
+
+    // The wizard's next focus: the GET is still pending, but the just-saved
+    // rows are already on screen — the stale flash is gone. (The wizard
+    // probe is the global `probe`: its render is the newest.)
+    let resolveGet!: (v: unknown) => void;
+    svc.getDefault.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveGet = resolve; }),
+    );
+    fireFocus();
+    expect(probe.defaultView).toEqual(view([7], '2027-03-07'));
+
+    await act(async () => {
+      resolveGet(saved);
+      await flush();
+    });
+    expect(probe.defaultView).toEqual(view([7], '2027-03-07'));
+  });
+
+  it('the post-save ECHO fallback primes the snapshot too', async () => {
+    svc.getDefault.mockResolvedValueOnce({
+      default: null,
+      next: null,
+      history: [],
+    });
+    renderProbe();
+    const editor = probe;
+    await focusAndFlush();
+
+    svc.getDefault.mockResolvedValueOnce({
+      default: null,
+      next: null,
+      history: [],
+    });
+    renderProbe();
+    await focusAndFlush();
+    expect(probe.defaultView).toBeNull();
+
+    // The save's canonical re-fetch FAILS: the echo is seeded AND is the
+    // freshest known truth, so the refocus paints it.
+    const echo = savedResponse([2], '2027-03-07');
+    svc.setDefault.mockResolvedValueOnce(echo);
+    svc.getDefault.mockRejectedValueOnce(apiError());
+    await act(async () => {
+      await editor.saveDefault({ days: [2], effectiveFrom: '2027-03-07' });
+    });
+
+    let resolveGet!: (v: unknown) => void;
+    svc.getDefault.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveGet = resolve; }),
+    );
+    fireFocus();
+    expect(probe.defaultView).toEqual(view([2], '2027-03-07'));
+    await act(async () => {
+      resolveGet(echo);
+      await flush();
+    });
+  });
+
+  it('a snapshot older than the TTL does not prime', async () => {
+    // The editor loads, then saves — writing the snapshot at real time T.
+    svc.getDefault.mockResolvedValueOnce({
+      default: null,
+      next: null,
+      history: [],
+    });
+    const editorRenderer = renderProbe();
+    const editor = probe;
+    await focusAndFlush();
+    const saved = savedResponse([7], '2027-03-07');
+    svc.setDefault.mockResolvedValueOnce(saved);
+    svc.getDefault.mockResolvedValueOnce(saved);
+    await act(async () => {
+      await editor.saveDefault({ days: [7], effectiveFrom: '2027-03-07' });
+    });
+
+    // The editor unmounts, then 31 seconds pass: the snapshot is past the
+    // TTL and the editor is gone, so nothing can steal the probe reference.
+    act(() => {
+      editorRenderer.unmount();
+    });
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(Date.now() + 31_000);
+
+      // The wizard mounts fresh AFTER the jump, loads stale rows...
+      svc.getDefault.mockResolvedValueOnce({
+        default: null,
+        next: null,
+        history: [],
+      });
+      renderProbe();
+      await focusAndFlush();
+      expect(probe.defaultView).toBeNull();
+
+      // ...and its refocus with the GET pending must NOT paint the expired
+      // snapshot.
+      let resolveGet!: (v: unknown) => void;
+      svc.getDefault.mockImplementationOnce(
+        () => new Promise((resolve) => { resolveGet = resolve; }),
+      );
+      fireFocus();
+      expect(probe.defaultView).toBeNull();
+      await act(async () => {
+        resolveGet(saved);
+        await flush();
+      });
+      expect(probe.defaultView).toEqual(saved.default);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('a FIRST fetch never primes, even when a snapshot exists', async () => {
+    // Runs after the tests above, so a snapshot is guaranteed to exist —
+    // the hasLoadedRef guard is what keeps the first fetch honest, not the
+    // snapshot's absence.
+    let resolveGet!: (v: unknown) => void;
+    svc.getDefault.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveGet = resolve; }),
+    );
+    renderProbe();
+    fireFocus();
+    expect(probe.hasLoaded).toBe(false);
+    expect(probe.defaultView).toBeNull();
+    await act(async () => {
+      resolveGet(savedResponse([3], '2027-03-07'));
+      await flush();
+    });
+    expect(probe.defaultView).toEqual(view([3], '2027-03-07'));
   });
 });
 

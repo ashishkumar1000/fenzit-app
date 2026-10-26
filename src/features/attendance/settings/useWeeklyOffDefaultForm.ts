@@ -216,6 +216,22 @@ export function useWeeklyOffDefaultForm({
     [hasLoaded, history, today],
   );
 
+  // The date this save takes effect from — the blank field means today
+  // (AD-8). One source for the replace-guard's filter AND the confirm's
+  // stated date, so they can never diverge.
+  const effectiveDate = effectiveFrom || today;
+
+  // Queued edits a save from the working effective date would REPLACE: the
+  // RPC deletes every row starting on/after that date, so anything queued
+  // strictly later silently disappears (found on device 2026-10-26 — a
+  // mid-chain edit dropped two future rules without a word). The screen
+  // confirms before saving when this is non-empty. The row AT the effective
+  // date is the edit itself — expected, not warned.
+  const supersededHops = useMemo(() => {
+    if (!hasLoaded) return [];
+    return history.filter((h) => h.validFrom > effectiveDate);
+  }, [hasLoaded, history, effectiveDate]);
+
   const onDayToggle = useCallback((next: IsoWeekday[]) => {
     setHasTouched(true);
     setSelectedDays(next);
@@ -269,10 +285,12 @@ export function useWeeklyOffDefaultForm({
     neverConfigured,
     selectedDays,
     effectiveFrom,
+    effectiveDate,
     sevenSelected,
     noWorkingDays,
     saveDisabled,
     upcoming,
+    supersededHops,
     onDayToggle,
     onEffectiveFromChange,
     onSave,

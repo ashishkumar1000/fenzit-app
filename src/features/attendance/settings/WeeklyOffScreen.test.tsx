@@ -319,6 +319,62 @@ describe('WeeklyOffScreen tenant default', () => {
     expect(hasText(screen.root, 'Weekly off saved')).toBe(true);
   });
 
+  it('a save that would replace queued edits raises the confirm before writing', async () => {
+    // Found on device 2026-10-26: the save RPC owns everything from its
+    // effective date onward, so a mid-chain edit silently dropped every
+    // later queued rule. Save now names them and waits for an explicit
+    // confirm; a tail edit with nothing behind it saves straight through
+    // (pinned by the PUT test above, whose history is empty).
+    getDefaultMock.mockResolvedValue({
+      default: view([7]),
+      next: { days: [4], validFrom: '2027-03-04', validTo: null },
+      history: [
+        view([7]),
+        { days: [4], validFrom: '2027-03-04', validTo: null },
+        { days: [6], validFrom: '2027-03-08', validTo: null },
+      ],
+    });
+    const screen = await renderLoaded();
+
+    // The working copy seeds from the queued Thu-off hop; adding Sunday
+    // makes it dirty with the 8 Mar hop still queued behind it.
+    act(() => {
+      findPill(screen.root, 7).props.onPress();
+    });
+    const save = findDefaultSave(screen.root);
+    expect(save.props.disabled).toBe(false);
+
+    act(() => {
+      save.props.onPress();
+    });
+
+    // The confirm, not the write.
+    expect(setDefaultMock).not.toHaveBeenCalled();
+    expect(hasText(screen.root, 'Remove upcoming changes?')).toBe(true);
+    expect(hasText(screen.root, 'Mon, 8 Mar, 2027')).toBe(true);
+
+    // Go back: still no write, dialog dismissed.
+    act(() => {
+      findButtons(screen.root, 'Go back')[0].props.onPress();
+    });
+    expect(setDefaultMock).not.toHaveBeenCalled();
+    expect(hasText(screen.root, 'Remove upcoming changes?')).toBe(false);
+
+    // Save again and confirm: exactly one PUT with the working copy.
+    act(() => {
+      findDefaultSave(screen.root).props.onPress();
+    });
+    await act(async () => {
+      findButtons(screen.root, 'Save anyway')[0].props.onPress();
+      await flush();
+    });
+    expect(setDefaultMock).toHaveBeenCalledTimes(1);
+    expect(setDefaultMock).toHaveBeenCalledWith({
+      days: [4, 7],
+      effectiveFrom: '2027-03-04',
+    });
+  });
+
   it('seeds the working copy from an existing default (no dirty state)', async () => {
     getDefaultMock.mockResolvedValue({
       default: view([6, 7]),
