@@ -44,6 +44,17 @@ export interface UseWeeklyOffsResult {
   isSaving: boolean;
 }
 
+// Stale-while-revalidate primer: the freshest GET response any mounted
+// weekly-off screen has seen. On refocus (e.g. popping back from a save)
+// the screen paints this INSTANTLY instead of the pre-save rows while the
+// focus GET is in flight — found on device 2026-10-26 (the wizard showed
+// stale data for a beat after every save-return). 30s TTL so a
+// logout→login can never prime a previous tenant's data; the in-flight GET
+// always replaces it.
+let latestSnapshot: { rows: WeeklyOffDefaultResponse; at: number } | null =
+  null;
+const SNAPSHOT_TTL_MS = 30_000;
+
 export function useWeeklyOffs(): UseWeeklyOffsResult {
   const [data, setData] = useState<WeeklyOffDefaultResponse>({
     default: null,
@@ -60,6 +71,10 @@ export function useWeeklyOffs(): UseWeeklyOffsResult {
   // slower earlier response must never overwrite a newer one (the 15-4
   // review added this to `useOffices`; 15-6 needs it for the same reason).
   const fetchSeqRef = useRef(0);
+  // Ref mirror of `hasLoaded`: the SWR primer only refreshes an ALREADY
+  // loaded screen — a first fetch (or a first fetch that fails) must leave
+  // the rows empty so the skeleton/error states stay honest.
+  const hasLoadedRef = useRef(false);
   // Returns the fetched rows, or null when superseded (a newer fetch won
   // the race). `fallback` (15-6 review P9): the post-save refetch's failure
   // path seeds the write's echo under the seq guard INSTEAD of surfacing as
@@ -72,17 +87,31 @@ export function useWeeklyOffs(): UseWeeklyOffsResult {
       fallback?: WeeklyOffDefaultResponse,
     ): Promise<WeeklyOffDefaultResponse | null> => {
       const seq = ++fetchSeqRef.current;
+      if (
+        hasLoadedRef.current &&
+        latestSnapshot &&
+        Date.now() - latestSnapshot.at < SNAPSHOT_TTL_MS
+      ) {
+        setData(latestSnapshot.rows);
+      }
       setIsLoading(true);
       setError(null);
       try {
         const rows = await weeklyOffsService.getDefault();
         if (seq !== fetchSeqRef.current) return null;
+        latestSnapshot = { rows, at: Date.now() };
         setData(rows);
+        hasLoadedRef.current = true;
         setHasLoaded(true);
         return rows;
       } catch (err) {
         if (seq !== fetchSeqRef.current) return null;
         if (fallback) {
+          // The echo is the freshest truth on this path too — prime the
+          // snapshot so the pop-back-after-save paints the saved rows, not
+          // the pre-save ones (the primer's whole reason to exist).
+          latestSnapshot = { rows: fallback, at: Date.now() };
+          hasLoadedRef.current = true;
           setData(fallback);
           setHasLoaded(true);
           return fallback;

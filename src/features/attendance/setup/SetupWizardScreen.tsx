@@ -102,10 +102,18 @@ export default function SetupWizardScreen({ navigation }: Props) {
   const stepSnapshot: StepGateSnapshot = {
     liveOfficeCount: live.length,
     liveOfficesMissingRule: live.filter((office) => !office.rule).length,
-    // A saved EMPTY default (days: [], the works-all-week rule) is a real
-    // saved view — only `defaultView === null` gates Continue.
-    weeklyOffDefaultDays:
-      weeklyOffs.defaultView === null ? null : weeklyOffs.defaultView.days,
+    // R-11's `configured`: a SAVED decision — including a future-dated
+    // first rule (default still null until that date) and "no day off"
+    // (no row at all). Gating on `defaultView` instead would dead-lock
+    // step 3 until the saved start date arrived. `configured` is absent
+    // from an older backend (the service documents the tolerance) — infer
+    // from the views rather than blocking a saved rule.
+    weeklyOffConfigured:
+      weeklyOffs.configured === true ||
+      (weeklyOffs.configured === undefined &&
+        (weeklyOffs.defaultView !== null ||
+          weeklyOffs.nextView !== null ||
+          weeklyOffs.history.length > 0)),
   };
 
   // --- Bootstrap loading / error / exit chrome --------------------------
@@ -239,6 +247,8 @@ export default function SetupWizardScreen({ navigation }: Props) {
     body = (
       <WeeklyOffStep
         defaultDays={weeklyOffs.defaultView?.days ?? null}
+        configured={weeklyOffs.configured === true}
+        pendingHops={weeklyOffs.history.filter((h) => h.validFrom > today)}
         isLoading={weeklyOffs.isLoading}
         hasLoaded={weeklyOffs.hasLoaded}
         error={weeklyOffs.error}

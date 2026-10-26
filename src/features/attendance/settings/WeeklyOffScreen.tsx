@@ -42,6 +42,10 @@ import { useWeeklyOffDefaultForm } from './useWeeklyOffDefaultForm';
 import { viewDays } from './weeklyOffModel';
 import { WeeklyOffDefaultSection } from './WeeklyOffDefaultSection';
 import { WeeklyOffOverridesSection } from './WeeklyOffOverridesSection';
+import {
+  useWeeklyOffReplaceConfirm,
+  WeeklyOffReplaceConfirm,
+} from './WeeklyOffReplaceConfirm';
 import WeeklyOffOverrideSheet from './WeeklyOffOverrideSheet';
 import { useOverrideSheet } from './useOverrideSheet';
 import type { RootStackParamList } from '../../../navigation/types';
@@ -113,6 +117,17 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
       setRefreshing(false);
     }
   }, [refresh, refreshOverrides, refreshing]);
+
+  // A save owns everything from its effective date onward (AD-8) — when
+  // queued edits would be replaced, Save raises the confirm instead of
+  // writing straight through (found on device 2026-10-26).
+  const { requestSave: onSavePress, confirmProps: replaceConfirmProps } =
+    useWeeklyOffReplaceConfirm({
+      supersededHops: defaultForm.supersededHops,
+      effectiveDate: defaultForm.effectiveDate,
+      submitting: isSaving,
+      onSave: defaultForm.onSave,
+    });
 
   // --- Override sheet wiring ---
   // Every open path (Add CTA, Edit tap, picker round-trip) drops a held
@@ -207,7 +222,7 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
             today={today}
             saveError={saveError}
             saveDisabled={defaultForm.saveDisabled}
-            onSave={defaultForm.onSave}
+            onSave={onSavePress}
             upcoming={defaultForm.upcoming}
             currentDays={viewDays(defaultView)}
           />
@@ -225,6 +240,8 @@ export default function WeeklyOffScreen({ navigation, route }: Props) {
           onEdit={openEditOverride}
         />
       </ScrollView>
+
+      <WeeklyOffReplaceConfirm {...replaceConfirmProps} />
 
       {openSheetFor ? (
         <WeeklyOffOverrideSheet
