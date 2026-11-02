@@ -18,8 +18,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   ) -> Bool {
     // Google Maps SDK key — react-native-maps requires this to be the FIRST
     // call of this method. Read from Info.plist (GOOGLE_MAPS_API_KEY) so the
-    // key lives in one tracked iOS file; same pre-launch caveat as
-    // android/keystore.properties (restrict by iOS bundle id com.fenzitapp).
+    // key is still in the tracked Info.plist for now; restrict it by iOS
+    // bundle id com.fenzit before launch.
     if let mapsApiKey = Bundle.main.object(
       forInfoDictionaryKey: "GOOGLE_MAPS_API_KEY") as? String {
       GMSServices.provideAPIKey(mapsApiKey)

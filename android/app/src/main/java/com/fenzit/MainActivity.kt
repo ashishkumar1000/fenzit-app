@@ -1,4 +1,4 @@
-package com.fenzitapp
+package com.fenzit
 
 import android.os.Bundle
 import com.facebook.react.ReactActivity

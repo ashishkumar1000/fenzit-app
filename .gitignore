@@ -41,8 +41,8 @@ android/local.properties
 .cxx/
 *.keystore
 !debug.keystore
-# Keystore tracked intentionally for now (solo dev, pre-launch); rotate before launch
-!fenzit-release.keystore
+# Release signing key and credentials live in GitHub secrets, never in the repo
+android/keystore.properties
 
 # Node
 node_modules/
