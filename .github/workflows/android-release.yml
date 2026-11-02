@@ -113,9 +113,26 @@ jobs:
       - name: Verify store version downgrade
         run: bun run verify:store
 
-      # Signs with the release keystore tracked in the repo
-      # (android/keystore.properties — pre-launch convention; rotate before any
-      # public release) and fails the run if output is debug-signed.
+      # Rebuilds the release keystore and keystore.properties from GitHub
+      # secrets (never stored in the repo). The runner's copy is discarded
+      # with the job.
+      - name: Write release signing config
+        env:
+          KEYSTORE_B64: ${{ secrets.FENZIT_RELEASE_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.FENZIT_UPLOAD_STORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.FENZIT_UPLOAD_KEY_PASSWORD }}
+          MAPS_KEY: ${{ secrets.FENZIT_MAPS_API_KEY }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 --decode > android/app/fenzit-release.keystore
+          {
+            echo "FENZIT_UPLOAD_STORE_FILE=fenzit-release.keystore"
+            echo "FENZIT_UPLOAD_STORE_PASSWORD=$STORE_PASS"
+            echo "FENZIT_UPLOAD_KEY_ALIAS=fenzit-release"
+            echo "FENZIT_UPLOAD_KEY_PASSWORD=$KEY_PASS"
+            echo "FENZIT_MAPS_API_KEY=$MAPS_KEY"
+          } > android/keystore.properties
+
+      # Fails the run if the output is debug-signed.
       - name: Build release APKs (per-ABI)
         run: bun run android:build:release
 
