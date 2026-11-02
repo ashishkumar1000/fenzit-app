@@ -20,6 +20,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import {
   Platform,
+  Pressable,
   StatusBar,
   StyleSheet,
   Text,
@@ -29,11 +30,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageViewing from 'react-native-image-viewing';
-import { ImageOff, X } from 'lucide-react-native';
+import { Flag, ImageOff, X } from 'lucide-react-native';
 import { IconButton } from './ui';
 import { colors, radius, spacing, touch, typography } from '../theme';
 
-export type ViewerItem = { id: string; kind: 'photo' | 'signature'; url: string };
+export type ViewerItem = {
+  id: string;
+  kind: 'photo' | 'signature';
+  url: string;
+};
 
 type Props = {
   visible: boolean;
@@ -42,6 +47,10 @@ type Props = {
   /** Index of the tapped tile — captured once at open. */
   initialIndex: number;
   onClose: () => void;
+  /** Set on screens that let people report photos. Shows a Report action on
+   *  photo pages (never on the signature). The screen closes the viewer and
+   *  opens its own report sheet. */
+  onReport?: (item: ViewerItem) => void;
 };
 
 /** The snapshot a single open session shows; frozen for the session. */
@@ -59,7 +68,13 @@ const HEADER_TOP = spacing.s5;
  * 2026-09-14, decision (a)). */
 const EXIT_FADE_MS = 350;
 
-export function AttachmentViewer({ visible, items, initialIndex, onClose }: Props) {
+export function AttachmentViewer({
+  visible,
+  items,
+  initialIndex,
+  onClose,
+  onReport,
+}: Props) {
   const [session, setSession] = useState<Session | null>(null);
   // The exit-fade window: after `visible` drops, the session stays mounted
   // for the Modal's fade, then is released.
@@ -70,7 +85,11 @@ export function AttachmentViewer({ visible, items, initialIndex, onClose }: Prop
       setDismissed(false);
       // A stale open (the list shrank or shifted under a captured index)
       // closes gracefully instead of opening on a broken pager (UX §6.4).
-      if (items.length === 0 || initialIndex < 0 || initialIndex >= items.length) {
+      if (
+        items.length === 0 ||
+        initialIndex < 0 ||
+        initialIndex >= items.length
+      ) {
         onClose();
         setSession(null);
         return;
@@ -94,7 +113,14 @@ export function AttachmentViewer({ visible, items, initialIndex, onClose }: Prop
   }, [visible]);
 
   if (!session) return null;
-  return <ActiveViewer session={session} visible={!dismissed} onClose={onClose} />;
+  return (
+    <ActiveViewer
+      session={session}
+      visible={!dismissed}
+      onClose={onClose}
+      onReport={onReport}
+    />
+  );
 }
 
 /** The open viewer, memoized so a parent screen re-render never re-enters
@@ -105,11 +131,13 @@ const ActiveViewer = memo(function ActiveViewer({
   session,
   visible,
   onClose,
+  onReport,
 }: {
   session: Session;
   /** Drives the lib's Modal — false during the exit-fade window. */
   visible: boolean;
   onClose: () => void;
+  onReport?: (item: ViewerItem) => void;
 }) {
   const { items, initialIndex } = session;
   const images = items.map(item => ({ uri: item.url }));
@@ -118,7 +146,9 @@ const ActiveViewer = memo(function ActiveViewer({
   // gets the white card.
   const getPageStyle = useCallback(
     (index: number): ViewStyle =>
-      items[index]?.kind === 'signature' ? (styles.signaturePage as ViewStyle) : {},
+      items[index]?.kind === 'signature'
+        ? (styles.signaturePage as ViewStyle)
+        : {},
     [items],
   );
 
@@ -139,14 +169,22 @@ const ActiveViewer = memo(function ActiveViewer({
       // the dark photo pages and the white signature page.
       loadingColor={colors.primary}
       getPageStyle={getPageStyle}
-      HeaderComponent={props => <Header {...props} items={items} onClose={onClose} />}
+      HeaderComponent={props => (
+        <Header
+          {...props}
+          items={items}
+          onClose={onClose}
+          onReport={onReport}
+        />
+      )}
     />
   );
 });
 
 /**
- * Header — transparent strip over the backdrop: close (top-left, ≥44px) and
- * a centre counter ("2 of 6"), replaced by "Customer signature" on the
+ * Header — transparent strip over the backdrop: close (top-left, ≥44px), a
+ * Report chip (top-right, photo pages only, when the host passes onReport),
+ * and a centre counter ("2 of 6"), replaced by "Customer signature" on the
  * signature page; hidden entirely for a single-item viewer. The counter is
  * a polite live region so screen readers announce page changes.
  */
@@ -154,10 +192,12 @@ function Header({
   imageIndex,
   items,
   onClose,
+  onReport,
 }: {
   imageIndex: number;
   items: ViewerItem[];
   onClose: () => void;
+  onReport?: (item: ViewerItem) => void;
 }) {
   // iOS parity (code review 2026-09-14): the lib's StatusBarManager is inert
   // on iOS, so this header hides the status bar itself (reverted on unmount)
@@ -170,20 +210,24 @@ function Header({
     current?.kind === 'signature'
       ? 'Customer signature'
       : items.length > 1
-        ? `${imageIndex + 1} of ${items.length}`
-        : null;
+      ? `${imageIndex + 1} of ${items.length}`
+      : null;
   return (
     <View
       style={[styles.header, { paddingTop: headerTop }]}
       testID="attachment-viewer-header"
-      pointerEvents="box-none">
-      {Platform.OS === 'ios' ? <StatusBar hidden barStyle="light-content" /> : null}
+      pointerEvents="box-none"
+    >
+      {Platform.OS === 'ios' ? (
+        <StatusBar hidden barStyle="light-content" />
+      ) : null}
       <View style={[styles.counter, { top: headerTop }]} pointerEvents="none">
         {label ? (
           <Text
             style={styles.counterText}
             testID="attachment-viewer-counter-text"
-            accessibilityLiveRegion="polite">
+            accessibilityLiveRegion="polite"
+          >
             {label}
           </Text>
         ) : null}
@@ -192,6 +236,23 @@ function Header({
         <IconButton label="Close" variant="ghost" size="md" onPress={onClose}>
           <X size={24} color={colors.onPrimary} strokeWidth={2} />
         </IconButton>
+        {onReport && current?.kind === 'photo' ? (
+          // Dark chip with a light edge: readable on white, dark and busy photos alike.
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Report photo"
+            onPress={() => onReport(current)}
+            style={({ pressed }) => [
+              styles.reportAction,
+              pressed ? styles.reportActionPressed : null,
+            ]}
+            hitSlop={spacing.s1}
+            testID="attachment-viewer-report"
+          >
+            <Flag size={18} color={colors.onPrimary} strokeWidth={2} />
+            <Text style={styles.reportLabel}>Report</Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -226,7 +287,27 @@ const styles = StyleSheet.create({
     height: touch.min,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  reportAction: {
+    minHeight: touch.min,
+    minWidth: touch.min,
+    marginRight: spacing.s1,
+    paddingHorizontal: spacing.s3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s1,
+    borderRadius: radius.md,
+    backgroundColor: colors.backdropDark,
+    borderWidth: 1,
+    borderColor: colors.onPrimary,
+  },
+  reportActionPressed: {
+    opacity: 0.7,
+  },
+  reportLabel: {
+    ...typography.label,
+    color: colors.onPrimary,
   },
   // Centre column behind the row — the counter sits dead-centre regardless
   // of the close button's width.

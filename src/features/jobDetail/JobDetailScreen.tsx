@@ -536,7 +536,7 @@ export default function JobDetailScreen() {
           {/* 5. Photos & signature — only when the job has attachments. */}
           {detail.attachments.length ? (
             <SectionCard title="Photos & signature">
-              <AttachmentGrid attachments={detail.attachments} />
+              <AttachmentGrid attachments={detail.attachments} jobId={detail.id} />
             </SectionCard>
           ) : null}
 

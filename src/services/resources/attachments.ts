@@ -66,9 +66,13 @@ async function requestUpload(
   body: AttachmentPresignBody,
   idemKey: string,
 ): Promise<PresignResponse> {
-  const res = await apiClient.post<PresignResponse>(`/jobs/${jobId}/attachments`, body, {
-    headers: { 'X-Idempotency-Key': idemKey },
-  });
+  const res = await apiClient.post<PresignResponse>(
+    `/jobs/${jobId}/attachments`,
+    body,
+    {
+      headers: { 'X-Idempotency-Key': idemKey },
+    },
+  );
   return res.data;
 }
 
@@ -95,4 +99,40 @@ async function confirmUpload(
   return res.data;
 }
 
-export const attachmentService = { requestUpload, confirmUpload };
+/** Why a photo is reported. Same four values the backend accepts. */
+export type PhotoReportReason =
+  | 'inappropriate'
+  | 'harassment'
+  | 'spam'
+  | 'other';
+
+/** `POST …/report` — the stored report. 201 on a new report, 200 on a repeat. */
+export interface PhotoReportResponse {
+  id: string;
+  attachmentId: string;
+  reason: PhotoReportReason;
+  status: 'open' | 'hidden' | 'dismissed';
+  createdAt: string;
+}
+
+/**
+ * Report a job photo for review. Anyone who can open the job may report it.
+ * A repeat report by the same person returns the existing report (200), so
+ * a double tap is safe. Rejects with `ApiError`: 404 photo or job not found ·
+ * 403 technician not assigned to the job · 422 bad reason or note.
+ */
+async function reportPhoto(
+  jobId: string,
+  attachmentId: string,
+  reason: PhotoReportReason,
+  note?: string,
+): Promise<PhotoReportResponse> {
+  const body = note ? { reason, note } : { reason };
+  const res = await apiClient.post<PhotoReportResponse>(
+    `/jobs/${jobId}/attachments/${attachmentId}/report`,
+    body,
+  );
+  return res.data;
+}
+
+export const attachmentService = { requestUpload, confirmUpload, reportPhoto };
