@@ -25,7 +25,7 @@ jobs:
     steps:
       # fetch-depth: 0 — verify:store scans store-v* tags, which a shallow
       # clone never sees.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -76,14 +76,14 @@ jobs:
       # (JDK 26 breaks AGP's jlink transform). Gradle's daemon JVM criteria
       # match any installed JDK 17; the foojay resolver provisions one if
       # none exists. cache: gradle keeps the RN/AGP dependency caches warm.
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
           cache: gradle
 
       # The RN gradle plugin spawns `node` for Metro bundling; .nvmrc = 24.13.0.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
 
@@ -140,14 +140,14 @@ jobs:
         run: bun run android:build:aab
 
       - name: Upload APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-apks
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
       - name: Upload AAB
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-aab
           path: android/app/build/outputs/bundle/release/*.aab
