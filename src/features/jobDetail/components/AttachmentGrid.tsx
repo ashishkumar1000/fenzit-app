@@ -12,13 +12,19 @@
 import { useCallback, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ImageOff } from 'lucide-react-native';
-import { AttachmentViewer, type ViewerItem } from '../../../components/AttachmentViewer';
+import {
+  AttachmentViewer,
+  type ViewerItem,
+} from '../../../components/AttachmentViewer';
+import { ReportPhotoSheet } from '../../../components/ReportPhotoSheet';
 import { Button } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
 import type { JobAttachment } from '../../../services';
 
 type Props = {
   attachments: JobAttachment[];
+  /** Job the photos belong to. Passing it enables the Report action on photos. */
+  jobId?: string;
   /** 3.5 re-capture affordance — a ghost button under the signature tile. */
   onRecapture?: () => void;
 };
@@ -35,7 +41,9 @@ function viewerListOf(attachments: JobAttachment[]): ViewerItem[] {
   // Server is last-write-wins on signatures (a re-capture appends) — display
   // the LAST captured one, matching TechJobDetailContent (code review
   // 2026-09-14: `.find` surfaced the stale first capture).
-  const signature = attachments.filter(a => a.type === 'signature' && a.url).slice(-1)[0];
+  const signature = attachments
+    .filter(a => a.type === 'signature' && a.url)
+    .slice(-1)[0];
   if (signature?.url) {
     items.push({ id: signature.id, kind: 'signature', url: signature.url });
   }
@@ -91,9 +99,12 @@ function PhotoTile({
   return (
     <Pressable
       accessibilityRole={onOpen ? 'imagebutton' : undefined}
-      accessibilityLabel={onOpen ? `View photo ${viewIndex + 1} of ${total}` : undefined}
+      accessibilityLabel={
+        onOpen ? `View photo ${viewIndex + 1} of ${total}` : undefined
+      }
       onPress={onOpen ? () => onOpen(viewIndex) : undefined}
-      style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}>
+      style={({ pressed }) => [styles.tile, pressed && styles.tilePressed]}
+    >
       <Image
         source={{ uri: attachment.url }}
         style={styles.image}
@@ -106,7 +117,13 @@ function PhotoTile({
 
 /** The signature tile — same null/failed handling, full-width and `contain`.
  *  9-1: a captured signature is tappable to open the viewer on its page. */
-function SignatureTile({ url, onView }: { url: string | null; onView?: () => void }) {
+function SignatureTile({
+  url,
+  onView,
+}: {
+  url: string | null;
+  onView?: () => void;
+}) {
   const [failed, setFailed] = useState(false);
   const captured = Boolean(url) && !failed && Boolean(onView);
   if (!url || failed) {
@@ -117,7 +134,11 @@ function SignatureTile({ url, onView }: { url: string | null; onView?: () => voi
       accessibilityRole="imagebutton"
       accessibilityLabel="View customer signature"
       onPress={captured ? onView : undefined}
-      style={({ pressed }) => [styles.signaturePressable, captured && pressed && styles.tilePressed]}>
+      style={({ pressed }) => [
+        styles.signaturePressable,
+        captured && pressed && styles.tilePressed,
+      ]}
+    >
       <Image
         source={{ uri: url }}
         style={styles.signatureImage}
@@ -128,11 +149,24 @@ function SignatureTile({ url, onView }: { url: string | null; onView?: () => voi
   );
 }
 
-export function AttachmentGrid({ attachments, onRecapture }: Props) {
-  const [viewer, setViewer] = useState<{ items: ViewerItem[]; initialIndex: number } | null>(null);
+export function AttachmentGrid({ attachments, onRecapture, jobId }: Props) {
+  const [viewer, setViewer] = useState<{
+    items: ViewerItem[];
+    initialIndex: number;
+  } | null>(null);
+  // Photo being reported. Set after the viewer closes: the sheet opens from here.
+  const [reportId, setReportId] = useState<string | null>(null);
   // Stable close callback — a fresh arrow every render defeats
   // memo(ActiveViewer) (code review 2026-09-14).
   const closeViewer = useCallback(() => setViewer(null), []);
+  // Stable identity so the memoised viewer does not re-render on every grid update.
+  const reportItem = useCallback(
+    (item: ViewerItem) => {
+      closeViewer();
+      setReportId(item.id);
+    },
+    [closeViewer],
+  );
   const photos = attachments.filter(a => a.type === 'photo');
   const signature = attachments.find(a => a.type === 'signature');
   // 9-1 — the viewer list and its total (photos + signature), computed from
@@ -152,10 +186,14 @@ export function AttachmentGrid({ attachments, onRecapture }: Props) {
               key={`${attachment.id}:${attachment.url ?? 'none'}`}
               attachment={attachment}
               viewIndex={
-                attachment.url ? viewerItems.findIndex(i => i.id === attachment.id) : -1
+                attachment.url
+                  ? viewerItems.findIndex(i => i.id === attachment.id)
+                  : -1
               }
               total={viewerItems.length}
-              onOpen={index => setViewer({ items: viewerItems, initialIndex: index })}
+              onOpen={index =>
+                setViewer({ items: viewerItems, initialIndex: index })
+              }
             />
           ))}
           {/* A trailing short row must not stretch its tiles — pad it with
@@ -180,7 +218,12 @@ export function AttachmentGrid({ attachments, onRecapture }: Props) {
             <SignatureTile
               key={signature.url ?? 'none'}
               url={signature.url}
-              onView={() => setViewer({ items: viewerItems, initialIndex: viewerItems.length - 1 })}
+              onView={() =>
+                setViewer({
+                  items: viewerItems,
+                  initialIndex: viewerItems.length - 1,
+                })
+              }
             />
           </View>
           {onRecapture ? (
@@ -188,7 +231,8 @@ export function AttachmentGrid({ attachments, onRecapture }: Props) {
               variant="ghost"
               size="sm"
               onPress={onRecapture}
-              style={styles.recapture}>
+              style={styles.recapture}
+            >
               Re-capture
             </Button>
           ) : null}
@@ -201,7 +245,16 @@ export function AttachmentGrid({ attachments, onRecapture }: Props) {
         items={viewer?.items ?? []}
         initialIndex={viewer?.initialIndex ?? 0}
         onClose={closeViewer}
+        onReport={jobId ? reportItem : undefined}
       />
+      {jobId ? (
+        <ReportPhotoSheet
+          visible={reportId !== null}
+          jobId={jobId}
+          attachmentId={reportId}
+          onClose={() => setReportId(null)}
+        />
+      ) : null}
     </View>
   );
 }
