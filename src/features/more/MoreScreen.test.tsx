@@ -19,11 +19,13 @@ jest.mock('../auth', () => ({
   useCanWrite: () => mockCanWrite,
 }));
 
+// The role the profile store reports — the delete-account copy switches on it.
+let mockRole = 'company_admin';
 jest.mock('../profile', () => ({
   useMyProfile: () => ({
     profile: {
       name: 'Ashish',
-      role: 'company_admin',
+      role: mockRole,
       countryCode: '+91',
       phoneNumber: '9000000000',
       technicianCount: 0,
@@ -47,10 +49,15 @@ jest.mock('../customers', () => ({
 
 jest.mock('../../services', () => ({
   runAllResets: jest.fn(),
+  accountDeletionApi: { requestAccountDeletion: jest.fn() },
 }));
 
 jest.mock('../../services/authToken', () => ({
   clearAuthToken: jest.fn(),
+}));
+
+jest.mock('../../utils/linking', () => ({
+  openWebPage: jest.fn(),
 }));
 
 import type ReactTestRenderer from 'react-test-renderer';
@@ -59,10 +66,12 @@ import { Text } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { useFocusEffect } from '@react-navigation/native';
 import { ConfirmDialog } from '../../components/ui';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '../../config';
 import { loadCustomers, useCustomers } from '../customers';
 import { loadUnreadCount, useNotifications } from '../notifications';
-import { runAllResets } from '../../services';
+import { accountDeletionApi, runAllResets } from '../../services';
 import { clearAuthToken } from '../../services/authToken';
+import { openWebPage } from '../../utils/linking';
 import MoreScreen from './MoreScreen';
 import { MoreRow } from './components/MoreRow';
 import { MoreTile } from './components/MoreTile';
@@ -109,6 +118,7 @@ function subtitleTexts(root: ReactTestRenderer.ReactTestRenderer['root']): strin
 beforeEach(() => {
   jest.clearAllMocks();
   mockCanWrite = true;
+  mockRole = 'company_admin';
   useNotificationsMock.mockReturnValue({ unreadCount: null });
   useCustomersMock.mockReturnValue({ count: 0, hasLoaded: true });
 });
@@ -248,5 +258,81 @@ describe('MoreScreen — a viewer (read-only)', () => {
     for (const expected of ['Technicians', 'Notifications', 'Customers', 'Reports', 'Attendance', 'Log out']) {
       expect(titles).toContain(expected);
     }
+  });
+});
+
+describe('MoreScreen — the Play legal rows', () => {
+  it('the privacy and terms rows open the configured fenzit.com pages', () => {
+    const root = renderScreen();
+    for (const [title, url] of [
+      ['Privacy policy', PRIVACY_POLICY_URL],
+      ['Terms of service', TERMS_URL],
+    ] as const) {
+      const row = root.findAllByType(MoreRow).find(t => t.props.title === title);
+      act(() => {
+        row?.props.onPress();
+      });
+      expect(openWebPage).toHaveBeenCalledWith(url);
+    }
+    expect(openWebPage).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('MoreScreen — the delete-account flow (Play in-app path)', () => {
+  function pressDeleteRow(root: ReactTestRenderer.ReactTestRenderer['root']) {
+    const row = root.findAllByType(MoreRow).find(t => t.props.title === 'Delete account');
+    act(() => {
+      row?.props.onPress();
+    });
+  }
+
+  it('the admin sees the company-wipe consequences before anything is filed', () => {
+    const root = renderScreen();
+    pressDeleteRow(root);
+    const dialog = dialogsUp(root)[0];
+    expect(dialog.props.title).toBe('Delete your account?');
+    expect(dialog.props.message).toContain("All of your company's data");
+    expect(accountDeletionApi.requestAccountDeletion).not.toHaveBeenCalled();
+  });
+
+  it('an employee sees the personal-data copy, not the company wipe', () => {
+    mockRole = 'employee';
+    const root = renderScreen();
+    pressDeleteRow(root);
+    const dialog = dialogsUp(root)[0];
+    expect(dialog.props.message).toContain('Your name, mobile number and sign-in details');
+    expect(dialog.props.message).not.toContain("All of your company's data");
+  });
+
+  it('a confirmed request files once, then runs the forced-logout flow', async () => {
+    (accountDeletionApi.requestAccountDeletion as jest.Mock).mockResolvedValueOnce({
+      message: 'ok',
+    });
+    const root = renderScreen();
+    pressDeleteRow(root);
+    act(() => {
+      dialogsUp(root)[0].props.onConfirm();
+    });
+    await act(async () => {});
+    expect(accountDeletionApi.requestAccountDeletion).toHaveBeenCalledTimes(1);
+    expect(clearAuthToken).toHaveBeenCalled();
+    expect(runAllResets).toHaveBeenCalled();
+  });
+
+  it('a failed request keeps the dialog up with the retry line and signs nobody out', async () => {
+    (accountDeletionApi.requestAccountDeletion as jest.Mock).mockRejectedValueOnce(
+      new Error('offline'),
+    );
+    const root = renderScreen();
+    pressDeleteRow(root);
+    act(() => {
+      dialogsUp(root)[0].props.onConfirm();
+    });
+    await act(async () => {});
+    const dialog = dialogsUp(root)[0];
+    expect(dialogsUp(root)).toHaveLength(1);
+    expect(dialog.props.message).toContain('We could not send your request');
+    expect(clearAuthToken).not.toHaveBeenCalled();
+    expect(runAllResets).not.toHaveBeenCalled();
   });
 });

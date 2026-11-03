@@ -1,5 +1,5 @@
 /**
- * Tests for the deep-link helpers (`openTel`, `openMaps`).
+ * Tests for the deep-link helpers (`openTel`, `openMaps`, `openWebPage`).
  *
  * `react-native` is mocked wholesale — these helpers only need `Linking`
  * and `Platform`, and mocking gives full control over the OS branch (the
@@ -17,7 +17,7 @@ jest.mock('react-native', () => ({
 }));
 
 import { Linking } from 'react-native';
-import { openMaps, openTel } from './linking';
+import { openMaps, openTel, openWebPage } from './linking';
 
 const openURL = Linking.openURL as jest.Mock;
 const canOpenURL = Linking.canOpenURL as jest.Mock;
@@ -173,5 +173,25 @@ describe('openTel', () => {
     canOpenURL.mockResolvedValueOnce(false);
     await openTel('+91', '9123456780');
     expect(openURL).not.toHaveBeenCalled();
+  });
+});
+describe('openWebPage — the fenzit.com legal pages', () => {
+  it('opens the given URL with no canOpenURL gate (https needs no scheme declaration)', async () => {
+    await openWebPage('https://fenzit.com/privacy-policy');
+    expect(openURL).toHaveBeenCalledWith('https://fenzit.com/privacy-policy');
+    expect(canOpenURL).not.toHaveBeenCalled();
+  });
+
+  it('a blank URL opens nothing', async () => {
+    await openWebPage('   ');
+    expect(openURL).not.toHaveBeenCalled();
+  });
+
+  it('a rejected openURL is logged, never thrown (passive rows have no error surface)', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    openURL.mockRejectedValueOnce(new Error('no browser'));
+    await expect(openWebPage('https://fenzit.com/terms')).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

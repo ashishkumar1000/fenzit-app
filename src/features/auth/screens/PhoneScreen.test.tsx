@@ -4,11 +4,19 @@
  * 5.3), the returning-device greeting (redesign — "Welcome back" vs the
  * neutral "Login/Signup"), and the number form's own behaviour — digit
  * filtering, the short-number block, and server errors surfacing as-is.
+ * The consent line's legal phrases must open the configured fenzit.com
+ * pages (the Play User Data policy's in-app reachability requirement).
  */
+jest.mock('../../../utils/linking', () => ({
+  openWebPage: jest.fn(),
+}));
+
 import React from 'react';
 import { Text } from 'react-native';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 
+import { PRIVACY_POLICY_URL, TERMS_URL } from '../../../config';
+import { openWebPage } from '../../../utils/linking';
 import { PhoneScreen } from './PhoneScreen';
 import { Button } from '../../../components/ui';
 
@@ -176,6 +184,25 @@ describe('the number form', () => {
     const renderer = await render();
 
     expect(renderer.root.findByProps({ children: 'Terms of Service' })).toBeTruthy();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it('the consent phrases open the configured fenzit.com pages', async () => {
+    const renderer = await render();
+
+    act(() => {
+      renderer.root.findByProps({ children: 'Terms of Service' }).props.onPress();
+    });
+    expect(openWebPage).toHaveBeenCalledWith(TERMS_URL);
+
+    act(() => {
+      renderer.root.findByProps({ children: 'Privacy Policy' }).props.onPress();
+    });
+    expect(openWebPage).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
+    expect(openWebPage).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       renderer.unmount();
