@@ -19,17 +19,20 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Bell, Building2, FileText, HardHat, LogOut, Pencil, Phone, ShieldCheck, Users } from 'lucide-react-native';
+import { Bell, Building2, FileText, HardHat, LogOut, Pencil, Phone, ScrollText, ShieldCheck, Trash2, Users } from 'lucide-react-native';
 import { Avatar, Badge, Card, ConfirmDialog, IconButton } from '../../components/ui';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '../../config';
 import { colors, radius, spacing, typography } from '../../theme';
 import { runAllResets } from '../../services';
 import { clearAuthToken } from '../../services/authToken';
+import { openWebPage } from '../../utils/linking';
 import { useAuth, useCanWrite } from '../auth';
 import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
 import { loadUnreadCount, useNotifications } from '../notifications';
 import { loadCustomers, useCustomers } from '../customers';
 import { MoreTile } from './components/MoreTile';
 import { MoreRow } from './components/MoreRow';
+import { DeleteAccountConfirm } from './components/DeleteAccountConfirm';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 /**
@@ -55,6 +58,9 @@ export default function MoreScreen({ navigation }: Props) {
   // Log out asks through the shared ConfirmDialog instead of a system Alert
   // (the 20-1 modal ask) — same wording, in-app styling.
   const [logOutOpen, setLogOutOpen] = useState(false);
+  // Delete account raises its own role-specific guard (the Play-mandated
+  // in-app deletion path) before it files the reviewed deletion request.
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Same throttled focus refresh the bells (Jobs/Home headers) and the
   // Customers screen run — at most one request per store per window.
@@ -96,15 +102,19 @@ export default function MoreScreen({ navigation }: Props) {
 
   const handleLogOut = () => setLogOutOpen(true);
 
-  const confirmLogOut = () => {
-    setLogOutOpen(false);
-    // Same reset flow as a forced 401 logout (story 5.3): the registry
-    // owns the store list — a hand-rolled copy here would drift the
-    // first time a new store registers. The token must go too: a
-    // manual logout used to leave the JWT attached to later requests.
+  // Shared by manual logout and post-deletion sign-out: the registry owns
+  // the store list — a hand-rolled copy here would drift the first time a
+  // new store registers. The token must go too: a manual logout used to
+  // leave the JWT attached to later requests.
+  const signOutNow = useCallback(() => {
     clearAuthToken();
     runAllResets();
     reset();
+  }, [reset]);
+
+  const confirmLogOut = () => {
+    setLogOutOpen(false);
+    signOutNow();
   };
 
   // Account name and company come from `GET /users/me` (shared with Home) —
@@ -211,6 +221,36 @@ export default function MoreScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('AttendanceHome')}
         />
 
+        {/* Play User Data policy — the privacy policy must be reachable inside
+            the app. Both rows open fenzit.com in the device browser. */}
+        <MoreRow
+          icon={<ShieldCheck size={20} color={colors.status.done.solid} strokeWidth={1.5} />}
+          iconBg={colors.status.done.bg}
+          title="Privacy policy"
+          subtitle="How Fenzit handles your data"
+          onPress={() => void openWebPage(PRIVACY_POLICY_URL)}
+        />
+
+        <MoreRow
+          icon={<ScrollText size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
+          iconBg={colors.status.progress.bg}
+          title="Terms of service"
+          subtitle="The rules for using Fenzit"
+          onPress={() => void openWebPage(TERMS_URL)}
+        />
+
+        {/* The Play-mandated in-app deletion path: the dialog names the
+            consequences per role, consent files the reviewed request, and
+            success signs the person out. */}
+        <MoreRow
+          danger
+          icon={<Trash2 size={20} color={colors.danger} strokeWidth={2} />}
+          iconBg={colors.status.cancelled.bg}
+          title="Delete account"
+          subtitle="Ask us to delete your account and data"
+          onPress={() => setDeleteOpen(true)}
+        />
+
         <MoreRow
           danger
           icon={<LogOut size={20} color={colors.danger} strokeWidth={2} />}
@@ -236,6 +276,13 @@ export default function MoreScreen({ navigation }: Props) {
         cancelLabel="Cancel"
         onConfirm={confirmLogOut}
         onCancel={() => setLogOutOpen(false)}
+      />
+
+      <DeleteAccountConfirm
+        visible={deleteOpen}
+        role={profile.role}
+        onRequestFiled={signOutNow}
+        onClose={() => setDeleteOpen(false)}
       />
     </SafeAreaView>
   );

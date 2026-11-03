@@ -15,7 +15,9 @@
  */
 import type { UserRole } from '../../services';
 
-type RoleLike = UserRole | null | undefined;
+/** Any role the wire can carry, including Fenzit staff — every helper
+ *  answers false for `platform_admin`, since staff are never a company role. */
+type RoleLike = UserRole | 'platform_admin' | null | undefined;
 
 /** Every company role the app knows — used to reject stale or unknown stored values. */
 export const USER_ROLES: readonly UserRole[] = ['company_admin', 'employee', 'viewer'];

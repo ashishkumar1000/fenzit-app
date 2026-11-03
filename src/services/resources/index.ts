@@ -142,6 +142,8 @@ export type {
   ReportStatusResponse,
 } from './reports';
 export { authApi } from './authApi';
+export { accountDeletionApi } from './accountDeletion';
+export type { RequestAccountDeletionResponse } from './accountDeletion';
 export { usersApi } from './users';
 export type {
   MyProfile,

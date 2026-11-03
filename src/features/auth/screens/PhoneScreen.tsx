@@ -17,6 +17,8 @@ import {
 import Svg, { Circle, G, Rect } from 'react-native-svg';
 import { ArrowLeftRight, ArrowRight, Check } from 'lucide-react-native';
 import { Button, InlineError } from '../../../components/ui';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '../../../config';
+import { openWebPage } from '../../../utils/linking';
 import { colors, palette, radius, spacing, typography } from '../../../theme';
 import { AuthScaffold } from '../components/AuthScaffold';
 import { DIAL_CODE, PHONE_LENGTH } from '../constants';
@@ -173,10 +175,24 @@ export function PhoneScreen({
           {sending ? 'Sending…' : 'Get OTP'}
         </Button>
 
+        {/* Play User Data policy — the policy must be reachable in-app. These
+            are the consent point, so the phrases open the live pages (openWebPage
+            guards the open; a dead browser must not crash the screen). */}
         <Text style={styles.terms}>
           By continuing, you agree to Fenzit's{' '}
-          <Text style={styles.termsEm}>Terms of Service</Text> and{' '}
-          <Text style={styles.termsEm}>Privacy Policy</Text>.
+          <Text
+            style={styles.termsEm}
+            accessibilityRole="link"
+            onPress={() => void openWebPage(TERMS_URL)}>
+            Terms of Service
+          </Text>{' '}
+          and{' '}
+          <Text
+            style={styles.termsEm}
+            accessibilityRole="link"
+            onPress={() => void openWebPage(PRIVACY_POLICY_URL)}>
+            Privacy Policy
+          </Text>.
         </Text>
       </View>
 
@@ -347,5 +363,6 @@ const styles = StyleSheet.create({
   termsEm: {
     fontWeight: '600',
     color: colors.textStrong,
+    textDecorationLine: 'underline',
   },
 });
