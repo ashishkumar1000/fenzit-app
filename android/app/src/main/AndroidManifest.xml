@@ -1,8 +1,19 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <!-- react-native-nitro-geolocation merges these in for its background
+       tracking service, but this app only ever uses one-shot location
+       (getCurrentPosition / watchPosition while the app is open). Play's
+       Foreground Service declaration (and its demo-video requirement for
+       FGS location) is triggered by the merged manifest, so the unused
+       permissions are stripped instead of declared. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" tools:node="remove" />
+  <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" tools:node="remove" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove" />
 
   <application
     android:name=".MainApplication"
