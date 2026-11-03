@@ -12,17 +12,27 @@
  * More tab account card (story 5.2): both open the shared `EditNameSheet`,
  * whose successful save updates this screen instantly via the shared
  * profile store.
+ *
+ * The legal rows and the Delete account row (2026-11) are the technician
+ * surface of the Play User Data policy path — the policy must be reachable
+ * in-app and deletion must be startable in-app for EVERY role, so this
+ * screen mirrors the More tab rows through the same shared components
+ * (`openWebPage`, `DeleteAccountConfirm` — the employee role gets the
+ * personal-data consequences copy).
  */
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogOut, Pencil, Phone } from 'lucide-react-native';
+import { LogOut, Pencil, Phone, ScrollText, ShieldCheck, Trash2 } from 'lucide-react-native';
 import { Avatar, Card, ConfirmDialog, IconButton } from '../../components/ui';
+import { PRIVACY_POLICY_URL, TERMS_URL } from '../../config';
 import { colors, spacing, typography } from '../../theme';
 import { runAllResets } from '../../services';
 import { clearAuthToken } from '../../services/authToken';
+import { openWebPage } from '../../utils/linking';
 import { useAuth } from '../auth';
 import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
+import { DeleteAccountConfirm } from '../more/components/DeleteAccountConfirm';
 
 export default function ProfileScreen() {
   const { reset } = useAuth();
@@ -31,17 +41,24 @@ export default function ProfileScreen() {
   // Log out asks through the shared ConfirmDialog instead of a system Alert
   // (the 20-1 modal ask) — same wording, in-app styling.
   const [logOutOpen, setLogOutOpen] = useState(false);
+  // Delete account raises its own role-specific guard (the Play-mandated
+  // in-app deletion path) before it files the reviewed deletion request.
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const handleLogOut = () => setLogOutOpen(true);
 
-  const confirmLogOut = () => {
-    setLogOutOpen(false);
-    // Same reset flow as a forced 401 logout (story 5.3): the registry
-    // owns the store list (technician jobs included), and the token
-    // must go too — a manual logout used to leave the JWT attached.
+  // Shared by manual logout and post-deletion sign-out: the registry owns
+  // the store list (technician jobs included), and the token must go too —
+  // a manual logout used to leave the JWT attached.
+  const signOutNow = useCallback(() => {
     clearAuthToken();
     runAllResets();
     reset();
+  }, [reset]);
+
+  const confirmLogOut = () => {
+    setLogOutOpen(false);
+    signOutNow();
   };
 
   if (isLoading || !profile) {
@@ -89,6 +106,13 @@ export default function ProfileScreen() {
         onCancel={() => setLogOutOpen(false)}
       />
 
+      <DeleteAccountConfirm
+        visible={deleteOpen}
+        role={profile.role}
+        onRequestFiled={signOutNow}
+        onClose={() => setDeleteOpen(false)}
+      />
+
       <View style={styles.content}>
         <Card padding="none" style={styles.card}>
           {phone ? (
@@ -100,6 +124,45 @@ export default function ProfileScreen() {
               <View style={styles.divider} />
             </>
           ) : null}
+
+          {/* Play User Data policy — the privacy policy must be reachable
+              inside the app from every role's settings surface, not only the
+              owner's More tab. Both rows open fenzit.com in the browser. */}
+          <Card
+            padding="md"
+            interactive
+            elevated={false}
+            onPress={() => void openWebPage(PRIVACY_POLICY_URL)}
+            style={styles.actionRow}>
+            <ShieldCheck size={18} color={colors.status.done.solid} strokeWidth={2} />
+            <Text style={styles.actionText}>Privacy policy</Text>
+          </Card>
+          <View style={styles.divider} />
+
+          <Card
+            padding="md"
+            interactive
+            elevated={false}
+            onPress={() => void openWebPage(TERMS_URL)}
+            style={styles.actionRow}>
+            <ScrollText size={18} color={colors.status.progress.solid} strokeWidth={2} />
+            <Text style={styles.actionText}>Terms of service</Text>
+          </Card>
+          <View style={styles.divider} />
+
+          {/* The Play-mandated in-app deletion path: the dialog names the
+              consequences per role — for a technician, the personal-data
+              copy — and consent signs the person out. */}
+          <Card
+            padding="md"
+            interactive
+            elevated={false}
+            onPress={() => setDeleteOpen(true)}
+            style={styles.logoutRow}>
+            <Trash2 size={18} color={colors.danger} strokeWidth={2} />
+            <Text style={styles.logoutText}>Delete account</Text>
+          </Card>
+          <View style={styles.divider} />
 
           <Card
             padding="md"
@@ -177,5 +240,15 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.danger,
     fontWeight: '600',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
+    borderRadius: 0,
+  },
+  actionText: {
+    ...typography.body,
+    color: colors.textStrong,
   },
 });

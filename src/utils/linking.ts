@@ -109,3 +109,22 @@ export async function openUrl(url: string): Promise<void> {
     throw error instanceof Error ? error : new Error(String(error));
   }
 }
+
+/**
+ * Opens a public web page in the device browser — the fenzit.com legal pages
+ * (privacy policy, terms) that hang off passive rows and consent text with
+ * no error surface of their own.
+ *
+ * Silent guard, like `openTel`: a missing browser or a rejected open logs
+ * and gives up rather than crashing the screen. No `canOpenURL` gate — https
+ * needs no scheme declaration, and gating breaks on Android 11+ package
+ * visibility.
+ */
+export async function openWebPage(url: string): Promise<void> {
+  if (!url.trim()) return;
+  try {
+    await Linking.openURL(url);
+  } catch (error) {
+    console.warn('[linking] openWebPage failed →', error);
+  }
+}
