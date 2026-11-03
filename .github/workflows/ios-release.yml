@@ -1,0 +1,182 @@
+name: iOS release build
+
+# Mirrors android-release.yml: every push to `release` produces a signed
+# App Store IPA and uploads it to TestFlight. Intended flow is main →
+# release via PR, same as Android.
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-release-build:
+    name: Archive + TestFlight upload
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      # fetch-depth: 0 — verify:store scans store-v* tags (same as Android).
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # RN 0.87's Xcode build phase ("Bundle React Native code and images")
+      # shells out to node from ios/.xcode.env — setup-node puts it in PATH.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Same gates as the Android pipeline — PR merges and --no-verify
+      # commits reach `release` without ever running the pre-commit hook.
+      - name: Tests
+        run: bun run test
+        env:
+          TZ: Asia/Kolkata
+
+      - name: Verify version sync
+        run: bun run verify:version
+
+      - name: Verify store version downgrade
+        run: bun run verify:store
+
+      # Signing uses an App Store Connect API key, NOT checked-in certs:
+      # xcodebuild -allowProvisioningUpdates with the key creates/refreshes
+      # the App Store distribution profile on the fly, and fastlane pilot
+      # uses the same key for the TestFlight upload (altool is deprecated
+      # for uploads; pilot over the ASC API is Apple's supported CI path).
+      # The .p8 lives only in secrets and is written to the runner's build
+      # dir, discarded with the job. Role required: Admin or App Manager.
+      - name: Write App Store Connect key
+        env:
+          ASC_KEY_ID: ${{ secrets.FENZIT_ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.FENZIT_ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.FENZIT_ASC_KEY_P8 }}
+          ASC_TEAM_ID: ${{ secrets.FENZIT_APPLE_TEAM_ID }}
+        run: |
+          for v in "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$ASC_KEY_P8" "$ASC_TEAM_ID"; do
+            [ -n "$v" ] || { echo "::error::missing secret — need FENZIT_ASC_KEY_ID, FENZIT_ASC_ISSUER_ID, FENZIT_ASC_KEY_P8, FENZIT_APPLE_TEAM_ID"; exit 1; }
+          done
+          mkdir -p build
+          printf '%s' "$ASC_KEY_P8" > "build/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "build/AuthKey_${ASC_KEY_ID}.p8"
+          jq -n \
+            --arg key_id "$ASC_KEY_ID" \
+            --arg issuer_id "$ASC_ISSUER_ID" \
+            --arg key "$ASC_KEY_P8" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > build/asc_key.json
+          chmod 600 build/asc_key.json
+
+      # Podfile.lock pins pod versions — plain `pod install` is reproducible.
+      # CocoaPods ships on the macOS runner image.
+      - name: Install pods
+        working-directory: ios
+        run: pod install
+
+      # DEVELOPMENT_TEAM is passed as an override (the project has none
+      # checked in) so the same repo builds under any team. The archive
+      # bundles the JS via the RN build phase using node from setup-node.
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.FENZIT_ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.FENZIT_ASC_ISSUER_ID }}
+          ASC_TEAM_ID: ${{ secrets.FENZIT_APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/FenzitApp.xcworkspace \
+            -scheme FenzitApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/FenzitApp.xcarchive \
+            DEVELOPMENT_TEAM="$ASC_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            -authenticationKeyPath "build/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -allowProvisioningUpdates \
+            archive | tail -40
+
+      - name: Export App Store IPA
+        env:
+          ASC_KEY_ID: ${{ secrets.FENZIT_ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.FENZIT_ASC_ISSUER_ID }}
+          ASC_TEAM_ID: ${{ secrets.FENZIT_APPLE_TEAM_ID }}
+        run: |
+          set -o pipefail
+          cat > build/ExportOptions.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>signingStyle</key>
+            <string>automatic</string>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/FenzitApp.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/ipa \
+            -authenticationKeyPath "build/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            -allowProvisioningUpdates | tail -20
+          ls -la build/ipa/
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-ipa
+          path: build/ipa/*.ipa
+          if-no-files-found: error
+
+      # fastlane ships on the macOS runner image; install only as a fallback.
+      # skip_waiting_for_build_processing: Apple's processing queue runs
+      # 10-30 min — the runner must not bill minutes waiting on it.
+      - name: Upload to TestFlight
+        run: |
+          command -v fastlane >/dev/null 2>&1 || gem install fastlane --no-document
+          IPA_FILE="$(ls build/ipa/*.ipa | head -1)"
+          fastlane pilot upload \
+            --api_key_path build/asc_key.json \
+            --ipa "$IPA_FILE" \
+            --skip_waiting_for_build_processing \
+            --notify_external_testers false
+
+      # Record-keeping parity with Android: attach the IPA to the same
+      # v<version> GitHub Release (the store-signable IPA only installs via
+      # TestFlight/App Store — the release asset is an audit artifact).
+      - name: Publish GitHub release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v$VERSION"
+          IPA_FILE="$(ls build/ipa/*.ipa | head -1)"
+          STAGE="$(mktemp -d)"
+          cp "$IPA_FILE" "$STAGE/fenzit-$VERSION.ipa"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$STAGE/fenzit-$VERSION.ipa" --clobber
+          elif git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "::error::tag $TAG exists but has no release — delete the tag or bump the version before publishing"
+            exit 1
+          else
+            gh release create "$TAG" "$STAGE/fenzit-$VERSION.ipa" \
+              --target "$GITHUB_SHA" --title "Fenzit $VERSION" --generate-notes
+          fi
