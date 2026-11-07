@@ -160,7 +160,12 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
   const handleSave = useCallback(async () => {
     const validation = validateOfficeForm(form);
     setErrors(validation);
-    if (hasErrors(validation)) return;
+    if (hasErrors(validation)) {
+      // The first missing field (the office name) sits at the top of the
+      // form, so bring it into view instead of leaving the press silent.
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
     setSaveError(null);
     setSaving(true);
     try {
@@ -193,7 +198,7 @@ export default function OfficeFormScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [form, pinAddress, isEdit, detail, officeId, navigation, leaveGuard.allowLeave]);
+  }, [form, pinAddress, isEdit, detail, officeId, navigation, leaveGuard.allowLeave, scrollRef]);
 
   const handleArchive = useCallback(() => {
     if (!officeId) return;
