@@ -145,7 +145,7 @@ export function TechnicianPicker({ title, options, value, onChange, onBrowseAll 
                 tileWidth ? { width: tileWidth } : null,
                 isSelected && styles.tileSelected,
               ]}>
-              <Avatar name={technician.name} size="md" />
+              <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="md" />
               <Text
                 numberOfLines={2}
                 style={[styles.label, isSelected && styles.labelSelected]}>

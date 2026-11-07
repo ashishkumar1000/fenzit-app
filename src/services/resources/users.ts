@@ -21,6 +21,7 @@ import { apiClient } from '../api/apiClient';
 import type { LoginRole } from './authApi';
 import type { AttendanceAccessState } from './attendanceMe';
 import type { ApiJob } from './jobs';
+import type { BusinessType } from './company';
 
 export type { Paginated } from '../api/pagination';
 import type { Paginated } from '../api/pagination';
@@ -40,6 +41,11 @@ export interface ProfileTenant {
   stateCode: string;
   /** UPI VPA for payments, e.g. `name@bank`. */
   upiVpa: string | null;
+  /**
+   * The company's business types. Optional so an older backend, or a fixture,
+   * fails hidden (the app shows none) rather than crashing.
+   */
+  businessTypes?: BusinessType[];
 }
 
 export type UserStatus = 'active' | 'inactive';
@@ -76,6 +82,9 @@ export interface JobCounts {
  */
 export interface ProfileTechnician {
   id: string;
+  /** Short-lived link to the person's photo, or null. Optional: an older backend omits it (initials shown). */
+  avatarUrl?: string | null;
+
   /**
    * Per-tenant human reference (`'EMP-004'`), optional and nullable (the
    * backend types it `string | null`): freshly invited rows hydrate it only
@@ -112,6 +121,9 @@ export interface ProfileTechnician {
 export interface ProfileTechnicianSummary {
   id: string;
   name: string | null;
+  /** Short-lived link to the person's photo, or null. Optional: an older backend omits it (initials shown). */
+  avatarUrl?: string | null;
+
   countryCode: string;
   phoneNumber: string;
   skills: string[];
@@ -186,6 +198,11 @@ export interface MyProfile {
   phoneNumber: string;
   status: UserStatus;
   tenant: ProfileTenant;
+  /**
+   * Short-lived link to the person's own photo, or null when none is set.
+   * Optional so an older backend fails hidden (initials are shown).
+   */
+  avatarUrl?: string | null;
   /**
    * `null` when the person has no company (or was removed). The app gate
    * routes on the login session, so screens below the gate always see a
@@ -267,8 +284,39 @@ async function updateMe(body: { name: string }): Promise<MyProfile> {
   return res.data;
 }
 
+/** `POST /users/me/avatar/upload-url` response: where to PUT the photo, and the key to confirm. */
+export interface AvatarUploadTicket {
+  uploadUrl: string;
+  key: string;
+  expiresAt: string;
+  maxBytes: number;
+}
+
+/**
+ * Step 1 of a photo change: asks for a short-lived upload link. The server
+ * checks the type and size claimed here; the real file is checked on confirm.
+ */
+async function requestAvatarUpload(body: {
+  mimeType: 'image/jpeg' | 'image/png';
+  sizeBytes: number;
+}): Promise<AvatarUploadTicket> {
+  const res = await apiClient.post<AvatarUploadTicket>('/users/me/avatar/upload-url', body);
+  return res.data;
+}
+
+/**
+ * Step 2: after the file is PUT to `uploadUrl`, confirms it. The server checks
+ * the file itself and returns the fresh profile, which is stored wholesale.
+ */
+async function confirmAvatar(body: { key: string }): Promise<MyProfile> {
+  const res = await apiClient.put<MyProfile>('/users/me/avatar', body);
+  return res.data;
+}
+
 export const usersApi = {
   getMe,
   getAccess,
   updateMe,
+  requestAvatarUpload,
+  confirmAvatar,
 };

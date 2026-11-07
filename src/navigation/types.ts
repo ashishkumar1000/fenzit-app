@@ -149,6 +149,8 @@ export type RootStackParamList = {
    * Opened from the Account tab's Reports row — no params.
    */
   Reports: undefined;
+  /** Owner-only Edit profile page (name, photo, GST, business types) — no params. */
+  EditProfile: undefined;
   /** Owner-only customer profile + job history — opened with the customer's uuid. */
   CustomerDetail: { customerId: string };
   /**

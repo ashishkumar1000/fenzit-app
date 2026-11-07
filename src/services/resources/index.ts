@@ -147,6 +147,9 @@ export { authApi } from './authApi';
 export { accountDeletionApi } from './accountDeletion';
 export type { RequestAccountDeletionResponse } from './accountDeletion';
 export { usersApi } from './users';
+export type { AvatarUploadTicket } from './users';
+export { companyApi } from './company';
+export type { BusinessType, CompanyDetails, UpdateCompanyBody } from './company';
 export type {
   MyProfile,
   ProfileTenant,

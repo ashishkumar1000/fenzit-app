@@ -204,7 +204,7 @@ export function EmployeesStep({
       // the sliver right of the switch (review finding 2026-10-23).
       <View>
         <View style={[styles.row, cannotEnable && styles.rowDisabled]}>
-          <Avatar name={row.employeeName} size="md" />
+          <Avatar name={row.employeeName} uri={row.avatarUrl ?? null} size="md" />
           <View style={styles.rowText}>
             <View style={styles.nameLine}>
               <Text style={styles.rowName}>{row.employeeName}</Text>

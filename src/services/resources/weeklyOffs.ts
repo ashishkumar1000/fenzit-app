@@ -66,6 +66,7 @@ export interface WeeklyOffDefaultResponse {
 export interface WeeklyOffOverrideResponse {
   employeeId: string;
   employeeName: string;
+  avatarUrl?: string | null;
   current: WeeklyOffView | null;
   next: WeeklyOffView | null;
 }
@@ -131,6 +132,7 @@ function normalizeOverride(
   return {
     employeeId: row?.employeeId ?? '',
     employeeName: row?.employeeName ?? '',
+    avatarUrl: row?.avatarUrl ?? null,
     current: row?.current ?? null,
     next: row?.next ?? null,
   };

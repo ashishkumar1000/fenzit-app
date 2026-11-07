@@ -33,10 +33,8 @@ type Props = {
 const EMPTY_PROFILE: BusinessProfile = {
   businessName: '',
   ownerName: '',
-  businessTypes: [],
   city: '',
   stateCode: '',
-  gstNumber: '',
 };
 
 /** Turns a failed `sendOtp` call into copy the phone/otp screens can show directly. */
@@ -93,7 +91,7 @@ export function routeAfterVerify(
 /** Turns a failed `setupCompany` call into a copy the profile screen can show directly. */
 function setupCompanyErrorMessage(err: ApiError): string {
   if (err.code === 'VALIDATION_ERROR') {
-    return 'Check your GST number and state — one of them looks wrong.';
+    return 'Check your state — it looks wrong.';
   }
   if (err.status === 403) {
     return 'This account cannot set up a company. Please talk to your company owner.';
@@ -249,16 +247,11 @@ export default function AuthFlow({ onComplete, intent = null }: Props) {
 
   // --- Step 3: finish setup ----------------------------------------------
   const finish = useCallback(async () => {
-    // Belt-and-braces: the profile screen already requires a name and at
-    // least one business type before calling this, but guard here too in
-    // case that validation is ever bypassed or this function is called from
-    // somewhere else in the future.
+    // Belt-and-braces: the profile screen already requires a name before
+    // calling this, but guard here too in case that validation is ever
+    // bypassed or this function is called from somewhere else in the future.
     if (!profile.ownerName.trim()) {
       setProfileError('Enter your name.');
-      return;
-    }
-    if (profile.businessTypes.length === 0) {
-      setProfileError('Select at least one business type.');
       return;
     }
 
@@ -269,7 +262,6 @@ export default function AuthFlow({ onComplete, intent = null }: Props) {
         name: profile.ownerName.trim(),
         companyName: profile.businessName,
         stateCode: profile.stateCode,
-        gstin: profile.gstNumber || undefined,
         address: profile.city || undefined,
       });
       // CRITICAL: this token replaces the one from verifyOtp — it now has

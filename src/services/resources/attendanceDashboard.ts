@@ -48,6 +48,8 @@ export interface AttendanceDashboardCounts {
 export interface CheckoutMissingRow {
   employeeId: string;
   employeeName: string;
+  /** Photo link or null; absent on an older backend (initials shown). */
+  avatarUrl?: string | null;
   workDate: string;
   /** Nullable on the wire (the office may have been removed) — display-only. */
   officeName: string | null;
@@ -87,6 +89,8 @@ export type DashboardEmployeeStatus =
 export interface DashboardEmployeeStat {
   employeeId: string;
   employeeName: string;
+  /** Photo link or null; absent on an older backend (initials shown). */
+  avatarUrl?: string | null;
   phone: string | null;
   officeName: string | null;
   status: DashboardEmployeeStatus;
@@ -168,6 +172,7 @@ function normalizeFlagRow(raw: unknown): CheckoutMissingRow {
   return {
     employeeId: record.employeeId as string,
     employeeName: record.employeeName as string,
+    avatarUrl: typeof record.avatarUrl === 'string' ? record.avatarUrl : null,
     workDate: record.workDate as string,
     officeName: record.officeName as string | null,
   };
@@ -307,6 +312,7 @@ function normalizeEmployees(raw: unknown): DashboardEmployeeStat[] | null {
     return {
       employeeId: row.employeeId as string,
       employeeName: row.employeeName as string,
+      avatarUrl: typeof row.avatarUrl === 'string' ? row.avatarUrl : null,
       phone: row.phone as string | null,
       officeName: row.officeName as string | null,
       status: row.status as DashboardEmployeeStatus,

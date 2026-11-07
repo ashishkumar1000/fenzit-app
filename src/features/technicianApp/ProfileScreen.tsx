@@ -75,7 +75,7 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={styles.header}>
-        <Avatar name={name ?? undefined} size="xl" />
+        <Avatar name={name ?? undefined} uri={profile.avatarUrl ?? null} size="xl" />
         <View style={styles.nameRow}>
           <Text style={styles.name}>{name}</Text>
           <IconButton

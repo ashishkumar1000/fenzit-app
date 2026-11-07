@@ -7,6 +7,7 @@
  * variant: 'tint' (default, name-derived tint) | 'onColor' (white disc with
  * primary initials — for sitting on a brand-colored surface).
  */
+import { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { colors, palette, radius, weight } from '../../theme';
 
@@ -57,7 +58,16 @@ export function Avatar({ name: rawName, uri = null, size = 'md', variant = 'tint
   const dim = dims[size];
   const [bg, fg] = tints[hashName(name) % tints.length];
   const onColor = variant === 'onColor';
-  const backgroundColor = onColor ? colors.onPrimary : uri ? palette.gray100 : bg;
+  // A photo link can expire or fail to load (presigned links last an hour).
+  // Then the initials placeholder shows, the same as when there is no photo.
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [uri]);
+  // Only a non-empty string is a usable link; anything else shows initials.
+  const photoUri = typeof uri === 'string' && uri.trim() !== '' ? uri : null;
+  const showPhoto = !!photoUri && !loadFailed;
+  const backgroundColor = onColor ? colors.onPrimary : showPhoto ? palette.gray100 : bg;
   const initialsColor = onColor ? colors.primary : fg;
   const initials = initialsOf(name);
 
@@ -73,11 +83,12 @@ export function Avatar({ name: rawName, uri = null, size = 'md', variant = 'tint
         },
         style,
       ]}>
-      {uri ? (
+      {showPhoto ? (
         <Image
-          source={{ uri }}
+          source={{ uri: photoUri as string }}
           accessibilityLabel={name}
           style={styles.image}
+          onError={() => setLoadFailed(true)}
         />
       ) : (
         <Text

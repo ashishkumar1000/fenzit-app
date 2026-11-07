@@ -93,7 +93,7 @@ function lastSheetProps(): { visible: boolean; currentName: string | null } {
 async function mountScreen(): Promise<ReactTestRenderer> {
   let renderer!: ReactTestRenderer;
   await act(async () => {
-    renderer = create(React.createElement(MoreScreen));
+    renderer = create(React.createElement(MoreScreen, { navigation: mockNavigation } as never));
   });
   return renderer;
 }
@@ -102,7 +102,7 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-it('the account-row pencil opens EditNameSheet with the live profile name (story 5.2)', async () => {
+it('the account-row pencil opens the Edit profile page', async () => {
   useMyProfileMock.mockReturnValue({
     profile: makeProfile(),
     isLoading: false,
@@ -114,17 +114,13 @@ it('the account-row pencil opens EditNameSheet with the live profile name (story
 
   const renderer = await mountScreen();
 
-  // The sheet is mounted closed from the start.
-  expect(lastSheetProps().visible).toBe(false);
-
   // Press the pencil affordance on the account row.
-  const pencil = renderer.root.findByProps({ accessibilityLabel: 'Edit name' });
+  const pencil = renderer.root.findByProps({ accessibilityLabel: 'Edit profile' });
   await act(async () => {
     pencil.props.onPress();
   });
 
-  expect(lastSheetProps().visible).toBe(true);
-  expect(lastSheetProps().currentName).toBe('Kumar Selvan');
+  expect(mockNavigation.navigate).toHaveBeenCalledWith('EditProfile');
 
   await act(async () => {
     renderer.unmount();

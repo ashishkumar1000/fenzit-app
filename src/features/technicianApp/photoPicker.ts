@@ -68,6 +68,9 @@ export function validateAsset(asset: { mimeType: string; fileSize: number }): st
   return null;
 }
 
+/** Optional picker settings. `maxDimension` bounds the longest edge in pixels. */
+export type PickOptions = { maxDimension?: number };
+
 /** What a picker run hands back: normalized files, or a reason it gave up. */
 export type PickOutcome = {
   files: PickedFile[];
@@ -82,20 +85,25 @@ export type PickOutcome = {
 export function showPhotoSourceAlert(
   remaining: number,
   onPicked: (outcome: PickOutcome) => void,
+  options: PickOptions = {},
 ): void {
+  const maxDimension = options.maxDimension ?? MAX_DIMENSION;
   Alert.alert('Add photo', undefined, [
-    { text: 'Take photo', onPress: () => void takePhoto(onPicked) },
+    { text: 'Take photo', onPress: () => void takePhoto(onPicked, maxDimension) },
     {
       text: 'Choose from gallery',
       onPress: () =>
-        void pickFromGallery(Math.min(remaining, MAX_PHOTOS), onPicked),
+        void pickFromGallery(Math.min(remaining, MAX_PHOTOS), onPicked, maxDimension),
     },
     { text: 'Cancel', style: 'cancel' },
   ]);
 }
 
 /** Camera path: Android's runtime permission first, then launchCamera. */
-async function takePhoto(onPicked: (outcome: PickOutcome) => void): Promise<void> {
+async function takePhoto(
+  onPicked: (outcome: PickOutcome) => void,
+  maxDimension: number,
+): Promise<void> {
   try {
     if (Platform.OS === 'android') {
       const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.CAMERA, {
@@ -113,8 +121,8 @@ async function takePhoto(onPicked: (outcome: PickOutcome) => void): Promise<void
       {
         mediaType: 'photo',
         quality: PHOTO_QUALITY,
-        maxWidth: MAX_DIMENSION,
-        maxHeight: MAX_DIMENSION,
+        maxWidth: maxDimension,
+        maxHeight: maxDimension,
         saveToPhotos: false,
       },
       undefined,
@@ -135,6 +143,7 @@ async function takePhoto(onPicked: (outcome: PickOutcome) => void): Promise<void
 async function pickFromGallery(
   selectionLimit: number,
   onPicked: (outcome: PickOutcome) => void,
+  maxDimension: number,
 ): Promise<void> {
   try {
     // Same resize/quality options as the camera path — the gallery path is
@@ -143,8 +152,8 @@ async function pickFromGallery(
       {
         mediaType: 'photo',
         quality: PHOTO_QUALITY,
-        maxWidth: MAX_DIMENSION,
-        maxHeight: MAX_DIMENSION,
+        maxWidth: maxDimension,
+        maxHeight: maxDimension,
         selectionLimit,
       },
       undefined,

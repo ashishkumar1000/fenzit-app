@@ -62,6 +62,7 @@ import { apiClient } from '../api/apiClient';
 export interface EnrolmentOverview {
   employeeId: string;
   employeeName: string;
+  avatarUrl?: string | null;
   phone: string;
   /** TENANT module flag — see the interface docblock; not per-employee. */
   attendanceEnabled: boolean;
@@ -89,6 +90,7 @@ function normalizeRow(row: Partial<EnrolmentOverview> | null | undefined): Enrol
   return {
     employeeId: row?.employeeId ?? '',
     employeeName: row?.employeeName ?? '',
+    avatarUrl: row?.avatarUrl ?? null,
     phone: row?.phone ?? '',
     attendanceEnabled: row?.attendanceEnabled === true,
     attendanceAccess: row?.attendanceAccess ?? 'none',

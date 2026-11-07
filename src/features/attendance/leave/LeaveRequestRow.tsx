@@ -125,7 +125,7 @@ export function LeaveRequestRow(input: {
         requestStatusChip(request.status).label
       }`}>
       <View style={styles.ownerRow}>
-        <Avatar name={name} size="md" />
+        <Avatar name={name} uri={request.employeeAvatarUrl ?? null} size="md" />
         <View style={styles.ownerTexts}>
           <Text style={styles.ownerName} numberOfLines={1}>
             {label}

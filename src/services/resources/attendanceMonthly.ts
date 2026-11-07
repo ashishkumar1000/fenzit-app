@@ -60,6 +60,8 @@ export interface MonthlyEmployeeSummary {
 export interface EmployeeMonthlyRow {
   employeeId: string;
   employeeName: string;
+  /** Photo link or null; absent on an older backend (initials shown). */
+  avatarUrl?: string | null;
   officeId: string | null;
   officeName: string | null;
   summary: MonthlyEmployeeSummary;
@@ -173,6 +175,7 @@ function normalizeEmployeeRow(raw: unknown): EmployeeMonthlyRow {
   return {
     employeeId: record.employeeId as string,
     employeeName: record.employeeName as string,
+    avatarUrl: typeof record.avatarUrl === 'string' ? record.avatarUrl : null,
     officeId: record.officeId as string | null,
     officeName: record.officeName as string | null,
     summary: normalizeSummary(record.summary),

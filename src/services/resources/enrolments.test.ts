@@ -25,6 +25,7 @@ const remove = apiClient.delete as jest.Mock;
 const ENABLED_ROW = {
   employeeId: 'e1',
   employeeName: 'Priya',
+  avatarUrl: null,
   phone: '+919000000000',
   attendanceEnabled: true,
   attendanceAccess: 'active',
@@ -59,6 +60,16 @@ describe('enrolmentsService.list', () => {
     expect(returned).toEqual([ENABLED_ROW]);
   });
 
+  it('keeps a photo link the server sends', async () => {
+    get.mockResolvedValueOnce({
+      data: [{ ...ENABLED_ROW, avatarUrl: 'https://signed.example/p.jpg' }],
+    });
+
+    const returned = await enrolmentsService.list();
+
+    expect(returned[0].avatarUrl).toBe('https://signed.example/p.jpg');
+  });
+
   it('normalizes a partial row: empty ids, strict-true enabled, null dates/office', async () => {
     get.mockResolvedValueOnce({ data: [{ employeeId: 'e9' }] });
 
@@ -68,6 +79,7 @@ describe('enrolmentsService.list', () => {
       {
         employeeId: 'e9',
         employeeName: '',
+        avatarUrl: null,
         phone: '',
         attendanceEnabled: false,
         attendanceAccess: 'none',

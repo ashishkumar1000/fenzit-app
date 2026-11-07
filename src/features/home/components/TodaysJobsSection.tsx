@@ -84,6 +84,7 @@ export function TodaysJobsSection({
           // through to the next source, not render blank.
           customerName={job.customer.name || job.skill?.name}
           technicianName={job.technician.name || technicianNames.get(job.technicianId) || undefined}
+          technicianAvatarUrl={job.technician.avatarUrl ?? null}
           onPress={() => onPressJob(job.id)}
         />
       ))}

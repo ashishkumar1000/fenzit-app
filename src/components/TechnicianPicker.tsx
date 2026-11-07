@@ -103,7 +103,7 @@ function Tiles({
             accessibilityLabel={technician.name}
             onPress={() => onSelect(isSelected ? null : technician.id)}
             style={[styles.tile, isSelected && styles.tileSelected]}>
-            <Avatar name={technician.name} size="md" />
+            <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="md" />
             <Text
               numberOfLines={1}
               style={[styles.name, isSelected && styles.nameSelected]}>
@@ -147,7 +147,7 @@ function Rows({
             accessibilityLabel={technician.name}
             onPress={() => onSelect(isSelected ? null : technician.id)}
             style={[styles.listRow, isSelected && styles.listRowSelected]}>
-            <Avatar name={technician.name} size="md" />
+            <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="md" />
             <View style={styles.listRowText}>
               <Text
                 numberOfLines={1}

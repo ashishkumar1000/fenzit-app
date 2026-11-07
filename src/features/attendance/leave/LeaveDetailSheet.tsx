@@ -152,7 +152,7 @@ export function LeaveDetailSheet(input: {
         <>
           {!readOnly ? (
             <View style={styles.identity}>
-              <Avatar name={request.employeeName ?? ''} size="md" />
+              <Avatar name={request.employeeName ?? ''} uri={request.employeeAvatarUrl ?? null} size="md" />
               <View style={styles.identityTexts}>
                 <Text style={styles.identityName}>
                   {request.employeeName ?? 'Team member'}

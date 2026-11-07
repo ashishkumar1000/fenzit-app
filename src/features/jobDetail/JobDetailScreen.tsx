@@ -453,6 +453,7 @@ export default function JobDetailScreen() {
               countryCode={detail.technician.countryCode}
               phoneNumber={detail.technician.phoneNumber}
               subLine={formatPhone(detail.technician)}
+              avatarUrl={detail.technician.avatarUrl ?? null}
               action={
                 <>
                   <IconButton

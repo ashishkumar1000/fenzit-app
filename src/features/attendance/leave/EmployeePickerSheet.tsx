@@ -21,6 +21,8 @@ export interface LeavePickerEmployee {
   employeeId: string;
   employeeName: string;
   officeName: string | null;
+  /** Photo link or null; absent shows initials. */
+  avatarUrl?: string | null;
 }
 
 /** The name filter appears only past this many rows. */
@@ -106,7 +108,7 @@ export function EmployeePickerSheet(input: {
                 accessibilityLabel={`Apply leave for ${employee.employeeName}`}
                 onPress={() => onPick(employee.employeeId)}
                 style={styles.row}>
-                <Avatar name={employee.employeeName} size="md" />
+                <Avatar name={employee.employeeName} uri={employee.avatarUrl ?? null} size="md" />
                 <View style={styles.rowText}>
                   <Text style={styles.rowTitle} numberOfLines={1}>
                     {employee.employeeName}

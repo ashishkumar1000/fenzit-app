@@ -58,6 +58,7 @@ export interface OfficeDetail {
 export interface OfficeArchiveBlocker {
   employeeId: string;
   employeeName: string;
+  avatarUrl?: string | null;
 }
 
 /**

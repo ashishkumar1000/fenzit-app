@@ -14,13 +14,9 @@ export type AuthStep = 'phone' | 'otp' | 'profile' | 'notOnTeam';
 export type BusinessProfile = {
   businessName: string;
   ownerName: string;
-  /** One or more business types — profile data only, nothing downstream reads them. */
-  businessTypes: string[];
   city: string;
   /** 2-letter ISO 3166-2: IN state code, e.g. "KA" — required by company setup. */
   stateCode: string;
-  /** GSTIN — optional; only needed for GST invoices. */
-  gstNumber: string;
 };
 
 /**

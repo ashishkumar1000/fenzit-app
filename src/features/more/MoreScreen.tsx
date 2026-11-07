@@ -27,7 +27,7 @@ import { runAllResets } from '../../services';
 import { clearAuthToken } from '../../services/authToken';
 import { openWebPage } from '../../utils/linking';
 import { useAuth, useCanWrite } from '../auth';
-import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
+import { formatPhone, formatRole, useMyProfile } from '../profile';
 import { loadUnreadCount, useNotifications } from '../notifications';
 import { loadCustomers, useCustomers } from '../customers';
 import { MoreTile } from './components/MoreTile';
@@ -54,7 +54,6 @@ export default function MoreScreen({ navigation }: Props) {
   const { profile, isLoading } = useMyProfile();
   const { unreadCount } = useNotifications();
   const { count: customerCount, hasLoaded: customersHasLoaded } = useCustomers();
-  const [editNameOpen, setEditNameOpen] = useState(false);
   // Log out asks through the shared ConfirmDialog instead of a system Alert
   // (the 20-1 modal ask) — same wording, in-app styling.
   const [logOutOpen, setLogOutOpen] = useState(false);
@@ -136,7 +135,12 @@ export default function MoreScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Card padding="none" style={styles.accountCard}>
           <View style={styles.accountRow}>
-            <Avatar name={profile.name ?? undefined} size="lg" style={styles.avatar} />
+            <Avatar
+              name={profile.name ?? undefined}
+              uri={profile.avatarUrl ?? null}
+              size="lg"
+              style={styles.avatar}
+            />
             <View style={styles.rowInfo}>
               <View style={styles.nameRow}>
                 <Text style={styles.rowTitle} numberOfLines={1}>
@@ -159,10 +163,10 @@ export default function MoreScreen({ navigation }: Props) {
             </View>
 
             <IconButton
-              label="Edit name"
+              label="Edit profile"
               size="md"
               style={styles.editButton}
-              onPress={() => setEditNameOpen(true)}>
+              onPress={() => navigation.navigate('EditProfile')}>
               <Pencil size={18} color={colors.textMuted} strokeWidth={2} />
             </IconButton>
           </View>
@@ -259,12 +263,6 @@ export default function MoreScreen({ navigation }: Props) {
           onPress={handleLogOut}
         />
       </ScrollView>
-
-      <EditNameSheet
-        visible={editNameOpen}
-        currentName={profile.name}
-        onClose={() => setEditNameOpen(false)}
-      />
 
       <ConfirmDialog
         visible={logOutOpen}

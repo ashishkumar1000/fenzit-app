@@ -57,14 +57,15 @@ export const APPLIED_ANNOUNCEMENT_PREFIX = 'Leave applied for';
 
 /** D4 — the picker keeps TRACKED rows only (`attendanceStartDate != null`). */
 export function trackedEmployees(
-  rows: { employeeId: string; employeeName: string; officeName: string | null; attendanceStartDate: string | null }[],
+  rows: { employeeId: string; employeeName: string; officeName: string | null; attendanceStartDate: string | null; avatarUrl?: string | null }[],
 ): LeavePickerEmployee[] {
   return rows
     .filter(row => row.attendanceStartDate != null)
-    .map(({ employeeId, employeeName, officeName }) => ({
+    .map(({ employeeId, employeeName, officeName, avatarUrl }) => ({
       employeeId,
       employeeName,
       officeName,
+      avatarUrl: avatarUrl ?? null,
     }));
 }
 

@@ -175,7 +175,7 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
           .join('. ')}
         onPress={() => setPendingId(item.id)}
         style={styles.row}>
-        <Avatar name={item.name} size="md" />
+        <Avatar name={item.name} uri={item.avatarUrl ?? null} size="md" />
         <View style={styles.rowText}>
           <Text style={styles.rowName}>{item.name}</Text>
           {item.skills.length ? (

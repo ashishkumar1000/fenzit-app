@@ -207,6 +207,10 @@ export default function JobsScreen({ navigation, route }: Props) {
     () => new Map((profile?.technicians ?? []).map(t => [t.id, t.name])),
     [profile],
   );
+  const technicianAvatarUrls = useMemo(
+    () => new Map((profile?.technicians ?? []).map(t => [t.id, t.avatarUrl ?? null])),
+    [profile],
+  );
 
   // A failed refresh keeps its rows on screen behind a dismissible banner;
   // the dismissal is local (the store's error clears on the next success).
@@ -263,10 +267,11 @@ export default function JobsScreen({ navigation, route }: Props) {
         urgencyNow={now}
         customerName={customerNames.get(item.customerId)}
         technicianName={technicianNames.get(item.technicianId)}
+        technicianAvatarUrl={technicianAvatarUrls.get(item.technicianId) ?? null}
         onPress={handleOpenJob}
       />
     ),
-    [customerNames, technicianNames, scope, now],
+    [customerNames, technicianNames, technicianAvatarUrls, scope, now],
   );
 
   return (

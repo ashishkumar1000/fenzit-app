@@ -240,6 +240,8 @@ export interface JobDetailTechnician {
   countryCode: string;
   phoneNumber: string;
   skills: string[];
+  /** Short-lived link to the person's photo, or null. Optional: an older backend omits it (initials shown). */
+  avatarUrl?: string | null;
 }
 
 export interface JobDetailCustomer {
