@@ -98,9 +98,10 @@ it('loads skills from the shared store when the sheet opens, not while closed', 
 });
 
 it('offers exactly the skills the shared store holds', () => {
+  // `pinned` marks the catch-all "Others" skill; these skills are not it.
   const options = [
-    { value: 's1', label: 'AC repair' },
-    { value: 's2', label: 'Wiring' },
+    { value: 's1', label: 'AC repair', pinned: false },
+    { value: 's2', label: 'Wiring', pinned: false },
   ];
   mockStore({
     skills: [
@@ -226,36 +227,28 @@ it('keeps the team message for a same-company duplicate, not the company one', a
   expect(visibleText(root)).not.toContain('This number already belongs to a company.');
 });
 
-// --- Why Send invite is off --------------------------------------------------
+// --- Send invite gating ------------------------------------------------------
+// No reason copy is shown under the button (owner request). The button is the
+// only signal: off until name and a full 10-digit phone are in; skills optional.
 
-/** The one-line reason under the button, or null when none is shown. */
-function inviteHint(root: ReactTestRenderer.ReactTestInstance): unknown {
-  const copy = [
-    "Enter the person's name to continue",
-    'Enter a 10-digit phone number to continue',
-    'Pick at least one skill to continue',
-  ];
-  return visibleText(root).find(c => copy.includes(c as string)) ?? null;
+/** The "Send invite" button's disabled flag. */
+function sendDisabled(root: ReactTestRenderer.ReactTestInstance): boolean {
+  return root.findByType(Button).props.disabled as boolean;
 }
 
-it('names the first missing field, in on-screen order', () => {
+it('keeps Send invite off until name and a full phone number are entered', () => {
   mockStore({ skills: [{ id: 's1', name: 'AC repair' }] });
   const root = renderSheet({ visible: true });
-  // Nothing filled: name comes first.
-  expect(inviteHint(root)).toBe("Enter the person's name to continue");
-
-  // Name only: phone is next.
   const inputs = root.findAllByType(Input);
+  expect(sendDisabled(root)).toBe(true);
+
+  // Name only: phone still missing.
   act(() => inputs[0].props.onChangeText('Vel Murugan'));
-  expect(inviteHint(root)).toBe('Enter a 10-digit phone number to continue');
+  expect(sendDisabled(root)).toBe(true);
 
-  // Name and phone: skill is last.
+  // Name and a full phone: enabled, with no skill chosen (skills are optional).
   act(() => inputs[1].props.onChangeText('9123456780'));
-  expect(inviteHint(root)).toBe('Pick at least one skill to continue');
-
-  // Everything filled: no hint.
-  act(() => root.findByType(MultiSelect).props.onChange(['s1']));
-  expect(inviteHint(root)).toBeNull();
+  expect(sendDisabled(root)).toBe(false);
 });
 
 it('treats a whitespace-only name as missing, and a 9-digit phone as incomplete', () => {
@@ -264,19 +257,20 @@ it('treats a whitespace-only name as missing, and a 9-digit phone as incomplete'
   const inputs = root.findAllByType(Input);
 
   act(() => inputs[0].props.onChangeText('   '));
-  expect(inviteHint(root)).toBe("Enter the person's name to continue");
+  act(() => inputs[1].props.onChangeText('9123456780'));
+  expect(sendDisabled(root)).toBe(true);
 
   act(() => inputs[0].props.onChangeText('Vel Murugan'));
   act(() => inputs[1].props.onChangeText('912345678'));
-  expect(inviteHint(root)).toBe('Enter a 10-digit phone number to continue');
+  expect(sendDisabled(root)).toBe(true);
 });
 
-it('hides the hint while a server error is showing', async () => {
+it('shows the server error and no reason copy when the invite fails', async () => {
   const root = await submitRejectingWith(
     Object.assign(new Error('x'), { code: 'DUPLICATE_RESOURCE' }),
   );
-  expect(inviteHint(root)).toBeNull();
   expect(visibleText(root)).toContain('This number already belongs to a company.');
+  expect(visibleText(root)).not.toContain("Enter the person's name to continue");
 });
 // --- A stale server error clears on the next edit ----------------------------
 
@@ -288,7 +282,7 @@ it('clears a server error when the name is emptied, and shows the name reason ag
 
   act(() => root.findAllByType(Input)[0].props.onChangeText(''));
   expect(visibleText(root)).not.toContain('This number already belongs to a company.');
-  expect(inviteHint(root)).toBe("Enter the person's name to continue");
+  expect(sendDisabled(root)).toBe(true);
 });
 
 it('clears a server error when the skills change, and shows the skill reason again', async () => {
@@ -299,7 +293,8 @@ it('clears a server error when the skills change, and shows the skill reason aga
 
   act(() => root.findByType(MultiSelect).props.onChange([]));
   expect(visibleText(root)).not.toContain('Check the phone number and skills — one of them looks invalid.');
-  expect(inviteHint(root)).toBe('Pick at least one skill to continue');
+  // Skills are optional, so clearing them keeps Send invite on.
+  expect(sendDisabled(root)).toBe(false);
 });
 
 it('clears a server error when the phone is edited', async () => {
@@ -308,7 +303,7 @@ it('clears a server error when the phone is edited', async () => {
   );
   act(() => root.findAllByType(Input)[1].props.onChangeText('912345678'));
   expect(visibleText(root)).not.toContain('This number already belongs to a company.');
-  expect(inviteHint(root)).toBe('Enter a 10-digit phone number to continue');
+  expect(sendDisabled(root)).toBe(true);
 });
 
 it('drops an invite error that arrives after the owner changed the form', async () => {
