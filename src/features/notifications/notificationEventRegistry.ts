@@ -4,28 +4,33 @@
  * `jobId`), it decides each notification's card kind and, by way of the
  * card kind, its deep link and which UI it may touch. No React, no network.
  *
- * Three card KINDS today (story 19-4 adds the attendance card for both
- * roles):
- *   'job'        — a job-status event (eventType = a workflow step key,
- *                  jobId set) → the grouped job card → JobDetail (owner) /
- *                  TechJobDetail (technician).
- *   'report'     — the report engine's terminal events (Epic 12) → the
- *                  report card → Reports. OWNER-only: reports are an owner
- *                  surface, so a technician row of this type renders
- *                  generic.
- *   'attendance' — holiday events (15-6, technician) AND, from 19-4, the
- *                  three attendance reminders (employee personal reminders
- *                  + the owner's not-checked-in summary) — composed copy
- *                  (the payload is display DATA, not display text), with a
- *                  tap the screen guards: the technician tab rows only
- *                  navigate while the Attendance tab exists; the owner
- *                  card lands on the AttendanceDashboard.
- *   'leave'      — the leave cards (17-6), role-keyed ENUMERATED
- *                  classifications of the shipped events (19-4 adds
- *                  leave.pending_reminder to the owner list).
- *   'generic'    — anything else, including event types this build has
- *                  never seen (the AD-19 fallback). Renders a plain,
- *                  non-tappable card and NEVER touches job UI.
+ * Five card KINDS today (story 19-4 adds the attendance card for both
+ * roles; the Firebase plan adds the `job.assigned` assignment card):
+ *   'job'          — a job-status event (eventType = a workflow step key,
+ *                    jobId set) → the grouped job card → JobDetail (owner) /
+ *                    TechJobDetail (technician).
+ *   'job-assigned' — the technician's assignment notice (Firebase plan,
+ *                    user decision 2026-11-07) → its own readable card
+ *                    ("New job assigned") → TechJobDetail via the shared
+ *                    tap helper. Classified BEFORE the job fallback so it
+ *                    never renders as a workflow-step stage.
+ *   'report'       — the report engine's terminal events (Epic 12) → the
+ *                    report card → Reports. OWNER-only: reports are an owner
+ *                    surface, so a technician row of this type renders
+ *                    generic.
+ *   'attendance'   — holiday events (15-6, technician) AND, from 19-4, the
+ *                    three attendance reminders (employee personal reminders
+ *                    + the owner's not-checked-in summary) — composed copy
+ *                    (the payload is display DATA, not display text), with a
+ *                    tap the screen guards: the technician tab rows only
+ *                    navigate while the Attendance tab exists; the owner
+ *                    card lands on the AttendanceDashboard.
+ *   'leave'        — the leave cards (17-6), role-keyed ENUMERATED
+ *                    classifications of the shipped events (19-4 adds
+ *                    leave.pending_reminder to the owner list).
+ *   'generic'      — anything else, including event types this build has
+ *                    never seen (the AD-19 fallback). Renders a plain,
+ *                    non-tappable card and NEVER touches job UI.
  *
  * Rows written before Story 14-2 carry NULL entityType/entityId — they are
  * classified by eventType + jobId exactly as before, so owner job/report
@@ -49,6 +54,7 @@ import {
 /** What a notification row renders as on the shared inbox. */
 export type NotificationEventAction =
   | 'job'
+  | 'job-assigned'
   | 'report'
   | 'attendance'
   | 'leave'
@@ -67,6 +73,13 @@ export function notificationEventAction(
   n: ApiNotification,
   role: SessionRole,
 ): NotificationEventAction {
+  // Firebase plan (user decision 2026-11-07): a `job.assigned` row is the
+  // technician's assignment notice — its own readable card, NOT a
+  // workflow-step stage on the grouped job card (its payload is job
+  // number / customer / time, not a step). Role-agnostic: the recipient is
+  // always the assigned technician; the card builder + shared tap helper
+  // handle the routing.
+  if (n.eventType === 'job.assigned') return 'job-assigned';
   // Reports are a company-wide surface: the admin and the viewer (who may
   // request reports) see them; an employee's report rows stay generic.
   if (isCompanyWideRole(role) && isReportNotification(n)) return 'report';

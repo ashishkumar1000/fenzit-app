@@ -36,10 +36,14 @@ export function StatusBanner({ banner }: StatusBannerProps) {
 
   const technicianName = banner.technicianName;
   const jobNumber = banner.jobNumber;
+  // UX spec: the technician's assignment banner carries the customer as a
+  // third neutral chip; owner banners leave it null.
+  const customerName = banner.customerName;
   const hasName = technicianName !== null;
   const hasJob = jobNumber !== null;
+  const hasCustomer = customerName !== null;
   const hasStep = banner.stepLabel !== null;
-  const hasAny = hasName || hasJob || hasStep;
+  const hasAny = hasName || hasJob || hasCustomer || hasStep;
 
   return (
     <View
@@ -71,7 +75,7 @@ export function StatusBanner({ banner }: StatusBannerProps) {
         )}
 
         <View style={styles.column}>
-          {(hasName || hasJob) && (
+          {(hasName || hasJob || hasCustomer) && (
             <View style={styles.row}>
               {hasName && (
                 <Text style={styles.name} numberOfLines={1}>
@@ -82,6 +86,12 @@ export function StatusBanner({ banner }: StatusBannerProps) {
               {hasJob && (
                 <Badge status="neutral" size="sm" style={styles.jobBadge}>
                   {jobNumber}
+                </Badge>
+              )}
+              {(hasName || hasJob) && hasCustomer && <View style={styles.separator} />}
+              {hasCustomer && (
+                <Badge status="neutral" size="sm" style={styles.jobBadge}>
+                  {customerName}
                 </Badge>
               )}
             </View>

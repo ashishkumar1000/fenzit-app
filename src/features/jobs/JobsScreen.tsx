@@ -38,6 +38,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, IconButton, InlineError, SegmentedControl } from '../../components/ui';
+import { PushEnableCard } from '../push/PushEnableCard';
 import { useCanWrite } from '../auth';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
@@ -353,6 +354,10 @@ export default function JobsScreen({ navigation, route }: Props) {
               <InlineError message={error ?? ''} onDismiss={() => setErrorDismissed(true)} />
             </View>
           ) : null}
+          {/* UX spec: the one-time notifications-off card on the admin's
+              home surfaces (whichever is visited first; suppressed after
+              dismissal/denial). */}
+          <PushEnableCard />
 
           <FlatList
             data={jobs}

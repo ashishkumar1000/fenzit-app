@@ -66,7 +66,6 @@ import type {
   TechnicianTabParamList,
 } from '../../navigation/types';
 import { useAuth } from '../auth/useAuth';
-import { isCompanyWideRole } from '../auth/roles';
 import {
   loadMoreNotifications,
   loadNotifications,
@@ -93,8 +92,21 @@ import {
   type LeaveCardIconName,
   type LeaveNotificationCardData,
 } from './leaveNotificationModel';
+import {
+  buildJobAssignedCards,
+  type JobAssignedNotificationCardData,
+} from './jobAssignedNotificationModel';
 import { isAttendanceReachable } from '../../services/attendanceAccessEvents';
 import { useJobTemplateCache } from './useJobTemplateCache';
+import {
+  openTapTarget,
+  tapTargetForAttendance,
+  tapTargetForJobCard,
+  tapTargetForReportCard,
+  tapTargetForLeave,
+  type TapNavigate,
+} from './notificationTapModel';
+import { PushPermissionCard } from '../push/PushPermissionCard';
 import type { NotificationFilter } from './notificationCardModel';
 import type {
   NotificationListItem,
@@ -184,33 +196,44 @@ export default function NotificationsScreen({ navigation }: Props) {
     // below) and reconciles via the store's server re-ask.
   }, []);
 
+  /**
+   * The kind→route decisions live in `notificationTapModel.ts` — the ONE
+   * shared mapping the push tap also uses (Firebase spec CAP-3), so a push
+   * always lands where the bell's tap for the same event lands. This side
+   * only adds the cosmetic optimistic mark-read (navigate first was the
+   * old order; here the mark-read is fired alongside — both fire-and-forget
+   * or synchronous, never blocking the navigation).
+   */
+  const navigate = useCallback<TapNavigate>(
+    (name, params) => {
+      // The shared route names span BOTH stacks' param lists (no single
+      // type covers them — see SharedRoutes above), so the executor's
+      // permissive signature is the honest one; runtime validity is the
+      // tap model's job (role guards + the delegate form). A param-less
+      // route is called WITHOUT the second argument — the recorded call
+      // shape is part of the screens' pinned tap contracts.
+      const loose = navigation.navigate as unknown as TapNavigate;
+      if (params === undefined) loose(name);
+      else loose(name, params);
+    },
+    [navigation],
+  );
+
   const handleCardPress = useCallback(
     (card: TappableNotificationListItem) => {
-      // Navigate first — the deep link is the user's intent and must not
-      // wait on the mark-read POST. Read-state is cosmetic (handled
-      // optimistically inside the store, with its own rollback). Opening a
-      // job's card settles ALL of its unread events (the POSTs are
-      // idempotent; a card usually carries at most a couple).
+      // Job and report cards route differently (and a report card carries
+      // no jobId at all) — the decisions live in the shared tap model.
+      const target =
+        card.kind === 'report'
+          ? tapTargetForReportCard(role)
+          : tapTargetForJobCard(role, card.jobId);
+      if (target === null) return;
+      // Opening a job's card settles ALL of its unread events (the POSTs
+      // are idempotent; a card usually carries at most a couple).
       for (const id of card.unreadIds) void markNotificationRead(id);
-      // Epic 12: a report notification points at a REPORT, not a job — the
-      // Reports screen (root-stack sibling, same navigation the More tab
-      // uses). Owner-only: the registry renders report rows generic for
-      // technicians, so this branch is unreachable for them — kept as a
-      // guard. It loads its own list on focus, so no reports-store arming
-      // is needed here.
-      if (card.kind === 'report') {
-        if (isCompanyWideRole(role)) navigation.navigate('Reports');
-        return;
-      }
-      // Story 14-3: the deep link routes per role — job cards open the
-      // viewer for the signed-in role's tree.
-      if (role === 'employee') {
-        navigation.navigate('TechJobDetail', { jobId: card.jobId });
-        return;
-      }
-      navigation.navigate('JobDetail', { jobId: card.jobId });
+      openTapTarget(navigate, target, 'inbox');
     },
-    [navigation, markNotificationRead, role],
+    [markNotificationRead, navigate, role],
   );
 
   // Memoize job IDs to avoid refetch on every render. Report notifications
@@ -245,11 +268,22 @@ export default function NotificationsScreen({ navigation }: Props) {
   // Story 17-6: the leave cards — role-keyed, composed copy per the D5
   // table, each with its own glyph and tap target.
   const leaveCards = useMemo(() => buildLeaveCards(items, role), [items, role]);
+  // Firebase plan (user decision 2026-11-07): the technician's assignment
+  // notices — one readable "New job assigned" card per `job.assigned` row,
+  // never a workflow-step stage (the grouper skips them).
+  const jobAssignedCards = useMemo(() => buildJobAssignedCards(items), [items]);
   // Interleaved by recency under "All"; the job buckets (below) stay job-only.
   const listCards = useMemo(
     () =>
-      mergeNotificationCards(cards, reportCards, genericCards, attendanceCards, leaveCards),
-    [cards, reportCards, genericCards, attendanceCards, leaveCards],
+      mergeNotificationCards(
+        cards,
+        reportCards,
+        genericCards,
+        attendanceCards,
+        leaveCards,
+        jobAssignedCards,
+      ),
+    [cards, reportCards, genericCards, attendanceCards, leaveCards, jobAssignedCards],
   );
   const [filter, setFilter] = useState<NotificationFilter>('all');
   // Active/Completed are JOB-status buckets — report and generic
@@ -269,11 +303,12 @@ export default function NotificationsScreen({ navigation }: Props) {
         reportCards.length +
         genericCards.length +
         attendanceCards.length +
-        leaveCards.length,
+        leaveCards.length +
+        jobAssignedCards.length,
       active: filterCards(cards, 'active').length,
       completed: filterCards(cards, 'completed').length,
     }),
-    [cards, reportCards, genericCards, attendanceCards, leaveCards],
+    [cards, reportCards, genericCards, attendanceCards, leaveCards, jobAssignedCards],
   );
 
   // 15-10: attendance taps mark the row read, then deep link ONLY when the
@@ -282,24 +317,16 @@ export default function NotificationsScreen({ navigation }: Props) {
   // (FR-3; the seam mirrors the store's `attendanceAccess !== 'none'`).
   // 19-4: the OWNER's summary card (`dashboard` tap) bypasses that guard —
   // it lands on the AttendanceDashboard, an owner-stack route that never
-  // rides the tab seam.
+  // rides the tab seam. The decisions (incl. the guard-consults-first
+  // no-op and the nested-delegate form) live in the shared tap model.
   const handleAttendanceCardPress = useCallback(
     (card: AttendanceNotificationCardData) => {
-      if (card.tap === 'dashboard') {
-        for (const id of card.unreadIds) void markNotificationRead(id);
-        navigation.navigate('AttendanceDashboard');
-        return;
-      }
-      // The guard consults FIRST: for a `none` employee the tap is a
-      // no-op (frozen matrix) — no navigation AND no read-mark mutation.
-      if (!isAttendanceReachable()) return;
+      const target = tapTargetForAttendance(card.tap, isAttendanceReachable);
+      if (target === null) return;
       for (const id of card.unreadIds) void markNotificationRead(id);
-      // The Attendance route is a TAB inside TechnicianTabs — invisible
-      // to the root stack's plain navigate (device-found: "The action
-      // 'NAVIGATE' … was not handled"). Delegate through the tabs route.
-      navigation.navigate('TechnicianTabs', { screen: 'Attendance' });
+      openTapTarget(navigate, target, 'inbox');
     },
-    [markNotificationRead, navigation],
+    [markNotificationRead, navigate],
   );
 
   // 17-6: leave-card taps. Owner cards land on the Leave surface's right
@@ -310,20 +337,25 @@ export default function NotificationsScreen({ navigation }: Props) {
   // no-ops — the tab no longer exists for them.
   const handleLeaveCardPress = useCallback(
     (card: LeaveNotificationCardData) => {
-      if (card.tap === 'attendance-guarded') {
-        if (!isAttendanceReachable()) return;
-        for (const id of card.unreadIds) void markNotificationRead(id);
-        // Delegate through the tabs route (device-found: the Attendance tab
-        // is invisible to the root stack's plain navigate).
-        navigation.navigate('TechnicianTabs', { screen: 'Attendance' });
-        return;
-      }
+      const target = tapTargetForLeave(card.tap, isAttendanceReachable);
+      if (target === null) return;
       for (const id of card.unreadIds) void markNotificationRead(id);
-      navigation.navigate('OwnerLeave', {
-        tab: card.tap === 'owner-pending' ? 'pending' : 'all',
-      });
+      openTapTarget(navigate, target, 'inbox');
     },
-    [markNotificationRead, navigation],
+    [markNotificationRead, navigate],
+  );
+
+  // Firebase plan (user decision 2026-11-07): an assignment card's tap is
+  // the SHARED job-card decision — the technician lands on TechJobDetail,
+  // exactly where the push tap for the same event lands.
+  const handleJobAssignedCardPress = useCallback(
+    (card: JobAssignedNotificationCardData) => {
+      const target = tapTargetForJobCard(role, card.jobId);
+      if (target === null) return;
+      for (const id of card.unreadIds) void markNotificationRead(id);
+      openTapTarget(navigate, target, 'inbox');
+    },
+    [markNotificationRead, navigate, role],
   );
 
   const renderCard = useCallback(
@@ -341,10 +373,15 @@ export default function NotificationsScreen({ navigation }: Props) {
           icon={<LeaveCardIcon name={item.icon} />}
           onPress={() => handleLeaveCardPress(item)}
         />
+      ) : item.kind === 'job-assigned' ? (
+        <GenericNotificationCard
+          card={item}
+          onPress={() => handleJobAssignedCardPress(item)}
+        />
       ) : (
         <NotificationCard card={item} onPress={handleCardPress} />
       ),
-    [handleAttendanceCardPress, handleCardPress, handleLeaveCardPress],
+    [handleAttendanceCardPress, handleCardPress, handleJobAssignedCardPress, handleLeaveCardPress],
   );
 
   const hasData = items.length > 0;
@@ -413,6 +450,10 @@ export default function NotificationsScreen({ navigation }: Props) {
         </View>
       ) : (
         <>
+          {/* Firebase plan: the existing-installs permission ask lives in
+              context, here — one inline card while notifications are off
+              (denial keeps today's in-app-only behaviour). */}
+          <PushPermissionCard />
           <NotificationFilterBar value={filter} onChange={setFilter} counts={counts} />
           {showBanner ? (
             <View style={styles.bannerWrap}>

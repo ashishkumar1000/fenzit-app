@@ -4,6 +4,7 @@ import React_RCTAppDelegate
 import ReactAppDependencyProvider
 import RNBootSplash
 import GoogleMaps
+import FirebaseCore
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -24,6 +25,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       forInfoDictionaryKey: "GOOGLE_MAPS_API_KEY") as? String {
       GMSServices.provideAPIKey(mapsApiKey)
     }
+
+    // Firebase (FCM, Crashlytics, Analytics) — reads GoogleService-Info.plist
+    // from the app bundle. Must run before the React factory starts so every
+    // RNFB native module finds the [DEFAULT] app on init.
+    FirebaseApp.configure()
 
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)

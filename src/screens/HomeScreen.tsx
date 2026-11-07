@@ -21,6 +21,7 @@ import { EmptyState, InlineError, InlineNotice, Skeleton } from '../components/u
 import { Tile } from '../components/Tile';
 import { colors, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
+import { PushEnableCard } from '../features/push/PushEnableCard';
 import { firstName, loadMyProfile, useMyProfile } from '../features/profile';
 import {
   QuickActions,
@@ -191,7 +192,7 @@ export default function HomeScreen({ navigation }: Props) {
   // name), so the greeting degrades to a nameless form instead of crashing.
   const ownerFirstName = firstName(profile.name);
   const businessName = profile.tenant.companyName;
-  const { jobCounts, technicianCount } = profile;
+  const { jobCounts } = profile;
 
   // 20-1 (AC 12) → CAP-4: the leave-review banner's count rides the same
   // attendance mirror the Attendance tile gates on — no second request.
@@ -273,6 +274,7 @@ export default function HomeScreen({ navigation }: Props) {
           contentContainerStyle={styles.newUserContent}
           refreshControl={refreshControl}>
           {errorBanner}
+          <PushEnableCard />
           {quickActions}
           {attendanceTile}
 
@@ -312,19 +314,18 @@ export default function HomeScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}>
         {errorBanner}
+        <PushEnableCard />
         {quickActions}
         {attendanceTile}
 
         <TodaysJobsSection
           jobs={profile.jobs.data}
           overdueCount={jobCounts.overdue}
-          technicianCount={technicianCount}
           technicians={profile.technicians ?? []}
           pendingLeaveRequests={pendingLeaveRequests}
           onPressLeaveBanner={handlePressLeaveBanner}
           onPressJob={handlePressJob}
           onPressStrip={() => handleTilePress('overdue')}
-          onPressCreate={canWrite ? handleNewJob : undefined}
         />
       </ScrollView>
     </>

@@ -55,6 +55,11 @@ import { loadReports } from '../reports/useReports';
 // Story 14-3: the notification list itself joins it on the technician
 // branch — the inbox is a technician's only consumer of these events.
 import { loadNotifications, loadUnreadCount } from './useNotifications';
+// Firebase plan (user decision 2026-11-07): `job.assigned` refreshes the
+// technician's job list (Today) — the same cross-feature-loader pattern the
+// owner branch's loadJobs uses; no import cycle (technicianApp never
+// imports notifications).
+import { loadToday } from '../technicianApp/useTechnicianJobs';
 import {
   emitAttendanceAccessRefresh,
   isAttendanceEventType,
@@ -76,6 +81,10 @@ import {
   notificationStepStatus,
   type JobStatusEventPayload,
 } from './notificationBannerModel';
+import {
+  JOB_ASSIGNED_TITLE,
+  readJobAssignedParts,
+} from './jobAssignedNotificationModel';
 import type { StatusKey } from '../../theme';
 
 export interface OwnerNotificationBanner {
@@ -84,6 +93,8 @@ export interface OwnerNotificationBanner {
   /** Per-field parts — the toast renders each independently, dropping whatever the payload lacked. */
   technicianName: string | null;
   jobNumber: string | null;
+  /** UX spec: the technician's `job.assigned` banner carries the customer as its third chip; owner banners leave it null. */
+  customerName: string | null;
   stepLabel: string | null;
   stepStatus: StatusKey;
 }
@@ -97,6 +108,57 @@ export function shouldSubscribe(appState: string | null | undefined): boolean {
   // RN 0.87 types AppState.currentState as string | null | undefined
   // (transient states) — anything that isn't 'active' is not foreground.
   return appState === 'active';
+}
+
+/**
+ * The designed push seam (Firebase spec NFR-G): the role-aware store
+ * refresh, extracted verbatim from the Realtime event handler so a push's
+ * foreground `onMessage` can call the SAME refresh the socket would. Takes
+ * the event type (or null when the payload carried none) and the signed-in
+ * session's role:
+ *
+ * - Technician branch (Story 14-3) — the inbox is the consumer: the shared
+ *   notification list + unread-count stores, past their TTLs. An
+ *   `attendance.*` event also refreshes the entry-point gate via the
+ *   neutral seam (AD-19; the module boundary forbids importing the
+ *   attendance feature from here).
+ * - Owner branch — report terminal events (`report_ready` /
+ *   `report_failed`) route to the reports store; every other event
+ *   force-refetches the jobs store, the bell badge and the profile store
+ *   (Home's counts; the heavy-endpoint caveat from the original Story 3.3
+ *   note still stands).
+ *
+ * No banner here — the banner is Realtime-only presentation (the hook's
+ * handler keeps it); push refreshes stores silently (spec CAP-3).
+ */
+export function refreshStoresForEvent(
+  eventType: string | null,
+  role: UserRole | null,
+): void {
+  if (!isCompanyWideRole(role)) {
+    if (eventType !== null && isAttendanceEventType(eventType)) {
+      emitAttendanceAccessRefresh();
+    }
+    // Firebase plan (user decision 2026-11-07): a `job.assigned` event also
+    // refreshes the technician's job list — Today is where an assignment
+    // shows up, and its TTL would otherwise hide the new job on the next
+    // focus. Realtime and foreground push share this seam, so both paths
+    // refresh.
+    if (eventType === 'job.assigned') {
+      void loadToday({ force: true });
+    }
+    void loadNotifications({ force: true });
+    void loadUnreadCount({ force: true });
+    return;
+  }
+  if (eventType === 'report_ready' || eventType === 'report_failed') {
+    void loadReports({ force: true });
+    void loadUnreadCount({ force: true });
+    return;
+  }
+  void loadJobs(undefined, undefined, { force: true });
+  void loadUnreadCount({ force: true });
+  void loadMyProfile({ force: true });
 }
 
 interface UseRealtimeNotificationsOptions {
@@ -136,29 +198,57 @@ export function useRealtimeNotifications(
    * the timer — the first event's timer must never dismiss the second
    * event's banner.
    */
-  const showBanner = (payload: JobStatusEventPayload | null) => {
+  const raiseBanner = (record: OwnerNotificationBanner) => {
     dismissTimer();
-    const parts = bannerPartsFromEvent(payload);
-    setBanner({
-      text: bannerTextFromParts(parts),
-      technicianName: parts.technicianName,
-      jobNumber: parts.jobNumber,
-      stepLabel: parts.stepLabel,
-      stepStatus: notificationStepStatus(parts.step),
-    });
+    setBanner(record);
     bannerTimerRef.current = setTimeout(() => {
       bannerTimerRef.current = null;
       setBanner(null);
     }, BANNER_VISIBLE_MS);
   };
 
+  const showBanner = (payload: JobStatusEventPayload | null) => {
+    const parts = bannerPartsFromEvent(payload);
+    raiseBanner({
+      text: bannerTextFromParts(parts),
+      technicianName: parts.technicianName,
+      jobNumber: parts.jobNumber,
+      customerName: null,
+      stepLabel: parts.stepLabel,
+      stepStatus: notificationStepStatus(parts.step),
+    });
+  };
+
   /**
-   * The single event-handling seam — the pure entry point Phase 2's push
-   * handler will call from its foreground/background message listener, so
-   * push integration is a new caller, not a rewrite. Force-refetches the
-   * role's stores (bypassing their throttles); a burst of events is
-   * serialized by the stores' shared in-flight queues.
+   * UX spec (resolved Open Question 2): the technician's foreground
+   * `job.assigned` banner — the owner StatusBanner pattern, 4s. Raised from
+   * the REALTIME path only; FCM's onMessage stays a silent store refresh
+   * (Realtime and FCM deliver the same row, so nothing can ever double).
+   * Copy mirrors the inbox card: "New job assigned · JOB-1042 · customer",
+   * present parts only (payload drift degrades per field, never a crash).
    */
+  const showAssignedBanner = (payload: JobStatusEventPayload | null) => {
+    const { jobNumber, customerName } =
+      payload && typeof payload === 'object'
+        ? readJobAssignedParts(payload as Record<string, unknown>)
+        : { jobNumber: null, customerName: null };
+    const line = [JOB_ASSIGNED_TITLE, jobNumber, customerName]
+      .filter((v): v is string => v !== null)
+      .join(' · ');
+    raiseBanner({
+      text: line.length > 0 ? line : JOB_ASSIGNED_TITLE,
+      technicianName: null,
+      jobNumber,
+      customerName,
+      stepLabel: JOB_ASSIGNED_TITLE,
+      stepStatus: 'neutral',
+    });
+  };
+
+  // The Realtime event handler: the socket-side caller of
+  // `refreshStoresForEvent` (the push seam above). It keeps ONLY the
+  // Realtime-specific guards (stale-topic drop, foreground gate) and the
+  // owner banner — the store refresh itself lives in the exported seam.
   const handleJobStatusEvent = (topic: string, message: unknown) => {
     // In-flight event from a channel the session has already moved off —
     // an event can land after a user switch before teardown completes.
@@ -168,54 +258,24 @@ export function useRealtimeNotifications(
     // the foreground rule forbids any banner/refetch work in that state.
     if (!shouldSubscribe(AppState.currentState)) return;
 
-    // Story 14-3: the technician branch — the inbox is the consumer. Every
-    // event (whatever its type; no job/report events are emitted to
-    // technicians today) refetches the shared notification stores, past
-    // their TTLs so a burst can't be throttled away. No banner, no
-    // owner-store refetches. Later epics' event types need nothing here.
-    if (!isCompanyWideRole(roleRef.current)) {
-      // Story 15-10: an attendance.* event also refreshes the entry-point
-      // gate (AD-19: every attendance notification refetches access), via
-      // the neutral seam — the module boundary forbids importing the
-      // attendance feature from here. The inbox loads below are unchanged.
-      const evtType = notificationEventType(message);
-      if (evtType !== null && isAttendanceEventType(evtType)) {
-        emitAttendanceAccessRefresh();
-      }
-      void loadNotifications({ force: true });
-      void loadUnreadCount({ force: true });
-      return;
-    }
-
-    // Owner branch — the original Story 3.3/12-6 behaviour, unchanged.
-    // Story 12-6: report terminal events carry a different payload shape
-    // (reportId/reportLabel, no job fields) — they would render as the
-    // generic "Job status updated" fallback banner and pointlessly refetch
-    // jobs/profile, so they route to the reports store instead. The bell's
-    // unread count still refreshes: a report notification IS a notification.
     const eventType = notificationEventType(message);
-    if (eventType === 'report_ready' || eventType === 'report_failed') {
-      void loadReports({ force: true });
-      void loadUnreadCount({ force: true });
-      return;
+    // Banners are Realtime-path-only presentation (push's foreground
+    // delivery refreshes the stores silently — spec CAP-3), so nothing can
+    // ever double:
+    //   - company-wide roles: every non-report event raises the job-status
+    //     banner, exactly as before;
+    //   - the technician: a `job.assigned` raises the assignment banner
+    //     (UX spec Open Question 2 — the mirror of the owner's toast).
+    if (
+      isCompanyWideRole(roleRef.current) &&
+      eventType !== 'report_ready' &&
+      eventType !== 'report_failed'
+    ) {
+      showBanner(eventRowPayload(message));
+    } else if (!isCompanyWideRole(roleRef.current) && eventType === 'job.assigned') {
+      showAssignedBanner(eventRowPayload(message));
     }
-    showBanner(eventRowPayload(message));
-    void loadJobs(undefined, undefined, { force: true });
-    // Story 3.4: the bell badge tracks the same stream of events — force
-    // past the count TTL so a burst of events can't be throttled away.
-    void loadUnreadCount({ force: true });
-    // Post-spec extension (user-approved, 2026-09-09 device spike): Home is
-    // the screen the owner actually sits on, and it renders from the profile
-    // store (`GET /users/me` — job counts + the Today's-jobs section), a
-    // DIFFERENT store from the Jobs tab's. Force it too, so the whole
-    // dashboard updates live. `force` matches the jobs refetch: a throttled
-    // call within the focus TTL would silently skip and leave Home stale.
-    // FUTURE OPTIMIZATION: /users/me is the heavy endpoint (full roster +
-    // customers/jobs pages) fetched to flip one status badge — fine at one
-    // event per technician step; if event frequency ever grows (Story 3.4
-    // push, many technicians), add a lightweight summary endpoint (counts +
-    // today's jobs only) and point this handler at it instead.
-    void loadMyProfile({ force: true });
+    refreshStoresForEvent(eventType, roleRef.current);
   };
 
   useEffect(() => {

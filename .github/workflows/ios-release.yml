@@ -37,6 +37,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # SkillIcon.catalog.test.ts reads the skills icon catalog straight from
+      # the fenzit-be migration — same sibling checkout as android-release.yml
+      # (pinned to .fenzit-be-ref, two levels up from the checkout dir).
+      - name: Check out sibling fenzit-be
+        run: |
+          : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE unset}"
+          PIN="$(grep -v '^#' "$GITHUB_WORKSPACE/.fenzit-be-ref" | head -1 | tr -d '[:space:]')"
+          if [[ ! "$PIN" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::.fenzit-be-ref must contain a 40-hex commit sha (got: '$PIN')"
+            exit 1
+          fi
+          DEST="$GITHUB_WORKSPACE/../../backend/fenzit-be"
+          rm -rf "$DEST"
+          git init -q "$DEST"
+          git -C "$DEST" fetch -q --depth 1 https://github.com/ashishkumar1000/fenzit-be.git "$PIN"
+          git -C "$DEST" checkout -q FETCH_HEAD
+          echo "fenzit-be pinned at $(git -C "$DEST" rev-parse HEAD)"
+
       # Same gates as the Android pipeline — PR merges and --no-verify
       # commits reach `release` without ever running the pre-commit hook.
       - name: Tests

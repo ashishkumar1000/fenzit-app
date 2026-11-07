@@ -1,11 +1,18 @@
 /**
  * RealtimeBridge — Story 14-3's dual-role mount, automated: probe-rendered
- * with a mocked session per role. Owner path renders the banner through;
- * a technician session ENABLES the hook (their socket must open — the
- * token endpoint opened to technicians in Story 14-2) but never renders
- * StatusBanner (no job-status events are ever emitted to technicians); a
- * bootstrap-null session suspends the hook entirely. StatusBanner's own
- * rendering is covered by `src/components/StatusBanner.test.tsx`.
+ * with a mocked session per role. The bridge renders whatever banner the
+ * hook raises: the owner job-status toast, and (UX spec 2026-11-07) the
+ * technician's `job.assigned` assignment toast — so a technician session
+ * with a raised banner now renders it through. A technician session still
+ * ENABLES the hook (their socket must open — the token endpoint opened to
+ * technicians in Story 14-2); a bootstrap-null session suspends the hook
+ * entirely. StatusBanner's own rendering is covered by
+ * `src/components/StatusBanner.test.tsx`.
+ *
+ * REQUIREMENT CHANGE NOTE (UX spec 2026-11-07, adopted): the old contract
+ * ("technician never renders StatusBanner") is superseded — the hook now
+ * raises the `job.assigned` banner on the technician branch, so the old
+ * pinning test became wrong about the requirement, not about behaviour.
  */
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
@@ -32,8 +39,20 @@ const BANNER: OwnerNotificationBanner = {
   text: 'Priya · JOB-1042 · On my way',
   technicianName: 'Priya',
   jobNumber: 'JOB-1042',
+  customerName: null,
   stepLabel: 'On my way',
   stepStatus: 'progress',
+};
+
+/** The UX spec's technician assignment toast — what the hook raises for a
+ *  `job.assigned` event on the technician branch. */
+const ASSIGNED_BANNER: OwnerNotificationBanner = {
+  text: 'New job assigned · JOB-1042 · Sharma Electronics',
+  technicianName: null,
+  jobNumber: 'JOB-1042',
+  customerName: 'Sharma Electronics',
+  stepLabel: 'New job assigned',
+  stepStatus: 'neutral',
 };
 
 function mount(): ReactTestRenderer.ReactTestRenderer {
@@ -51,9 +70,21 @@ beforeEach(() => {
 afterEach(() => jest.clearAllMocks());
 
 describe('RealtimeBridge', () => {
-  it('technician session: enables the hook but renders no banner', () => {
+  it('technician session: enables the hook and renders the raised assignment banner through', () => {
+    // The hook (not the bridge) decides what a role sees — a technician
+    // banner only ever exists for `job.assigned` (UX spec 2026-11-07).
     mockSession = { role: 'employee', tenantId: 't1' };
-    mockUseRealtimeNotifications.mockReturnValue({ banner: BANNER });
+    mockUseRealtimeNotifications.mockReturnValue({ banner: ASSIGNED_BANNER });
+
+    const renderer = mount();
+
+    expect(renderer.toJSON()).not.toBeNull();
+    expect(mockUseRealtimeNotifications).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  it('technician session with no live banner: renders nothing', () => {
+    mockSession = { role: 'employee', tenantId: 't1' };
+    mockUseRealtimeNotifications.mockReturnValue({ banner: null });
 
     const renderer = mount();
 

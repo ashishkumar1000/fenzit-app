@@ -22,6 +22,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import { jobService, type ApiError, type JobDetail } from '../../services';
+import { logEvent } from '../../services/telemetry';
 import { generateIdempotencyKey } from '../../utils/idempotency';
 import { apiJobOf, upsertTechnicianJob } from './useTechnicianJobs';
 import { classifyAdvanceError, JOB_LOCKED_MESSAGE } from './workflowActionBarModel';
@@ -98,6 +99,10 @@ export function useWorkflowAdvance({
         const job = await jobService.advanceWorkflow(jobId, step, key);
         keyRef.current = null; // server answered — a retry may be a new submit
         detailGenRef.current += 1; // the in-flight resync below is now stale-able
+        // Firebase analytics (CAP-5 catalog): the technician's step funnel —
+        // which workflow steps complete, logged only on real success (the
+        // reconcile branches below are races, not completions).
+        logEvent('job_step_completed', { step });
         // The response is the post-advance ApiJob: merge into the open detail
         // and into the shared list store. No optimistic activity-log append —
         // the new step's timestamp arrives with the resync below.

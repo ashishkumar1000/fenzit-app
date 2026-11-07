@@ -12,7 +12,7 @@
  * columns:
  * - "Flat / House no., Building & Wing" → `addressDetails`
  * - "Street, Landmark or Locality"      → free-text `address`
- * - "Area / Pincode"                    → `area` (requestMapping merges it
+ * - "Pincode"                            → `area` (requestMapping merges it
  *   into the address line, as it always has)
  * A pin/search pick NO LONGER copies the resolved line into the free-text
  * address — the preview box and `formattedAddress` carry it (the jobs embed
@@ -526,10 +526,10 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
                 style={styles.rowItem}
               />
               <Input
-                label="Area / Pincode"
+                label="Pincode"
                 value={area}
                 onChangeText={editField(setArea)}
-                placeholder="Andheri West"
+                placeholder="e.g. 400058"
                 autoCapitalize="words"
                 style={styles.rowItem}
               />

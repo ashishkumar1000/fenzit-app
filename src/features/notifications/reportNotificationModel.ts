@@ -21,6 +21,7 @@ import type { StatusKey } from '../../theme';
 import { failedReportCopy } from '../reports/reportModel';
 import type { NotificationCardData } from './notificationCardModel';
 import type { LeaveNotificationCardData } from './leaveNotificationModel';
+import type { JobAssignedNotificationCardData } from './jobAssignedNotificationModel';
 import type {
   AttendanceNotificationCardData,
   GenericNotificationCardData,
@@ -88,6 +89,7 @@ export type NotificationListItem =
   | ReportNotificationCardData
   | AttendanceNotificationCardData
   | LeaveNotificationCardData
+  | JobAssignedNotificationCardData
   | GenericNotificationCardData;
 
 /**
@@ -99,7 +101,10 @@ export type NotificationListItem =
  */
 export type TappableNotificationListItem = Exclude<
   NotificationListItem,
-  { kind: 'generic' } | { kind: 'attendance' } | { kind: 'leave' }
+  | { kind: 'generic' }
+  | { kind: 'attendance' }
+  | { kind: 'leave' }
+  | { kind: 'job-assigned' }
 >;
 
 /**
@@ -170,11 +175,13 @@ export function mergeNotificationCards(
   genericCards: GenericNotificationCardData[] = [],
   attendanceCards: AttendanceNotificationCardData[] = [],
   leaveCards: LeaveNotificationCardData[] = [],
+  jobAssignedCards: JobAssignedNotificationCardData[] = [],
 ): NotificationListItem[] {
   return [
     ...genericCards,
     ...attendanceCards,
     ...leaveCards,
+    ...jobAssignedCards,
     ...reportCards,
     ...jobCards,
   ].sort((a, b) => Date.parse(b.latestCreatedAt) - Date.parse(a.latestCreatedAt));

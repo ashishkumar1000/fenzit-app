@@ -128,8 +128,12 @@ export function PhoneScreen({
         </View>
       ) : null}
 
+      {/* Equal spacers above and below the form put it in the middle of the
+          free space; the explainer spacer below pins the explainer to the
+          bottom. */}
+      <View style={styles.push} />
+
       <View style={styles.card}>
-        <Text style={styles.fieldLabel}>Mobile number</Text>
         <View style={styles.numberRow}>
           <View style={styles.dialPill}>
             <IndiaFlag />
@@ -250,12 +254,6 @@ const styles = StyleSheet.create({
   },
   notice: {
     marginBottom: spacing.s4,
-  },
-  fieldLabel: {
-    ...typography.caption,
-    color: colors.textStrong,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
   },
   numberRow: {
     flexDirection: 'row',

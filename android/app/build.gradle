@@ -1,6 +1,13 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+// Firebase (Firebase plan Phase 1): google-services processes
+// google-services.json into resources BEFORE crashlytics reads the build —
+// either plugin missing or misordered is a startup crash ("No Firebase App
+// '[DEFAULT]'" / "Crashlytics build ID missing"). Both classpaths are
+// declared in the root build.gradle, RNFB-pinned.
+apply plugin: "com.google.gms.google-services"
+apply plugin: "com.google.firebase.crashlytics"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -129,8 +136,8 @@ android {
         // Synced with package.json "version" and the iOS MARKETING_VERSION/
         // CURRENT_PROJECT_VERSION — validated by `bun run verify:version`
         // (scripts/verify-version-sync.js) and on every commit via .githooks.
-        versionCode 10201
-        versionName "1.2.1"
+        versionCode 10202
+        versionName "1.2.2"
     }
     // Split the APK per CPU architecture — each ABI APK carries only its own
     // native libs (Hermes etc.), roughly a quarter of the universal size.

@@ -5,14 +5,21 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
+# RNFB (@react-native-firebase 26.4.1) defaults to Swift Package Manager on
+# RN >= 0.75 — this project installs with CocoaPods, so opt out and use the
+# documented static-frameworks combo. First `pod install` must log
+# "SPM disabled"; if it does not, these flags are not being picked up.
+$RNFirebaseDisableSPM = true
+# Firebase pods built as static frameworks: dynamic linkage breaks the
+# RN 0.87 pod set (reanimated fails dynamic-only), and RNFB documents
+# static as the supported CocoaPods-mode combo with the flag above.
+$RNFirebaseAsStaticFramework = true
+# Firebase Analytics without AdSupport: the app declares "does not use
+# advertising ID" on both stores — mirrors the Android AD_ID manifest strip.
+$RNFirebaseAnalyticsWithoutAdIdSupport = true
+
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
-
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
-end
 
 target 'FenzitApp' do
   # Google Maps provider for react-native-maps (attendance geofence map
@@ -25,6 +32,11 @@ target 'FenzitApp' do
   pod 'react-native-maps/Google', :path => rn_maps_path
 
   config = use_native_modules!
+
+  # Static linkage for every pod in this target — pinned, not env-dependent
+  # (replaces the old USE_FRAMEWORKS conditional; required by the RNFB
+  # static-frameworks combo above, before use_react_native!).
+  use_frameworks! :linkage => :static
 
   use_react_native!(
     :path => config[:reactNativePath],

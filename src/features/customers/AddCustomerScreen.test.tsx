@@ -580,7 +580,7 @@ it('sends coordinates for a pin drop but never a placeId', async () => {
   expect(payload).not.toHaveProperty('placeId');
 });
 
-it('merges Street and Area/Pincode into the address line; details travel separately', async () => {
+it('merges Street and Pincode into the address line; details travel separately', async () => {
   createSpy.mockResolvedValueOnce({
     id: 'cust-12',
     name: 'Ramesh Kumar',
@@ -597,7 +597,7 @@ it('merges Street and Area/Pincode into the address line; details travel separat
     inputByPlaceholder(root, 'Mumbai').props.onChangeText('Mumbai');
   });
   act(() => {
-    inputByPlaceholder(root, 'Andheri West').props.onChangeText('Andheri West');
+    inputByPlaceholder(root, 'e.g. 400058').props.onChangeText('Andheri West');
   });
   act(() => {
     inputByPlaceholder(

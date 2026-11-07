@@ -99,7 +99,7 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={colors.textPlaceholder}
           editable={!disabled && editable}
           // A non-editable field is often wrapped in its own `Pressable` (a
           // tap-to-open-picker field, not real text entry) — without this,
@@ -183,12 +183,12 @@ const styles = StyleSheet.create({
     padding: 0,
     ...typography.body,
     color: colors.textStrong,
-    marginBottom: 10,
+    // Centre the text box in the row so it lines up with the leading icon and
+    // the placeholder. (A marginBottom nudge here pushed the text above the
+    // icon's centre line.) Android also needs this to vertically centre text.
+    textAlignVertical: 'center',
   },
   inputMultiline: {
-    // The single-line field nudges text up with a marginBottom to sit on the
-    // optical centre; in a top-aligned box that would just clip the last line.
-    marginBottom: 0,
     alignSelf: 'stretch',
     textAlignVertical: 'top',
   },

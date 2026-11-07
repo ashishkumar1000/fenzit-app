@@ -11,7 +11,7 @@
  */
 import { StyleSheet, Text, View } from 'react-native';
 import { Calendar } from 'lucide-react-native';
-import { Button, Card } from '../../../components/ui';
+import { Card } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { useNow } from '../../../hooks';
 import { JobCard } from '../../jobs/components/JobCard';
@@ -23,7 +23,6 @@ import { LeaveReviewBanner } from './LeaveReviewBanner';
 export type TodaysJobsSectionProps = {
   jobs: ProfileJob[];
   overdueCount: number;
-  technicianCount: number;
   /** Roster fallback for `job.technician.name` on a data-anomaly row. */
   technicians: ProfileTechnician[];
   /** 20-1 (AC 12) → CAP-4: the owner's pending leave-review count — the
@@ -34,20 +33,16 @@ export type TodaysJobsSectionProps = {
   onPressLeaveBanner?: () => void;
   onPressJob: (jobId: string) => void;
   onPressStrip: () => void;
-  /** Omit for a viewer: the "Create a job" button is then not shown. */
-  onPressCreate?: () => void;
 };
 
 export function TodaysJobsSection({
   jobs,
   overdueCount,
-  technicianCount,
   technicians,
   pendingLeaveRequests,
   onPressLeaveBanner,
   onPressJob,
   onPressStrip,
-  onPressCreate,
 }: TodaysJobsSectionProps) {
   const todayJobs = selectTodayJobs(jobs);
   const technicianNames = new Map(technicians.map(t => [t.id, t.name]));
@@ -105,11 +100,6 @@ export function TodaysJobsSection({
           <Text style={styles.emptyBody}>
             You're all clear. Upcoming work shows in the tiles above.
           </Text>
-          {technicianCount > 0 && onPressCreate ? (
-            <Button variant="secondary" size="md" onPress={onPressCreate} style={styles.emptyCta}>
-              Create a job
-            </Button>
-          ) : null}
         </Card>
       ) : null}
     </View>
@@ -147,8 +137,5 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.textMuted,
     textAlign: 'center',
-  },
-  emptyCta: {
-    marginTop: spacing.s2,
   },
 });

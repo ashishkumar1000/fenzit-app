@@ -1,6 +1,6 @@
 /**
  * AddTechnicianSheet — bottom-sheet form to invite a technician (name +
- * phone + skills). Uses the DS `Sheet` (native TrueSheet): the OS handles
+ * phone, optional skills). Uses the DS `Sheet` (native TrueSheet): the OS handles
  * the keyboard, drag-to-dismiss, and safe areas.
  *
  * The skill list comes from the shared `useSkills` store (loaded on sheet
@@ -84,17 +84,8 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
   const canSubmit =
     name.trim().length > 0 &&
     phone.length === PHONE_LENGTH &&
-    skillIds.length > 0 &&
     skillIds.length <= MAX_SKILLS &&
     !submitting;
-
-  // Why Send invite is greyed out, in the order the fields sit on screen.
-  const missingHint = (() => {
-    if (submitting || canSubmit) return null;
-    if (name.trim().length === 0) return "Enter the person's name to continue";
-    if (phone.length !== PHONE_LENGTH) return 'Enter a 10-digit phone number to continue';
-    return 'Pick at least one skill to continue';
-  })();
 
   const reset = () => {
     setName('');
@@ -159,14 +150,14 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     }
   };
 
-  const skillOptions = skills.map(s => ({ value: s.id, label: s.name }));
+  const skillOptions = skills.map(s => ({ value: s.id, label: s.name, pinned: s.is_fallback === true }));
   const skillsHelper =
     skillsError ||
     (!loadingSkills && skills.length === 0
-      ? 'No skills set up yet — add one from the Skills screen (More tab).'
+      ? "Skills aren't available right now. You can still send the invite."
       : skillIds.length >= MAX_SKILLS
         ? `Maximum ${MAX_SKILLS} skills per technician.`
-        : '');
+        : 'Optional. Skills decide which jobs they are matched to.');
 
   return (
     <Sheet
@@ -204,20 +195,18 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
           }
         />
         <MultiSelect
-          label="Skills"
+          label="Skills (optional)"
           value={skillIds}
           onChange={handleSkillsChange}
           options={skillOptions}
-          placeholder={loadingSkills ? 'Loading skills…' : 'Select skills'}
+          placeholder={loadingSkills ? 'Loading skills…' : 'Choose skills'}
           helper={skillsHelper}
           disabled={loadingSkills || skills.length === 0}
+          searchable
         />
       </View>
 
       {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
-      {!submitError && missingHint ? (
-        <Text style={styles.missingHint} accessibilityLiveRegion="polite">{missingHint}</Text>
-      ) : null}
 
       <Button
         variant="primary"
@@ -249,11 +238,5 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.danger,
     marginTop: -spacing.s2,
-  },
-  missingHint: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-    marginTop: -spacing.s2,
-    textAlign: 'center',
   },
 });

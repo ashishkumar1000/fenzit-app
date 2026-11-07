@@ -2,11 +2,12 @@
  * PermissionsPrimerScreen — the "here's the deal" moment: what Fenzit asks
  * for and why. Each row shows the LIVE OS state: a green check when the
  * permission is granted, an "Allow" pill that fires the OS prompt when not
- * (a permanently-denied answer — Android "don't ask again", iOS still-denied
- * — opens the app's Settings page, since the OS won't re-prompt). iOS camera
- * is the one state JS cannot read, so that row keeps the honest
- * ask-at-first-use path: the request fires at the first photo step. The
- * notifications row stays out until push ships (scope decision D4).
+ * (a permanently-denied answer — Android "don't ask again" — opens the
+ * app's Settings page, since the OS won't re-prompt). iOS camera is the one
+ * state JS cannot read, so that row keeps the honest ask-at-first-use path:
+ * the request fires at the first photo step. Notifications are NOT asked
+ * here: the push permission card asks in context (Home, Today, Jobs and the
+ * inbox), when the person can see what a notification will tell them.
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -56,11 +57,13 @@ type Row = {
  *  (iOS camera) — the row keeps the ask-at-first-use path. */
 type PermState = 'checking' | 'granted' | 'denied' | 'unknown';
 
+type PermKey = 'location' | 'camera';
+
 export default function PermissionsPrimerScreen({ role, notice, onContinue }: Props) {
   const isStaff = role === 'employee';
 
   // Live OS state per row, probed on mount and refreshed after every Allow.
-  const [perms, setPerms] = useState<{ location: PermState; camera: PermState }>(() => ({
+  const [perms, setPerms] = useState<Record<PermKey, PermState>>(() => ({
     location: 'checking',
     camera: Platform.OS === 'ios' ? 'unknown' : 'checking',
   }));
@@ -72,10 +75,11 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION),
           PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA),
         ]);
-        setPerms({
+        setPerms(p => ({
+          ...p,
           location: location ? 'granted' : 'denied',
           camera: camera ? 'granted' : 'denied',
-        });
+        }));
       } else {
         const status = (await checkPermission()) as string;
         setPerms(p => ({ ...p, location: status === 'granted' ? 'granted' : 'denied' }));
@@ -113,7 +117,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
     onContinue();
   };
 
-  const allow = async (perm: 'location' | 'camera') => {
+  const allow = async (perm: PermKey) => {
     try {
       if (perm === 'location') {
         if (Platform.OS === 'android') {
@@ -135,18 +139,20 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           const status = (await requestPermission()) as string;
           if (status !== 'granted') await Linking.openSettings();
         }
-      } else if (Platform.OS === 'android') {
-        const result = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          {
-            title: 'Camera Permission',
-            message: 'Allow Fenzit to use your camera for job photo proof.',
-            buttonPositive: 'Allow',
-            buttonNegative: 'Cancel',
-          },
-        );
-        if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
-          await Linking.openSettings();
+      } else {
+        if (Platform.OS === 'android') {
+          const result = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            {
+              title: 'Camera Permission',
+              message: 'Allow Fenzit to use your camera for job photo proof.',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Cancel',
+            },
+          );
+          if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+            await Linking.openSettings();
+          }
         }
       }
     } catch (err) {
@@ -206,7 +212,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           {isStaff ? 'Permissions that protect you' : 'Permissions that protect your team'}
         </Text>
         <Text style={styles.subtitle}>
-          {'We ask for two things now \u2014 so we never stop you during a job.'}
+          {'We ask for three things now \u2014 so we never stop you during a job.'}
         </Text>
 
         {rows.map((row, i) => (
