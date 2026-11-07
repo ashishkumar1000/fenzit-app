@@ -23,8 +23,8 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LogOut, Pencil, Phone, ScrollText, ShieldCheck, Trash2 } from 'lucide-react-native';
-import { Avatar, Card, ConfirmDialog, IconButton } from '../../components/ui';
+import { Camera, LogOut, Pencil, Phone, ScrollText, ShieldCheck, Trash2 } from 'lucide-react-native';
+import { Avatar, Card, ConfirmDialog, IconButton, InlineError } from '../../components/ui';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../../config';
 import { colors, spacing, typography } from '../../theme';
 import { runAllResets } from '../../services';
@@ -33,11 +33,15 @@ import { openWebPage } from '../../utils/linking';
 import { useAuth } from '../auth';
 import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
 import { DeleteAccountConfirm } from '../more/components/DeleteAccountConfirm';
+import { useAvatarUpload } from '../editProfile/useAvatarUpload';
 
 export default function ProfileScreen() {
   const { reset } = useAuth();
   const { profile, isLoading } = useMyProfile();
   const [editNameOpen, setEditNameOpen] = useState(false);
+  // The technician's own photo: same picker, upload and store update as the
+  // owner's Edit profile page.
+  const photo = useAvatarUpload();
   // Log out asks through the shared ConfirmDialog instead of a system Alert
   // (the 20-1 modal ask) — same wording, in-app styling.
   const [logOutOpen, setLogOutOpen] = useState(false);
@@ -124,6 +128,29 @@ export default function ProfileScreen() {
               <View style={styles.divider} />
             </>
           ) : null}
+
+          <Card
+            padding="md"
+            interactive
+            elevated={false}
+            onPress={photo.changePhoto}
+            disabled={photo.busy}
+            accessibilityRole="button"
+            accessibilityState={{ busy: photo.busy, disabled: photo.busy }}
+            accessibilityLabel={profile.avatarUrl ? 'Change photo' : 'Add photo'}
+            style={styles.actionRow}>
+            <Camera size={18} color={colors.textMuted} strokeWidth={2} />
+            <Text style={styles.actionText}>
+              {profile.avatarUrl ? 'Change photo' : 'Add photo'}
+            </Text>
+            {photo.busy ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+          </Card>
+          {photo.error ? (
+            <View style={styles.photoError}>
+              <InlineError message={photo.error} />
+            </View>
+          ) : null}
+          <View style={styles.divider} />
 
           {/* Play User Data policy — the privacy policy must be reachable
               inside the app from every role's settings surface, not only the
@@ -246,6 +273,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.s2,
     borderRadius: 0,
+  },
+  photoError: {
+    paddingHorizontal: spacing.s4,
+    paddingVertical: spacing.s2,
   },
   actionText: {
     ...typography.body,
