@@ -2,11 +2,13 @@
  * PermissionsPrimerScreen — the "here's the deal" moment: what Fenzit asks
  * for and why. Each row shows the LIVE OS state: a green check when the
  * permission is granted, an "Allow" pill that fires the OS prompt when not
- * (a permanently-denied answer — Android "don't ask again", iOS still-denied
- * — opens the app's Settings page, since the OS won't re-prompt). iOS camera
- * is the one state JS cannot read, so that row keeps the honest
- * ask-at-first-use path: the request fires at the first photo step. The
- * notifications row stays out until push ships (scope decision D4).
+ * (a permanently-denied answer — Android "don't ask again" — opens the
+ * app's Settings page, since the OS won't re-prompt). iOS camera is the one
+ * state JS cannot read, so that row keeps the honest ask-at-first-use path:
+ * the request fires at the first photo step. The notifications row
+ * (Firebase plan, D4 lifted) probes and asks through the push feature's
+ * permission seam — iOS denial there degrades to in-app-only, Android's
+ * never-ask goes to Settings.
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -31,7 +33,11 @@ import { Check, Info } from 'lucide-react-native';
 import { Button } from '../../components/ui';
 import { colors, palette, radius, shadow, spacing, typography, fontSize, weight, leading } from '../../theme';
 import type { UserRole } from '../../services';
-import { CameraArt, LocationArt, ShieldArt } from './components/artwork';
+import {
+  notificationPermissionState,
+  requestNotificationPermission,
+} from '../push/notificationPermission';
+import { BellArt, CameraArt, LocationArt, ShieldArt } from './components/artwork';
 
 type Props = {
   role: UserRole | null;
@@ -44,7 +50,7 @@ type Props = {
 
 type Row = {
   key: string;
-  perm: 'location' | 'camera';
+  perm: 'location' | 'camera' | 'notifications';
   art: ReactNode;
   title: string;
   badge: string;
@@ -56,13 +62,25 @@ type Row = {
  *  (iOS camera) — the row keeps the ask-at-first-use path. */
 type PermState = 'checking' | 'granted' | 'denied' | 'unknown';
 
+type PermKey = 'location' | 'camera' | 'notifications';
+
+// Notifications row copy (UX pass pending — Sally's spec will revise the
+// wording): named, in one place, per role.
+const NOTIFICATIONS_ROW_TITLE = 'Notifications';
+const NOTIFICATIONS_ROW_BADGE = 'RECOMMENDED';
+const NOTIFICATIONS_ROW_BODY_STAFF =
+  'Nudges about your jobs, attendance and leave \u2014 even when the app is closed. Turn them off anytime.';
+const NOTIFICATIONS_ROW_BODY_OWNER =
+  'Job assignments, leave requests and report updates \u2014 even when the app is closed. Turn them off anytime.';
+
 export default function PermissionsPrimerScreen({ role, notice, onContinue }: Props) {
   const isStaff = role === 'employee';
 
   // Live OS state per row, probed on mount and refreshed after every Allow.
-  const [perms, setPerms] = useState<{ location: PermState; camera: PermState }>(() => ({
+  const [perms, setPerms] = useState<Record<PermKey, PermState>>(() => ({
     location: 'checking',
     camera: Platform.OS === 'ios' ? 'unknown' : 'checking',
+    notifications: 'checking',
   }));
 
   const probe = async () => {
@@ -72,14 +90,22 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION),
           PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA),
         ]);
-        setPerms({
+        setPerms(p => ({
+          ...p,
           location: location ? 'granted' : 'denied',
           camera: camera ? 'granted' : 'denied',
-        });
+        }));
       } else {
         const status = (await checkPermission()) as string;
         setPerms(p => ({ ...p, location: status === 'granted' ? 'granted' : 'denied' }));
       }
+      // Notifications probe (both platforms — the seam handles the Android
+      // API-level rule and iOS's RNFB status internally).
+      const notifications = await notificationPermissionState();
+      setPerms(p => ({
+        ...p,
+        notifications: notifications === 'granted' ? 'granted' : 'denied',
+      }));
     } catch (err) {
       // Fail to 'denied' — the row then offers Allow, and tapping it runs
       // the real request (the attendance probe's fail-open rule).
@@ -87,6 +113,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
       setPerms(p => ({
         location: p.location === 'granted' ? 'granted' : 'denied',
         camera: p.camera === 'granted' ? 'granted' : p.camera,
+        notifications: p.notifications === 'granted' ? 'granted' : 'denied',
       }));
     }
   };
@@ -107,13 +134,14 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
     try {
       if (perms.location === 'denied') await allow('location');
       if (perms.camera === 'denied') await allow('camera');
+      if (perms.notifications === 'denied') await allow('notifications');
     } finally {
       setAsking(false);
     }
     onContinue();
   };
 
-  const allow = async (perm: 'location' | 'camera') => {
+  const allow = async (perm: PermKey) => {
     try {
       if (perm === 'location') {
         if (Platform.OS === 'android') {
@@ -135,17 +163,27 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           const status = (await requestPermission()) as string;
           if (status !== 'granted') await Linking.openSettings();
         }
-      } else if (Platform.OS === 'android') {
-        const result = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          {
-            title: 'Camera Permission',
-            message: 'Allow Fenzit to use your camera for job photo proof.',
-            buttonPositive: 'Allow',
-            buttonNegative: 'Cancel',
-          },
-        );
-        if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+      } else if (perm === 'camera') {
+        if (Platform.OS === 'android') {
+          const result = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            {
+              title: 'Camera Permission',
+              message: 'Allow Fenzit to use your camera for job photo proof.',
+              buttonPositive: 'Allow',
+              buttonNegative: 'Cancel',
+            },
+          );
+          if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+            await Linking.openSettings();
+          }
+        }
+      } else {
+        // Notifications (both platforms — the seam routes to the OS prompt):
+        // only Android's permanently-denied answer reroutes to Settings;
+        // a plain denial keeps today's in-app-only behaviour.
+        const result = await requestNotificationPermission();
+        if (result === 'never_ask') {
           await Linking.openSettings();
         }
       }
@@ -178,6 +216,15 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
         ? 'Snap photo proof when a job step asks for it.'
         : 'Photo proof that the work is done.',
     },
+    {
+      key: 'notifications',
+      perm: 'notifications',
+      art: <BellArt />,
+      title: NOTIFICATIONS_ROW_TITLE,
+      badge: NOTIFICATIONS_ROW_BADGE,
+      badgeFg: colors.primary,
+      body: isStaff ? NOTIFICATIONS_ROW_BODY_STAFF : NOTIFICATIONS_ROW_BODY_OWNER,
+    },
   ];
 
   const headerScale = useSharedValue(0);
@@ -206,7 +253,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           {isStaff ? 'Permissions that protect you' : 'Permissions that protect your team'}
         </Text>
         <Text style={styles.subtitle}>
-          {'We ask for two things now \u2014 so we never stop you during a job.'}
+          {'We ask for three things now \u2014 so we never stop you during a job.'}
         </Text>
 
         {rows.map((row, i) => (

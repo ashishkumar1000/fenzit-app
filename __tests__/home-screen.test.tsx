@@ -26,13 +26,24 @@ const mockNavigation = { navigate: jest.fn(), goBack: jest.fn(), canGoBack: jest
  * Captured focus-effect callback — the test for the story-1.4 focus refresh
  * invokes it directly instead of simulating a tab switch.
  */
-let focusEffect: (() => void) | null = null;
+// Home now has TWO focus consumers (the screen itself and the UX spec's
+// PushEnableCard), so every registered callback is captured and the focus
+// simulation fires them all.
+let mockFocusEffects: Array<() => void> = [];
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNavigation,
   useFocusEffect: (effect: () => void) => {
-    focusEffect = effect;
+    mockFocusEffects.push(effect);
   },
+}));
+
+// The UX spec's PushEnableCard is the push feature's own surface (probed +
+// suppressed internally); HomeScreen's contract here is only that it hosts
+// one. Stubbed so the probe's async update can't fight this suite's act
+// discipline.
+jest.mock('../src/features/push/PushEnableCard', () => ({
+  PushEnableCard: () => null,
 }));
 
 jest.mock('../src/features/profile', () => ({
@@ -176,7 +187,7 @@ async function mountScreen(): Promise<ReactTestRenderer> {
 
 afterEach(() => {
   jest.clearAllMocks();
-  focusEffect = null;
+  mockFocusEffects = [];
   mockUnreadCount = null;
 });
 
@@ -249,8 +260,12 @@ it('refreshes the profile on focus (unforced — the store throttle decides)', a
   const renderer = await mountScreen();
   expect(loadMyProfileMock).not.toHaveBeenCalled();
 
-  // Simulate regaining focus: the hook's captured callback is what fires.
-  focusEffect?.();
+  // Simulate regaining focus: every registered focus callback fires (the
+  // screen's refresh + the PushEnableCard probe), flushed inside act.
+  await act(async () => {
+    mockFocusEffects.forEach(fire => fire());
+    await Promise.resolve();
+  });
   expect(loadMyProfileMock).toHaveBeenCalledTimes(1);
   expect(loadMyProfileMock).toHaveBeenCalledWith(); // no { force: true }
   // Story 3.4: the bell's badge rides the same focus refresh (unforced —

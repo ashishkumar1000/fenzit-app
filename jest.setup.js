@@ -149,6 +149,65 @@ jest.mock('react-native-device-info', () => ({
   getModel: jest.fn(() => 'Pixel 6'),
 }));
 
+// The four @react-native-firebase packages (Firebase spec CAP-1/3/4/5) are
+// native TurboModules with ESM builds — they cannot boot in jest, and every
+// module that touches them (services/telemetry, features/push) must get an
+// inert stub instead. The messaging stub resolves immediately (a registered
+// token, no pending initial notification) and every subscription returns an
+// unsubscribe fn, so FirebaseBridge's effects settle harmlessly; suites that
+// need to drive taps/permission override these locally with jest.requireMock.
+jest.mock('@react-native-firebase/app', () => ({
+  __esModule: true,
+  getApp: jest.fn(() => ({ name: '[DEFAULT]' })),
+  initializeApp: jest.fn(),
+  getDefaultAppConfig: jest.fn(),
+}));
+
+jest.mock('@react-native-firebase/messaging', () => ({
+  __esModule: true,
+  AuthorizationStatus: { NOT_DETERMINED: -1, DENIED: 0, AUTHORIZED: 1, PROVISIONAL: 2, EPHEMERAL: 3 },
+  getMessaging: jest.fn(() => ({})),
+  getToken: jest.fn(async () => 'mock-fcm-token'),
+  deleteToken: jest.fn(async () => undefined),
+  onTokenRefresh: jest.fn(() => jest.fn()),
+  onMessage: jest.fn(() => jest.fn()),
+  onNotificationOpenedApp: jest.fn(() => jest.fn()),
+  getInitialNotification: jest.fn(async () => null),
+  setBackgroundMessageHandler: jest.fn(),
+  registerDeviceForRemoteMessages: jest.fn(async () => undefined),
+  unregisterDeviceForRemoteMessages: jest.fn(async () => undefined),
+  // The two permission fns are PLAIN async functions, deliberately NOT
+  // jest.fn: suites that call jest.resetAllMocks (PermissionsPrimerScreen)
+  // would wipe jest.fn implementations and flip every probe to denied,
+  // re-asking granted permissions. Plain functions survive the reset and
+  // keep the healthy "granted" default; suites needing another answer
+  // override with jest.spyOn(require('...messaging'), 'hasPermission').
+  hasPermission: async () => 1,
+  requestPermission: async () => 1,
+  isDeviceRegisteredForRemoteMessages: () => true,
+}));
+
+jest.mock('@react-native-firebase/crashlytics', () => ({
+  __esModule: true,
+  getCrashlytics: jest.fn(() => ({})),
+  log: jest.fn(),
+  recordError: jest.fn(),
+  crash: jest.fn(),
+  setUserId: jest.fn(async () => null),
+  setAttribute: jest.fn(async () => null),
+  setAttributes: jest.fn(async () => null),
+  setCrashlyticsCollectionEnabled: jest.fn(async () => null),
+}));
+
+jest.mock('@react-native-firebase/analytics', () => ({
+  __esModule: true,
+  getAnalytics: jest.fn(() => ({})),
+  logEvent: jest.fn(async () => undefined),
+  setUserId: jest.fn(async () => undefined),
+  setUserProperty: jest.fn(async () => undefined),
+  setAnalyticsCollectionEnabled: jest.fn(async () => undefined),
+}));
+
 // Pin the test timezone: the screens format dates with toLocaleDateString
 // ('en-IN', …) on UTC timestamps, which shifts a day in behind-UTC timezones
 // — assertions like "12 Aug 2026" must not depend on the host TZ. IST is the

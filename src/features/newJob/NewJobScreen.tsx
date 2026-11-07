@@ -66,6 +66,7 @@ import {
 import { colors, radius, spacing, touch, typography } from '../../theme';
 import { jobService } from '../../services';
 import type { ApiError } from '../../services';
+import { logEvent } from '../../services/telemetry';
 import { upsertJob } from '../jobs';
 import type { RootStackParamList } from '../../navigation/types';
 import { useCustomers } from '../customers';
@@ -370,6 +371,8 @@ export default function NewJobScreen({ navigation, route }: Props) {
       // refetch is throttled, so without this a job created within 15s of the
       // last successful load stays invisible until the throttle expires.
       upsertJob(job);
+      // Firebase analytics (CAP-5 catalog): the owner's create funnel.
+      logEvent('job_created');
       // Fire-and-forget profile refresh with force: a successful mutation
       // invalidates the Home tiles immediately, so returning to Home shows
       // the new count even inside the throttle window. Failures are fine to

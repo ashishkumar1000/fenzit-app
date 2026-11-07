@@ -1,4 +1,7 @@
 <resources>
     <color name="bootsplash_background">#1a56db</color>
     <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- FCM notification accent (default_notification_color) — the brand blue,
+         same value as bootsplash_background but named for its own job. -->
+    <color name="fenzit_brand_blue">#1a56db</color>
 </resources>

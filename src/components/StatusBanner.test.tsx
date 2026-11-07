@@ -19,6 +19,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 const FULL: OwnerNotificationBanner = {
+  customerName: null,
   text: 'Priya · JOB-1042 · On my way',
   technicianName: 'Priya',
   jobNumber: 'JOB-1042',
@@ -102,6 +103,7 @@ describe('StatusBanner', () => {
 
   it('drops the fields the event payload lacked (per-field rendering)', () => {
     const partial: OwnerNotificationBanner = {
+      customerName: null,
       text: 'Priya · On my way',
       technicianName: 'Priya',
       jobNumber: null,
@@ -117,6 +119,7 @@ describe('StatusBanner', () => {
 
   it('renders the fallback line alone when every field is missing', () => {
     const degraded: OwnerNotificationBanner = {
+      customerName: null,
       text: 'Job status updated',
       technicianName: null,
       jobNumber: null,

@@ -21,6 +21,7 @@ import { EmptyState, InlineError, InlineNotice, Skeleton } from '../components/u
 import { Tile } from '../components/Tile';
 import { colors, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
+import { PushEnableCard } from '../features/push/PushEnableCard';
 import { firstName, loadMyProfile, useMyProfile } from '../features/profile';
 import {
   QuickActions,
@@ -273,6 +274,7 @@ export default function HomeScreen({ navigation }: Props) {
           contentContainerStyle={styles.newUserContent}
           refreshControl={refreshControl}>
           {errorBanner}
+          <PushEnableCard />
           {quickActions}
           {attendanceTile}
 
@@ -312,6 +314,7 @@ export default function HomeScreen({ navigation }: Props) {
         contentContainerStyle={styles.content}
         refreshControl={refreshControl}>
         {errorBanner}
+        <PushEnableCard />
         {quickActions}
         {attendanceTile}
 

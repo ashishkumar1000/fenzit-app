@@ -37,6 +37,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import NetInfo from '@react-native-community/netinfo';
 import { Button, Eyebrow, InlineError } from '../../components/ui';
+import { PushEnableCard } from '../push/PushEnableCard';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
 import { firstName, useMyProfile } from '../profile';
@@ -172,6 +173,9 @@ export default function TodayScreen() {
               <InlineError message={errorToday} onDismiss={() => setErrorDismissed(true)} />
             </View>
           ) : null}
+          {/* UX spec: the one-time notifications-off card on the
+              technician's home surface. */}
+          <PushEnableCard />
           <SectionList
           sections={sections}
           keyExtractor={item => item.id}

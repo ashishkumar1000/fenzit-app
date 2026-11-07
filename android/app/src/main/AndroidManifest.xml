@@ -4,6 +4,19 @@
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <!-- Firebase push (Firebase plan Phase 1): the runtime notification
+       permission for Android 13+ — asked in context (primer / inbox card),
+       never at boot. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Firebase Analytics auto-merges the advertising-ID permission into the
+       merged manifest; Play blocks releases whose advertising-ID declaration
+       disagrees with it (we declare "does not use"). Strip it — the same
+       tools:node pattern as the FGS strip below. Collection is also turned
+       off via google_analytics_adid_collection_enabled in firebase.json
+       (RNFB injects that meta-data itself — never hand-write a duplicate). -->
+  <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+  <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
   <!-- react-native-nitro-geolocation merges these in for its background
        tracking service, but this app only ever uses one-shot location
        (getCurrentPosition / watchPosition while the app is open). Play's
@@ -29,6 +42,21 @@
     <meta-data
       android:name="com.google.android.geo.API_KEY"
       android:value="${mapsApiKey}" />
+    <!-- Firebase push: the OS-posted notification's small icon (the white
+         bootsplash F — notification small icons are alpha-masked) and its
+         accent colour. The notification CHANNELS themselves (UX spec:
+         fenzit_jobs / fenzit_attendance / fenzit_reports / fenzit_default)
+         are created natively in MainApplication.onCreate; fenzit_default
+         is the fallback channel id RNFB injects from firebase.json. -->
+    <meta-data
+      android:name="com.google.firebase.messaging.default_notification_icon"
+      android:resource="@drawable/ic_notification" />
+    <!-- RNFB declares this meta-data itself (@color/white) — the plan's
+         tools:replace override wins with the brand blue. -->
+    <meta-data
+      android:name="com.google.firebase.messaging.default_notification_color"
+      android:resource="@color/fenzit_brand_blue"
+      tools:replace="android:resource" />
     <activity
       android:name=".MainActivity"
       android:label="@string/app_name"
@@ -40,6 +68,14 @@
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <!-- Push tap (backend sends android.notification.clickAction with this
+           exact action): a tap on a CLOSED app starts this activity with the
+           push's data in the intent, so the app can route to the right
+           screen. Must match PUSH_TAP_CLICK_ACTION in fenzit-be. -->
+      <intent-filter>
+        <action android:name="com.fenzit.PUSH_TAP" />
+        <category android:name="android.intent.category.DEFAULT" />
       </intent-filter>
     </activity>
   </application>

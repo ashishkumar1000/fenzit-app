@@ -18,6 +18,7 @@ import type {
   GenericNotificationCardData,
 } from '../notificationEventRegistry';
 import type { LeaveNotificationCardData } from '../leaveNotificationModel';
+import type { JobAssignedNotificationCardData } from '../jobAssignedNotificationModel';
 
 /**
  * `onPress` — Story 15-10: attendance cards render through this component
@@ -33,7 +34,8 @@ interface GenericNotificationCardProps {
   card:
     | GenericNotificationCardData
     | AttendanceNotificationCardData
-    | LeaveNotificationCardData;
+    | LeaveNotificationCardData
+    | JobAssignedNotificationCardData;
   onPress?: () => void;
   /** Replaces the default bell glyph (the leave cards' D5 icon column). */
   icon?: ReactNode;

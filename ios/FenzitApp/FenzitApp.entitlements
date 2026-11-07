@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push Notifications capability (FCM delivery routes via APNs; delivery
+	     itself stays gated on Apple org enrollment + the APNs auth key).
+	     "development" here; App Store distribution upgrades it automatically
+	     under automatic signing. Device signing needs a paid org team. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

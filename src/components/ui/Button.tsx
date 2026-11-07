@@ -63,6 +63,9 @@ export type ButtonProps = {
    * dimmed visuals).
    */
   accessibilityState?: PressableProps['accessibilityState'];
+  /** Accessible name override for the pressable (screen readers) — e.g.
+   *  "Allow Notifications" when the visible label alone is ambiguous. */
+  accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -100,6 +103,7 @@ export function Button({
   onPress,
   testID,
   accessibilityState,
+  accessibilityLabel,
   style,
 }: ButtonProps) {
   const s = sizeStyles[size];
@@ -131,6 +135,7 @@ export function Button({
         onPress={onPress}
         testID={testID}
         accessibilityState={accessibilityState}
+        accessibilityLabel={accessibilityLabel}
         onPressIn={disabled || loading ? undefined : pressIn}
         onPressOut={disabled || loading ? undefined : pressOut}
         android_ripple={{ color: 'transparent' }}

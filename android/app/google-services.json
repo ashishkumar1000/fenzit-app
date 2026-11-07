@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "686145154578",
+    "project_id": "fenzit",
+    "storage_bucket": "fenzit.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:686145154578:android:9db301800ea51b6ffdf2cb",
+        "android_client_info": {
+          "package_name": "com.fenzit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEgD0xFH9U5x99kKex-0NG9Kj48-30Goc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

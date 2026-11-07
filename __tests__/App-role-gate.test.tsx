@@ -77,6 +77,20 @@ jest.mock('../src/features/notifications/RealtimeBridge', () => {
   const { Text } = require('react-native');
   return { RealtimeBridge: () => <Text testID="realtime-bridge">bridge</Text> };
 });
+// FirebaseBridge is stubbed the same way as RealtimeBridge — this file pins
+// App's DECISION to mount the bridges, not the bridges themselves (they are
+// tested in isolation in their own features). Without the stub, the real
+// bridge would run Firebase/listener code (and the real profile store) in
+// what is a navigation-gate test.
+jest.mock('../src/features/push', () => {
+  const { Text } = require('react-native');
+  return {
+    FirebaseBridge: () => <Text testID="firebase-bridge">push bridge</Text>,
+    flushPendingPushTap: jest.fn(),
+    retryPendingDeletion: jest.fn(async () => undefined),
+    unregisterPush: jest.fn(async () => undefined),
+  };
+});
 
 import App from '../src/App';
 

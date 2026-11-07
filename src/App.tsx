@@ -39,12 +39,23 @@ import {
   useRemoteConfig,
 } from './features/remoteConfig';
 import { RealtimeBridge } from './features/notifications/RealtimeBridge';
+// Firebase (spec CAP-1/3/4/5): the push bridge mounts beside RealtimeBridge
+// in BOTH role branches; the 401 handler drops the token locally; the
+// container's onReady flushes a cold-start push tap held before navigation
+// existed.
+import {
+  FirebaseBridge,
+  flushPendingPushTap,
+  retryPendingDeletion,
+  unregisterPush,
+} from './features/push';
 import {
   refreshRemoteConfig,
   runAllResets,
   setOnForbidden,
   setOnUnauthorized,
 } from './services';
+import { logEvent } from './services/telemetry';
 import { checkMembershipAfterForbidden } from './features/auth/membershipCheck';
 import { syncSessionFromServer } from './features/auth/sessionSync';
 
@@ -63,6 +74,14 @@ function App() {
   // useRemoteConfig change subscription, never via this effect.
   useEffect(() => {
     refreshRemoteConfig();
+    // Firebase analytics (CAP-5): `app_open` once per cold start — this
+    // effect runs exactly once per JS context.
+    logEvent('app_open');
+    // Firebase push (frozen matrix "Shared phone"): a failed offline-logout
+    // token deletion retries on the next start, signed in or not, BEFORE
+    // any new registration (FirebaseBridge's own registration awaits the
+    // same retry — this call covers the signed-out starts).
+    void retryPendingDeletion();
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') {
         refreshRemoteConfig();
@@ -76,10 +95,13 @@ function App() {
   // FIRST, then the auth gate flips — screens unmount into a clean world,
   // and the login screen shows the "Session expired" notice. The interceptor
   // in apiClient fires this at most once per expiry event (deduped), and
-  // never for a login 401 (no token was attached).
+  // never for a login 401 (no token was attached). Firebase push (frozen
+  // matrix "Forced logout"): the FCM token is deleted LOCALLY only — the
+  // backend row stays (the next sign-in's registration rebinds it).
   useEffect(() => {
     setOnUnauthorized(() => {
       runAllResets();
+      void unregisterPush({ notifyBackend: false });
       expireSession();
     });
     return () => setOnUnauthorized(null);
@@ -125,6 +147,9 @@ function App() {
       <AuthFlow
         intent={intent}
         onComplete={result => {
+          // Firebase analytics (CAP-5): the catalog `login` event — one per
+          // successful sign-in completion.
+          logEvent('login');
           // Gating fields only — name/phone/company come from `GET /users/me`
           // via `useMyProfile`, so there's one authoritative copy of them.
           completeAuth({
@@ -160,9 +185,10 @@ function App() {
     // one bridge for every role (the hook routes per role inside; the
     // employee's socket listens on their own topic only).
     content = (
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} onReady={flushPendingPushTap}>
         <TechnicianRootNavigator />
         <RealtimeBridge />
+        <FirebaseBridge />
       </NavigationContainer>
     );
   } else {
@@ -174,9 +200,10 @@ function App() {
     // so a top-level hook would run Realtime code for unsigned users too.
     // The bridge re-checks the session internally as well.
     content = (
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} onReady={flushPendingPushTap}>
         <RootNavigator />
         <RealtimeBridge />
+        <FirebaseBridge />
       </NavigationContainer>
     );
   }

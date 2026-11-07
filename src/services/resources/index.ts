@@ -141,6 +141,8 @@ export type {
   ReportRequestStatus,
   ReportStatusResponse,
 } from './reports';
+export { deviceTokenService } from './deviceTokens';
+export type { DeviceTokenPlatform, RegisterDeviceTokenBody } from './deviceTokens';
 export { authApi } from './authApi';
 export { accountDeletionApi } from './accountDeletion';
 export type { RequestAccountDeletionResponse } from './accountDeletion';

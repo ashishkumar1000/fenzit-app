@@ -15,6 +15,12 @@ buildscript {
         classpath("com.android.tools.build:gradle")
         classpath("com.facebook.react:react-native-gradle-plugin")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        // Firebase (Firebase plan Phase 1, RNFB-pinned versions — stack.md):
+        // google-services must be applied BEFORE crashlytics in the app
+        // module (misorder/mismatch is the classic "No Firebase App
+        // '[DEFAULT]'" / "Crashlytics build ID missing" startup crash).
+        classpath("com.google.gms:google-services:4.5.0")
+        classpath("com.google.firebase:firebase-crashlytics-gradle:3.0.8")
     }
 }
 

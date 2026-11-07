@@ -11,13 +11,13 @@
  *      direction means only a signed-in owner/technician enables the hook),
  *   2. runs `useRealtimeNotifications` (AppState-gated socket + role-aware
  *      force-refetch — one hook, no duplicated bridge code per role),
- *   3. renders `StatusBanner` when an owner job-status banner is live,
- *      null otherwise. Technicians get no banner: no job-status events are
- *      ever emitted to them (epic non-goal), and the hook only raises one
- *      on the owner branch.
+ *   3. renders `StatusBanner` when a banner is live, null otherwise.
+ *      Company-wide roles get the job-status banner; the technician gets
+ *      the `job.assigned` assignment banner (UX spec 2026-11-07, the owner
+ *      toast's mirror — 4s, Realtime path only). The hook decides what it
+ *      raises per role; this component only renders it.
  */
 import { useAuth } from '../auth/useAuth';
-import { isCompanyWideRole } from '../auth/roles';
 import { hasCompanyAccess } from '../auth/useRole';
 import { useRealtimeNotifications } from './useRealtimeNotifications';
 import { StatusBanner } from '../../components/StatusBanner';
@@ -31,8 +31,9 @@ export function RealtimeBridge() {
 
   const { banner } = useRealtimeNotifications({ enabled: isEnabled });
 
-  // Job-status banners are for the company-wide roles (admin, viewer).
-  if (!isEnabled || !isCompanyWideRole(session?.role) || !banner) return null;
+  // Which banner a role may see is the HOOK's decision (owner job-status
+  // vs technician assignment) — this component renders whatever it raised.
+  if (!isEnabled || !banner) return null;
 
   return <StatusBanner banner={banner} />;
 }

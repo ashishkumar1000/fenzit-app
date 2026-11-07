@@ -1,0 +1,7 @@
+{
+  "react-native": {
+    "messaging_android_notification_channel_id": "fenzit_default",
+    "crashlytics_javascript_exception_handler_chaining_enabled": false,
+    "google_analytics_adid_collection_enabled": false
+  }
+}

@@ -145,6 +145,11 @@ export function groupNotificationsByJob(
     // The null guard is the same exclusion, kept for any future job-less
     // event type.
     if (n.jobId === null) continue;
+    // Firebase plan (user decision 2026-11-07): a `job.assigned` row carries
+    // a job id but is an ASSIGNMENT notice, not a workflow step — its card
+    // is built separately (jobAssignedNotificationModel.ts) and it must
+    // never appear as a stage on the job's timeline.
+    if (n.eventType === 'job.assigned') continue;
     const group = byJob.get(n.jobId);
     if (group) group.push(n);
     else byJob.set(n.jobId, [n]);
