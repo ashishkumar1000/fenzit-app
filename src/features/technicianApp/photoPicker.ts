@@ -69,7 +69,12 @@ export function validateAsset(asset: { mimeType: string; fileSize: number }): st
 }
 
 /** Optional picker settings. `maxDimension` bounds the longest edge in pixels. */
-export type PickOptions = { maxDimension?: number };
+export type PickOptions = {
+  maxDimension?: number;
+  /** When set, "Take photo" calls this instead of the system camera (the
+   *  caller shows its own camera, e.g. one with a face guide). */
+  onTakePhoto?: () => void;
+};
 
 /** What a picker run hands back: normalized files, or a reason it gave up. */
 export type PickOutcome = {
@@ -89,7 +94,11 @@ export function showPhotoSourceAlert(
 ): void {
   const maxDimension = options.maxDimension ?? MAX_DIMENSION;
   Alert.alert('Add photo', undefined, [
-    { text: 'Take photo', onPress: () => void takePhoto(onPicked, maxDimension) },
+    {
+      text: 'Take photo',
+      onPress: () =>
+        options.onTakePhoto ? options.onTakePhoto() : void takePhoto(onPicked, maxDimension),
+    },
     {
       text: 'Choose from gallery',
       onPress: () =>

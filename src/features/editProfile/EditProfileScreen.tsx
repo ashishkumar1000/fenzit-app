@@ -22,6 +22,7 @@ import { loadMyProfile, setProfileFromServer, useMyProfile } from '../profile';
 import { useCanWrite } from '../auth';
 import { CompanyDetailsFields } from './components/CompanyDetailsFields';
 import { ProfilePhotoField } from './components/ProfilePhotoField';
+import { SelfieCamera } from './components/SelfieCamera';
 import { useAvatarUpload } from './useAvatarUpload';
 import { useBusinessTypeOptions } from './useBusinessTypeOptions';
 import {
@@ -216,6 +217,11 @@ function EditProfileForm({ profile, canEdit, onDone }: FormProps) {
         </Button>
         {saveHint ? <Text style={styles.hint}>{saveHint}</Text> : null}
       </ScrollView>
+      <SelfieCamera
+        visible={photo.cameraOpen}
+        onClose={photo.closeCamera}
+        onCaptured={photo.onCaptured}
+      />
     </SafeAreaView>
   );
 }

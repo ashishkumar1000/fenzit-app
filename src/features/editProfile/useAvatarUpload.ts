@@ -1,7 +1,7 @@
 /**
  * useAvatarUpload — change the signed-in person's own photo.
  *
- * Flow: pick (camera or gallery, downscaled to 512 px) → check type and size
+ * Flow: pick (camera → square crop, or gallery downscaled to 512 px) → check type and size
  * on the device → ask the server for an upload link → PUT the file to storage
  * → confirm, so the server checks the file and saves it → store the fresh
  * profile. The server's check on confirm is the real gate; this one only
@@ -12,8 +12,10 @@ import { usersApi, type ApiError } from '../../services';
 import { currentResetEpoch } from '../../services/resetRegistry';
 import { putToPresignedUrl } from '../../utils/r2Upload';
 import { showPhotoSourceAlert, type PickOutcome } from '../technicianApp/photoPicker';
+import type { PickedFile } from '../technicianApp/useAttachmentUpload';
 import { setProfileFromServer } from '../profile';
 import { AVATAR_MAX_BYTES, AVATAR_MAX_DIMENSION } from './profileDraft';
+import { cropAvatar } from './avatarCrop';
 
 const WRONG_TYPE = 'Use a JPG or PNG photo.';
 const TOO_BIG = 'Photo must be 2 MB or smaller. Try a smaller photo.';
@@ -31,6 +33,7 @@ function uploadErrorMessage(err: unknown): string {
 export function useAvatarUpload() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const upload = useCallback(async (file: { fileUri: string; mimeType: string; fileSize: number }) => {
     if (file.mimeType !== 'image/jpeg' && file.mimeType !== 'image/png') {
@@ -76,8 +79,29 @@ export function useAvatarUpload() {
   );
 
   const changePhoto = useCallback(() => {
-    showPhotoSourceAlert(1, onPicked, { maxDimension: AVATAR_MAX_DIMENSION });
+    showPhotoSourceAlert(1, onPicked, {
+      maxDimension: AVATAR_MAX_DIMENSION,
+      // "Take photo" opens the in-app camera with a face guide, not the
+      // system camera.
+      onTakePhoto: () => setCameraOpen(true),
+    });
   }, [onPicked]);
 
-  return { busy, error, changePhoto };
+  const closeCamera = useCallback(() => setCameraOpen(false), []);
+
+  // The camera photo is cropped to a square first; the person can back out of
+  // the cropper, which sends nothing.
+  const onCaptured = useCallback(
+    (file: PickedFile) => {
+      setCameraOpen(false);
+      cropAvatar(file.fileUri)
+        .then((cropped) => {
+          if (cropped) void upload(cropped);
+        })
+        .catch(() => setError(GENERIC));
+    },
+    [upload],
+  );
+
+  return { busy, error, changePhoto, cameraOpen, closeCamera, onCaptured };
 }
