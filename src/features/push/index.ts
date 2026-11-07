@@ -8,7 +8,6 @@
 export { FirebaseBridge } from './FirebaseBridge';
 export { flushPendingPushTap } from './pushTap';
 export { unregisterPush } from './pushToken';
-export { retryPendingDeletion } from './pushToken';
 export { PushPermissionCard } from './PushPermissionCard';
 export { PushEnableCard } from './PushEnableCard';
 export {

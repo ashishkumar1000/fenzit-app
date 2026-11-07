@@ -15,8 +15,8 @@
  *      `onNotificationOpenedApp` background) → the bell's shared tap
  *      mapping via `navigationRef` (cold-start taps are HELD until the
  *      containers' `onReady` flushes them),
- *   5. stamps the telemetry identity (Analytics + Crashlytics) on profile
- *      change and clears it when the session goes away.
+ *   5. stamps the telemetry role (Analytics + Crashlytics; no user id) on
+ *      profile change and clears it when the session goes away.
  *
  * Renders null always — no UI.
  */
@@ -37,8 +37,9 @@ import { hasCompanyAccess } from '../auth/useRole';
 import { useMyProfile } from '../profile/useMyProfile';
 import { refreshStoresForEvent } from '../notifications/useRealtimeNotifications';
 import type { UserRole } from '../../services';
-import { setTelemetryUser, clearTelemetryUser } from '../../services/telemetry';
+import { setTelemetryRole, clearTelemetryRole } from '../../services/telemetry';
 import { messageData, handlePushTap } from './pushTap';
+import { claimLaunchTap } from './pendingTapTarget';
 import { registerFcmToken } from './pushToken';
 
 export function FirebaseBridge() {
@@ -93,10 +94,16 @@ export function FirebaseBridge() {
     const unsubscribeOpened = onNotificationOpenedApp(messaging, message => {
       handlePushTap(message, roleRef.current);
     });
+    // Launch tap: handled once per process. The claim is taken only when the
+    // tap is actually handled, so a read cut short by teardown or a failed
+    // read leaves the launch tap for the next mount. A later sign-in on this
+    // phone finds the claim spent and must not replay it.
     void (async () => {
       try {
         const initial = await getInitialNotification(messaging);
-        if (!disposed && initial) handlePushTap(initial, roleRef.current);
+        if (!disposed && initial && claimLaunchTap()) {
+          handlePushTap(initial, roleRef.current);
+        }
       } catch (err) {
         console.warn('[push] initial notification read failed:', err);
       }
@@ -113,14 +120,14 @@ export function FirebaseBridge() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
-  // Telemetry identity (CAP-4/5): stamp on profile change, clear whenever
-  // this effect tears down (role-gate unmount on logout / forced 401 —
-  // profile resets to null through the global reset first).
+  // Telemetry role (CAP-4/5): stamp on profile change, clear whenever this
+  // effect tears down (role-gate unmount on logout / forced 401 — profile
+  // resets to null through the global reset first). Role only, no user id.
   const userId = profile?.id ?? null;
   const userRole = profile?.role ?? null;
   useEffect(() => {
-    if (userId !== null) setTelemetryUser(userId, userRole);
-    return () => clearTelemetryUser();
+    if (userId !== null) setTelemetryRole(userRole);
+    return () => clearTelemetryRole();
   }, [userId, userRole]);
 
   return null;

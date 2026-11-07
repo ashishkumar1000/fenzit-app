@@ -28,3 +28,17 @@ export function takePendingPushTap(): NotificationTapTarget | null {
 export function discardPendingPushTap(): void {
   pendingTarget = null;
 }
+
+/**
+ * The launch tap (the notification that opened the app) is read ONCE per
+ * process. `getInitialNotification` keeps returning the same message, so
+ * without this a tap made before sign-in would replay after login — for
+ * whoever signs in on that phone next. Returns true the first time only.
+ */
+let launchTapClaimed = false;
+
+export function claimLaunchTap(): boolean {
+  if (launchTapClaimed) return false;
+  launchTapClaimed = true;
+  return true;
+}

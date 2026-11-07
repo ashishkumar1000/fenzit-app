@@ -46,7 +46,6 @@ import { RealtimeBridge } from './features/notifications/RealtimeBridge';
 import {
   FirebaseBridge,
   flushPendingPushTap,
-  retryPendingDeletion,
   unregisterPush,
 } from './features/push';
 import {
@@ -54,10 +53,15 @@ import {
   runAllResets,
   setOnForbidden,
   setOnUnauthorized,
+  storage,
 } from './services';
 import { logEvent } from './services/telemetry';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { checkMembershipAfterForbidden } from './features/auth/membershipCheck';
 import { syncSessionFromServer } from './features/auth/sessionSync';
+import { claimLaunchTap } from './features/push/pendingTapTarget';
+
+const LEGACY_PENDING_DELETION_KEY = 'fenzit.push.pendingTokenDeletion';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -72,16 +76,24 @@ function App() {
   // every foreground return (throttled inside the service — a cold start
   // always fetches). The gate/banner below re-render through the
   // useRemoteConfig change subscription, never via this effect.
+  // A launch with no company access (signed out, removed, or staff) mounts no
+  // FirebaseBridge, so nothing would consume the launch tap. Spend the one-shot
+  // now, so a later sign-in in this process cannot replay it.
+  useEffect(() => {
+    if (!hasCompanyAccess(session)) claimLaunchTap();
+  }, [session]);
+
+  // Legacy slot from the removed pending-token-deletion queue. It held a
+  // session bearer in plain text; no code reads it any more, so drop it.
+  useEffect(() => {
+    storage.remove(LEGACY_PENDING_DELETION_KEY);
+  }, []);
+
   useEffect(() => {
     refreshRemoteConfig();
     // Firebase analytics (CAP-5): `app_open` once per cold start — this
     // effect runs exactly once per JS context.
     logEvent('app_open');
-    // Firebase push (frozen matrix "Shared phone"): a failed offline-logout
-    // token deletion retries on the next start, signed in or not, BEFORE
-    // any new registration (FirebaseBridge's own registration awaits the
-    // same retry — this call covers the signed-out starts).
-    void retryPendingDeletion();
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') {
         refreshRemoteConfig();
@@ -209,17 +221,19 @@ function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+    <AppErrorBoundary>
+      <SafeAreaProvider>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
-      {!updateRequired && <MaintenanceBanner text={config.maintenance_banner} />}
+        {!updateRequired && <MaintenanceBanner text={config.maintenance_banner} />}
 
-      {content}
+        {content}
 
-      {splashVisible && (
-        <AnimatedBootSplash onAnimationEnd={() => setSplashVisible(false)} />
-      )}
-    </SafeAreaProvider>
+        {splashVisible && (
+          <AnimatedBootSplash onAnimationEnd={() => setSplashVisible(false)} />
+        )}
+      </SafeAreaProvider>
+    </AppErrorBoundary>
   );
 }
 

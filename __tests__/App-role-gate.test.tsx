@@ -54,6 +54,8 @@ jest.mock('../src/services', () => ({
   setOnForbidden: jest.fn(),
   // App pulls server-driven config on mount + foreground (remoteConfig spec).
   refreshRemoteConfig: jest.fn(),
+  // App clears the legacy pending-deletion MMKV slot on mount.
+  storage: { remove: jest.fn() },
 }));
 jest.mock('../src/navigation/RootNavigator', () => {
   const { Text } = require('react-native');
@@ -87,7 +89,6 @@ jest.mock('../src/features/push', () => {
   return {
     FirebaseBridge: () => <Text testID="firebase-bridge">push bridge</Text>,
     flushPendingPushTap: jest.fn(),
-    retryPendingDeletion: jest.fn(async () => undefined),
     unregisterPush: jest.fn(async () => undefined),
   };
 });

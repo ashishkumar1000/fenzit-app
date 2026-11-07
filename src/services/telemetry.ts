@@ -22,14 +22,13 @@ import { getApp } from '@react-native-firebase/app';
 import {
   getAnalytics,
   logEvent as fbLogEvent,
-  setUserId as analyticsSetUserId,
   setUserProperty,
 } from '@react-native-firebase/analytics';
 import {
   getCrashlytics,
   log as crumb,
+  recordError,
   setAttribute,
-  setUserId as crashlyticsSetUserId,
 } from '@react-native-firebase/crashlytics';
 
 /** Analytics param values — the subset Firebase accepts and we send. */
@@ -108,27 +107,33 @@ export function logEvent(
 }
 
 /**
- * Stamps the signed-in user on Analytics + Crashlytics: the id on both, the
- * role as an Analytics user property and a Crashlytics attribute (so a crash
- * report reads "who and which role" without a lookup). A `null` id clears
- * both (logout). Never throws.
+ * Stamps the signed-in ROLE on Analytics (user property) and Crashlytics
+ * (attribute). No user id is sent to either: a role is enough to read a
+ * report, and it keeps the data-safety declarations to device/diagnostic IDs.
+ * A `null` role clears it (logout). Never throws.
  */
-export function setTelemetryUser(userId: string | null, role: string | null): void {
-  guard('analytics user', () => {
-    const analytics = getAnalytics(getApp());
-    void analyticsSetUserId(analytics, userId);
-    void setUserProperty(analytics, 'role', role ?? 'unknown');
+export function setTelemetryRole(role: string | null): void {
+  guard('analytics role', () => {
+    void setUserProperty(getAnalytics(getApp()), 'role', role ?? 'unknown');
   });
-  guard('crashlytics user', () => {
-    const crashlytics = getCrashlytics();
-    void crashlyticsSetUserId(crashlytics, userId ?? '');
-    void setAttribute(crashlytics, 'role', role ?? 'unknown');
+  guard('crashlytics role', () => {
+    void setAttribute(getCrashlytics(), 'role', role ?? 'unknown');
   });
 }
 
 /**
- * Clears the telemetry identity (logout / forced 401). Never throws.
+ * Clears the telemetry role (logout / forced 401). Never throws.
  */
-export function clearTelemetryUser(): void {
-  setTelemetryUser(null, null);
+export function clearTelemetryRole(): void {
+  setTelemetryRole(null);
+}
+
+/**
+ * Reports a JS error that React caught (the error boundary's path). Uncaught
+ * JS errors are reported by Crashlytics' own handler. Never throws.
+ */
+export function recordCrash(error: Error): void {
+  guard('crashlytics error', () => {
+    recordError(getCrashlytics(), error);
+  });
 }

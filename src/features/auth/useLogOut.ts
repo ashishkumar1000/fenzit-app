@@ -17,7 +17,7 @@
 import { useCallback } from 'react';
 import { runAllResets } from '../../services';
 import { getAuthToken, clearAuthToken } from '../../services/authToken';
-import { clearTelemetryUser } from '../../services/telemetry';
+import { clearTelemetryRole } from '../../services/telemetry';
 import { unregisterPush } from '../push/pushToken';
 import { useAuth } from './useAuth';
 
@@ -28,7 +28,7 @@ export function useLogOut(): () => void {
     clearAuthToken();
     // Fire-and-forget: logout never waits on the network (frozen matrix).
     void unregisterPush({ notifyBackend: true, bearer });
-    clearTelemetryUser();
+    clearTelemetryRole();
     runAllResets();
     reset();
   }, [reset]);

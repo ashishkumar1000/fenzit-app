@@ -171,21 +171,6 @@ export function CameraArt({ size = 44 }: ArtProps) {
   );
 }
 
-/** Permissions row: a bell mid-ring with its sound arcs (Firebase push). */
-export function BellArt({ size = 44 }: ArtProps) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-      <Path d="M24 8c-6 0-10.4 4.5-10.4 10.6V26l-3 5.4c-.7 1.3.2 2.6 1.7 2.6h23.4c1.5 0 2.4-1.3 1.7-2.6l-3-5.4v-7.4C34.4 12.5 30 8 24 8z" fill={BLUE} />
-      <Circle cx={24} cy={37.5} r={3.2} fill={BLUE_DK} />
-      <Circle cx={24} cy={20} r={3.4} fill="#FFFFFF" />
-      <Path d="M8.5 17a15.7 15.7 0 014.4-8.6" stroke={BLUE_SOFT} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="3 4.5" />
-      <Path d="M39.5 17a15.7 15.7 0 00-4.4-8.6" stroke={BLUE_SOFT} strokeWidth={1.8} strokeLinecap="round" strokeDasharray="3 4.5" />
-      <Circle cx={40} cy={29} r={2} fill={palette.blue200} />
-      <Circle cx={8} cy={29} r={2} fill={palette.blue200} />
-    </Svg>
-  );
-}
-
 /** Role pick — owner: a shopfront with awning and a pennant flag. */
 export function OwnerArt({ size = 44 }: ArtProps) {
   return (

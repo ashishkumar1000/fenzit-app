@@ -24,11 +24,6 @@ import { installedAppVersion } from '../../services/clientMetadata';
 import { deviceTokenService } from '../../services/resources/deviceTokens';
 import type { DeviceTokenPlatform } from '../../services/resources/deviceTokens';
 import { storage } from '../../services/storage';
-import {
-  clearPendingDeletion,
-  readPendingDeletion,
-  savePendingDeletion,
-} from './pendingDeletion';
 // NOTE: imported from pendingTapTarget (NOT pushTap) so the logout chain
 // (useLogOut → this module) never pulls in navigation/navigationRef —
 // several screen suites partially mock @react-navigation/native.
@@ -54,42 +49,12 @@ function forgetPushToken(): void {
 }
 
 /**
- * Retries a pending logout deletion (signed in or not — App.tsx kicks this
- * once per cold start, and registration awaits it too, so a stale token's
- * DELETE lands BEFORE the next register). Serialized: one in-flight retry
- * at a time; a failure keeps the pending slot for the next start.
- */
-let retryInFlight: Promise<void> | null = null;
-
-export function retryPendingDeletion(): Promise<void> {
-  // Clear the in-flight slot on every outcome, including "nothing pending".
-  // Otherwise a settled promise stays cached and later failed logouts in this
-  // session never get retried.
-  retryInFlight ??= runPendingDeletionRetry().finally(() => {
-    retryInFlight = null;
-  });
-  return retryInFlight;
-}
-
-async function runPendingDeletionRetry(): Promise<void> {
-  const pending = readPendingDeletion();
-  if (!pending) return;
-  try {
-    await deviceTokenService.unregister(pending.token, pending.bearer);
-    clearPendingDeletion();
-  } catch (err) {
-    console.warn('[push] pending token deletion retry failed (kept):', err);
-  }
-}
-
-/**
  * Registers one FCM token against the signed-in user (an idempotent upsert
  * on the token PK — StrictMode double-mounts and rotation both land here).
- * A failed offline-logout deletion retries FIRST, so a shared phone's token
- * rebinds to the new user with the old user's row already gone.
+ * A shared phone's token rebinds to the new user on this upsert, so the old
+ * user's row is overwritten rather than left behind.
  */
 export async function registerFcmToken(token: string): Promise<void> {
-  await retryPendingDeletion();
   try {
     await deviceTokenService.register({
       token,
@@ -108,8 +73,10 @@ export async function registerFcmToken(token: string): Promise<void> {
  * DELETEs the backend row with the captured bearer — the caller passes
  * `bearer` when it has already cleared the stored session token (useLogOut
  * clears FIRST, so the fallback `getAuthToken()` read would find nothing).
- * A failed backend DELETE records the pending slot; a forced-401 call
- * (`notifyBackend: false`) is local-only per the matrix. Never throws.
+ * A failed backend DELETE is log-only: the bearer is never stored, and the
+ * local FCM token deletion above already stops delivery to this device. A
+ * forced-401 call (`notifyBackend: false`) is local-only per the matrix.
+ * Never throws.
  */
 export async function unregisterPush(opts: {
   notifyBackend: boolean;
@@ -129,9 +96,10 @@ export async function unregisterPush(opts: {
   if (!bearer) return;
   try {
     await deviceTokenService.unregister(token, bearer);
-    clearPendingDeletion();
   } catch (err) {
-    console.warn('[push] backend token delete failed — will retry next start:', err);
-    savePendingDeletion(token, bearer);
+    // No retry queue and no stored bearer. The FCM token is already deleted
+    // above, so this device gets no more pushes; the push sweep removes the
+    // stale row on its next send (FCM reports it unregistered).
+    console.warn('[push] backend token delete failed (sweep cleans up):', err);
   }
 }

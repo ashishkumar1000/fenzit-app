@@ -5,10 +5,9 @@
  * (a permanently-denied answer — Android "don't ask again" — opens the
  * app's Settings page, since the OS won't re-prompt). iOS camera is the one
  * state JS cannot read, so that row keeps the honest ask-at-first-use path:
- * the request fires at the first photo step. The notifications row
- * (Firebase plan, D4 lifted) probes and asks through the push feature's
- * permission seam — iOS denial there degrades to in-app-only, Android's
- * never-ask goes to Settings.
+ * the request fires at the first photo step. Notifications are NOT asked
+ * here: the push permission card asks in context (Home, Today, Jobs and the
+ * inbox), when the person can see what a notification will tell them.
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -33,11 +32,7 @@ import { Check, Info } from 'lucide-react-native';
 import { Button } from '../../components/ui';
 import { colors, palette, radius, shadow, spacing, typography, fontSize, weight, leading } from '../../theme';
 import type { UserRole } from '../../services';
-import {
-  notificationPermissionState,
-  requestNotificationPermission,
-} from '../push/notificationPermission';
-import { BellArt, CameraArt, LocationArt, ShieldArt } from './components/artwork';
+import { CameraArt, LocationArt, ShieldArt } from './components/artwork';
 
 type Props = {
   role: UserRole | null;
@@ -50,7 +45,7 @@ type Props = {
 
 type Row = {
   key: string;
-  perm: 'location' | 'camera' | 'notifications';
+  perm: 'location' | 'camera';
   art: ReactNode;
   title: string;
   badge: string;
@@ -62,16 +57,7 @@ type Row = {
  *  (iOS camera) — the row keeps the ask-at-first-use path. */
 type PermState = 'checking' | 'granted' | 'denied' | 'unknown';
 
-type PermKey = 'location' | 'camera' | 'notifications';
-
-// Notifications row copy (UX pass pending — Sally's spec will revise the
-// wording): named, in one place, per role.
-const NOTIFICATIONS_ROW_TITLE = 'Notifications';
-const NOTIFICATIONS_ROW_BADGE = 'RECOMMENDED';
-const NOTIFICATIONS_ROW_BODY_STAFF =
-  'Nudges about your jobs, attendance and leave \u2014 even when the app is closed. Turn them off anytime.';
-const NOTIFICATIONS_ROW_BODY_OWNER =
-  'Job assignments, leave requests and report updates \u2014 even when the app is closed. Turn them off anytime.';
+type PermKey = 'location' | 'camera';
 
 export default function PermissionsPrimerScreen({ role, notice, onContinue }: Props) {
   const isStaff = role === 'employee';
@@ -80,7 +66,6 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
   const [perms, setPerms] = useState<Record<PermKey, PermState>>(() => ({
     location: 'checking',
     camera: Platform.OS === 'ios' ? 'unknown' : 'checking',
-    notifications: 'checking',
   }));
 
   const probe = async () => {
@@ -99,13 +84,6 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
         const status = (await checkPermission()) as string;
         setPerms(p => ({ ...p, location: status === 'granted' ? 'granted' : 'denied' }));
       }
-      // Notifications probe (both platforms — the seam handles the Android
-      // API-level rule and iOS's RNFB status internally).
-      const notifications = await notificationPermissionState();
-      setPerms(p => ({
-        ...p,
-        notifications: notifications === 'granted' ? 'granted' : 'denied',
-      }));
     } catch (err) {
       // Fail to 'denied' — the row then offers Allow, and tapping it runs
       // the real request (the attendance probe's fail-open rule).
@@ -113,7 +91,6 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
       setPerms(p => ({
         location: p.location === 'granted' ? 'granted' : 'denied',
         camera: p.camera === 'granted' ? 'granted' : p.camera,
-        notifications: p.notifications === 'granted' ? 'granted' : 'denied',
       }));
     }
   };
@@ -134,7 +111,6 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
     try {
       if (perms.location === 'denied') await allow('location');
       if (perms.camera === 'denied') await allow('camera');
-      if (perms.notifications === 'denied') await allow('notifications');
     } finally {
       setAsking(false);
     }
@@ -163,7 +139,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           const status = (await requestPermission()) as string;
           if (status !== 'granted') await Linking.openSettings();
         }
-      } else if (perm === 'camera') {
+      } else {
         if (Platform.OS === 'android') {
           const result = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.CAMERA,
@@ -177,14 +153,6 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           if (result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
             await Linking.openSettings();
           }
-        }
-      } else {
-        // Notifications (both platforms — the seam routes to the OS prompt):
-        // only Android's permanently-denied answer reroutes to Settings;
-        // a plain denial keeps today's in-app-only behaviour.
-        const result = await requestNotificationPermission();
-        if (result === 'never_ask') {
-          await Linking.openSettings();
         }
       }
     } catch (err) {
@@ -215,15 +183,6 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
       body: isStaff
         ? 'Snap photo proof when a job step asks for it.'
         : 'Photo proof that the work is done.',
-    },
-    {
-      key: 'notifications',
-      perm: 'notifications',
-      art: <BellArt />,
-      title: NOTIFICATIONS_ROW_TITLE,
-      badge: NOTIFICATIONS_ROW_BADGE,
-      badgeFg: colors.primary,
-      body: isStaff ? NOTIFICATIONS_ROW_BODY_STAFF : NOTIFICATIONS_ROW_BODY_OWNER,
     },
   ];
 
