@@ -66,6 +66,7 @@ export function SkillPicker({ title, options, value, onChange, onBrowseAll }: Pr
     if (trimmedQuery) {
       return options.filter(
         skill =>
+          skill.is_fallback === true ||
           skill.name.toLowerCase().includes(trimmedQuery) ||
           skill.description.toLowerCase().includes(trimmedQuery),
       );
@@ -164,7 +165,7 @@ export function SkillPicker({ title, options, value, onChange, onBrowseAll }: Pr
         ) : null}
       </View>
 
-      {trimmedQuery && visibleSkills.length === 0 ? (
+      {trimmedQuery && !visibleSkills.some(skill => skill.is_fallback !== true) ? (
         <Text style={styles.noMatch}>No skills match "{query.trim()}"</Text>
       ) : null}
     </View>

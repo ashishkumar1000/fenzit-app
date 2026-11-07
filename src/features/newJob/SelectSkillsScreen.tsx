@@ -55,6 +55,7 @@ export default function SelectSkillsScreen({ navigation, route }: Props) {
     if (!trimmedQuery) return skills;
     return skills.filter(
       skill =>
+        skill.is_fallback === true ||
         skill.name.toLowerCase().includes(trimmedQuery) ||
         skill.description.toLowerCase().includes(trimmedQuery),
     );

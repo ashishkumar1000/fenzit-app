@@ -29,6 +29,8 @@ export interface Skill {
   name: string;
   description: string;
   icon: string;
+  /** True for the catch-all skill ("Others"): pickers keep it visible during a search. */
+  is_fallback?: boolean;
 }
 
 /** Shape captured when creating a new skill. `name` is trimmed, non-empty, max 100 chars, unique per tenant (case-insensitive) — enforced server-side. */
