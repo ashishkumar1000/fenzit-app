@@ -64,11 +64,9 @@ function renderSection(props: { jobs: ProfileJob[] }) {
       <TodaysJobsSection
         jobs={props.jobs}
         overdueCount={0}
-        technicianCount={1}
         technicians={[]}
         onPressJob={() => {}}
         onPressStrip={() => {}}
-        onPressCreate={() => {}}
       />,
     );
   });

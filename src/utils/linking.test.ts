@@ -148,9 +148,8 @@ describe('openMaps — failure swallowing', () => {
 });
 
 describe('openTel', () => {
-  it('dials countryCode + phoneNumber after checking the scheme', async () => {
+  it('dials countryCode + phoneNumber straight away', async () => {
     await openTel('+91', '9123456780');
-    expect(canOpenURL).toHaveBeenCalledWith('tel:+919123456780');
     expect(openURL).toHaveBeenCalledWith('tel:+919123456780');
   });
 
@@ -169,10 +168,11 @@ describe('openTel', () => {
     warn.mockRestore();
   });
 
-  it('canOpenURL false → nothing dialled, quietly', async () => {
+  it('never consults canOpenURL: Android 11+ reports false for tel without a <queries> entry, and that must not block the call', async () => {
     canOpenURL.mockResolvedValueOnce(false);
     await openTel('+91', '9123456780');
-    expect(openURL).not.toHaveBeenCalled();
+    expect(canOpenURL).not.toHaveBeenCalled();
+    expect(openURL).toHaveBeenCalledWith('tel:+919123456780');
   });
 });
 describe('openWebPage — the fenzit.com legal pages', () => {

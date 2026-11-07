@@ -15,8 +15,10 @@ import { Linking, Platform } from 'react-native';
 /**
  * Dials `countryCode + phoneNumber` (e.g. `+91` + `2121212121` → `tel:+912121212121`).
  *
- * Guarded by `canOpenURL`: on iOS the query itself can reject when the scheme
- * isn't available on the device, and that rejection must be silent here.
+ * No `canOpenURL` gate. On Android 11+ that query returns false unless the app
+ * declares a `<queries>` entry for the tel scheme (package visibility), so
+ * gating on it silently blocked every call button. `openURL` alone is enough:
+ * the try/catch below handles a device with no dialer.
  */
 export async function openTel(countryCode: string, phoneNumber: string): Promise<void> {
   // Blank either half → nothing dialable; quietly do nothing instead of
@@ -24,9 +26,7 @@ export async function openTel(countryCode: string, phoneNumber: string): Promise
   if (!countryCode.trim() || !phoneNumber.trim()) return;
   const url = `tel:${countryCode}${phoneNumber}`;
   try {
-    if (await Linking.canOpenURL(url)) {
-      await Linking.openURL(url);
-    }
+    await Linking.openURL(url);
   } catch (error) {
     console.warn('[linking] openTel failed →', error);
   }

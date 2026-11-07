@@ -116,6 +116,9 @@ export const colors = {
   textBody: palette.gray700,
   textMuted: palette.gray600,
   textDisabled: palette.gray400,
+  // Input placeholder hint — light grey per owner request. gray400 is about
+  // 2.5:1 on white, below WCAG AA's 4.5:1 for text; kept on request.
+  textPlaceholder: palette.gray400,
   textOnColor: palette.gray0,
   textLink: palette.blue600,
 

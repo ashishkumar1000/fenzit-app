@@ -418,7 +418,7 @@ it('renders the strip alone when there are no today jobs but overdue > 0 — the
   expect(allText(renderer)).not.toContain('Nothing scheduled today');
 });
 
-it('shows the empty state (with CTA) when there are no today jobs and overdue is 0', async () => {
+it('shows the empty state without a create button when there are no today jobs and overdue is 0', async () => {
   // Established dashboard requires `hasAnyJobCount` true (Story 1.5 gate);
   // history-only counts (completed/cancelled) keep it established while
   // today/overdue — the fields this section renders — stay empty.
@@ -431,29 +431,6 @@ it('shows the empty state (with CTA) when there are no today jobs and overdue is
   const text = allText(renderer);
   expect(text).toContain('Nothing scheduled today');
   expect(text).toContain("You're all clear. Upcoming work shows in the tiles above.");
-  const cta = renderer.root.findAllByType(Button).find(b => b.props.children === 'Create a job');
-  expect(cta).toBeDefined();
-});
-
-it('hides the "Create a job" CTA when the tenant has no technicians', async () => {
-  // `technicianCount: 0` never reaches HomeScreen's established branch (the
-  // first-run gate requires a technician) — rendered directly to pin the
-  // component's own conditional (AC 7).
-  let renderer!: ReactTestRenderer;
-  await act(async () => {
-    renderer = create(
-      React.createElement(TodaysJobsSection, {
-        jobs: [],
-        overdueCount: 0,
-        technicianCount: 0,
-        technicians: [],
-        onPressJob: jest.fn(),
-        onPressStrip: jest.fn(),
-        onPressCreate: jest.fn(),
-      }),
-    );
-  });
-
   const cta = renderer.root.findAllByType(Button).find(b => b.props.children === 'Create a job');
   expect(cta).toBeUndefined();
 });
@@ -546,20 +523,6 @@ it('pressing the overdue strip navigates to the Jobs tab pre-set to the overdue 
   expect(mockNavigation.navigate).toHaveBeenCalledWith('Jobs', { scope: 'overdue' });
 });
 
-it('pressing "Create a job" in the empty state navigates to NewJob', async () => {
-  const renderer = await mountWithProfile({
-    jobs: { data: [], nextCursor: null, hasMore: false },
-    jobCounts: { today: 0, upcoming: 0, overdue: 0, completed: 3, cancelled: 1 },
-    technicianCount: 2,
-  });
-
-  const cta = renderer.root.findAllByType(Button).find(b => b.props.children === 'Create a job');
-  await act(async () => {
-    cta?.props.onPress();
-  });
-  expect(mockNavigation.navigate).toHaveBeenCalledWith('NewJob');
-});
-
 // --- Bell (Story 3.4) -----------------------------------------------------------
 
 /** The header bell, found by the start of its accessibility label. */
@@ -649,7 +612,6 @@ describe('a viewer (read-only)', () => {
 
     const section = renderer.root.findByType(TodaysJobsSection);
     expect(section.props.pendingLeaveRequests ?? 0).toBe(0);
-    expect(section.props.onPressCreate).toBeUndefined();
   });
 
   it('a first-run account with no jobs does not tell the viewer to create one', async () => {
@@ -660,12 +622,12 @@ describe('a viewer (read-only)', () => {
     expect(text).toContain('Jobs your team creates will show up here.');
   });
 
-  it('the company admin still gets the leave strip count and the create button (control)', async () => {
+  it('the company admin still gets the leave strip count, and the all-clear card has no create button (control)', async () => {
     mockCanWrite = true;
     const renderer = await mountWithProfile(ESTABLISHED);
 
     const section = renderer.root.findByType(TodaysJobsSection);
     expect(section.props.pendingLeaveRequests).toBe(4);
-    expect(section.props.onPressCreate).toBeDefined();
+    expect(renderer.root.findAllByType(Button).find(b => b.props.children === 'Create a job')).toBeUndefined();
   });
 });

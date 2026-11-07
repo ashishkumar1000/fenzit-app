@@ -36,13 +36,11 @@ function baseProps(pendingLeaveRequests?: number): TodaysJobsSectionProps {
   return {
     jobs: [],
     overdueCount: 0,
-    technicianCount: 1,
     technicians: [technician],
     pendingLeaveRequests,
     onPressLeaveBanner: jest.fn(),
     onPressJob: jest.fn(),
     onPressStrip: jest.fn(),
-    onPressCreate: jest.fn(),
   };
 }
 
