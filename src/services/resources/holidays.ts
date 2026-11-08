@@ -33,7 +33,7 @@ export interface Holiday {
 /** `GET /attendance/holidays/impact?date=` — the AD-24 preview body. */
 export interface HolidayImpactResponse {
   date: string;
-  affectedEmployees: { employeeId: string; employeeName: string }[];
+  affectedEmployees: { employeeId: string; employeeName: string; avatarUrl?: string | null }[];
 }
 
 /** `POST /attendance/holidays` body. Date immutable after creation. */

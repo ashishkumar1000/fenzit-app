@@ -9,6 +9,7 @@ import {
 } from '../features/newJob';
 import { JobDetailScreen } from '../features/jobDetail';
 import { NotificationsScreen } from '../features/notifications';
+import { EditProfileScreen } from '../features/editProfile';
 import { ReportsScreen } from '../features/reports';
 import { CustomerDetailScreen } from '../features/customerDetail';
 import { AddCustomerScreen, CustomersScreen } from '../features/customers';
@@ -87,6 +88,11 @@ export default function RootNavigator() {
       <Stack.Screen
         name="Reports"
         component={ReportsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen

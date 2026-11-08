@@ -52,7 +52,7 @@ export function TechnicianPicker({ technicians, selectedId, onSelect, variant = 
       <Input
         value={query}
         onChangeText={setQuery}
-        placeholder="Search technician..."
+        placeholder="Search employee..."
         autoCapitalize="none"
         autoCorrect={false}
         leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
@@ -62,9 +62,9 @@ export function TechnicianPicker({ technicians, selectedId, onSelect, variant = 
           one means "nothing exists yet (or the roster is still loading)", the
           other means "your search was too narrow". Never conflate them. */}
       {technicians.length === 0 ? (
-        <Text style={styles.noMatch}>No technicians added yet.</Text>
+        <Text style={styles.noMatch}>No employees added yet.</Text>
       ) : filtered.length === 0 ? (
-        <Text style={styles.noMatch}>No technician matches that search.</Text>
+        <Text style={styles.noMatch}>No employee matches that search.</Text>
       ) : variant === 'rows' ? (
         <Rows technicians={filtered} selectedId={selectedId} onSelect={onSelect} />
       ) : (
@@ -103,7 +103,7 @@ function Tiles({
             accessibilityLabel={technician.name}
             onPress={() => onSelect(isSelected ? null : technician.id)}
             style={[styles.tile, isSelected && styles.tileSelected]}>
-            <Avatar name={technician.name} size="md" />
+            <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="md" />
             <Text
               numberOfLines={1}
               style={[styles.name, isSelected && styles.nameSelected]}>
@@ -147,7 +147,7 @@ function Rows({
             accessibilityLabel={technician.name}
             onPress={() => onSelect(isSelected ? null : technician.id)}
             style={[styles.listRow, isSelected && styles.listRowSelected]}>
-            <Avatar name={technician.name} size="md" />
+            <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="md" />
             <View style={styles.listRowText}>
               <Text
                 numberOfLines={1}

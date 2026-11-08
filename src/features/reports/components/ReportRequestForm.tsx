@@ -157,7 +157,7 @@ export function ReportRequestForm({
           value={selectedTechnicianIds}
           onChange={ids => onChange({ technicianIds: ids })}
           options={technicianOptions}
-          placeholder="All technicians"
+          placeholder="All employees"
           helper={`Leave empty to include everyone · up to ${MAX_RANGE_DAYS}-day range`}
         />
       )}

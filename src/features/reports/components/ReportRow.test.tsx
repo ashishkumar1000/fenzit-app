@@ -95,7 +95,7 @@ describe('a ready row', () => {
       .join('\n');
     expect(text).toContain('Ready');
     expect(text).toContain('1 Sep – 7 Sep 2026');
-    expect(text).toContain('3 technicians');
+    expect(text).toContain('3 employees');
     expect(text).toContain('Requested 8 Sep, 4:05 PM');
   });
 

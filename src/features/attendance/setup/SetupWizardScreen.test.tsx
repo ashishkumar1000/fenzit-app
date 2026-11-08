@@ -636,7 +636,7 @@ describe('the Employees step (enrolment-lite)', () => {
     mockStepData({ offices: [LIVE_OFFICE], roster: [] });
     const wizard = await renderLoaded();
 
-    expect(hasText(wizard.root, 'Invite technicians first')).toBe(true);
+    expect(hasText(wizard.root, 'Invite employees first')).toBe(true);
     const enableButton = findButton(wizard.root, 'Enable attendance');
     expect(enableButton.props.disabled).toBe(true);
     expect(

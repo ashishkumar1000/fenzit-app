@@ -1,6 +1,6 @@
 /**
  * QuickActions — the three tap targets at the top of Home's dashboard:
- * New job (primary), Add customer, and Add technician. (The old middle tile,
+ * New job (primary), Add customer, and Add employee. (The old middle tile,
  * "Today's jobs", was removed on product feedback 2026-09-20 — the owner can
  * reach the same list via the Jobs tab and the "Today & needs attention"
  * section right below.)
@@ -9,7 +9,7 @@
  * Each tile is an interactive `Card`, so press feedback and the surface
  * treatment come from the design system rather than being re-styled here.
  * The row is also the setup gate: with no technicians, New job disables and
- * Add technician becomes the primary (see `canCreateJob`).
+ * Add employee becomes the primary (see `canCreateJob`).
  *
  * The two "add" tiles carry a plain count line (product feedback 2026-09-20)
  * — muted caption text under the label, no chip/badge around it. Hidden at
@@ -35,7 +35,7 @@ export type QuickActionsProps = {
   /**
    * False while the account has no technicians — a job must be assigned to
    * someone, so the New job tile disables (Button's 0.5-opacity disabled
-   * look) and the Add technician tile takes over as the row's primary.
+   * look) and the Add employee tile takes over as the row's primary.
    */
   canCreateJob: boolean;
   /** Pushes the full-page Add customer form (`returnRouteName: 'Home'`). */
@@ -50,7 +50,7 @@ export type QuickActionsProps = {
 const ICON_SIZE = 26;
 const ICON_STROKE = 1.75;
 /**
- * Labels shrink rather than truncate. "Add technician" is the longest and the
+ * Labels shrink rather than truncate. "Add employee" is the longest and the
  * row splits into thirds, so on a 320px-wide device each tile only has ~64px
  * of inner width — not enough for 14px semibold. Scaling down to 85% (≈12px)
  * covers that; anything wider keeps the full size.
@@ -147,7 +147,7 @@ export function QuickActions({
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={MIN_FONT_SCALE}>
-            Add technician
+            Add employee
           </Text>
           {technicianCount > 0 ? (
             <Text
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     // Padding is `sm` (12), not `md`: at `md` a 380px screen leaves too little
-    // inner width per tile, which clips "Add technician".
+    // inner width per tile, which clips "Add employee".
     // Shared by all three tiles and sized for the count line (icon 26 + gap 8
     // + label ~18 + gap 8 + caption ~16 + padding 24 ≈ 100, plus 4px headroom
     // so the row stays level whether the counts are showing or not.

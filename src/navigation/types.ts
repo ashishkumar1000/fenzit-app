@@ -69,7 +69,7 @@ export type TechnicianTabParamList = {
 export type RootStackParamList = {
   MainTabs: undefined;
   /**
-   * `autoOpenAdd` — Home's "Add technician" quick action pushes this route
+   * `autoOpenAdd` — Home's "Add employee" quick action pushes this route
    * with the Add sheet already open, mirroring the one-tap intent (a plain
    * push would land on the list and force a second tap on "Add"). Params are
    * read once on mount, so the sheet never re-opens on later visits.
@@ -149,6 +149,8 @@ export type RootStackParamList = {
    * Opened from the Account tab's Reports row — no params.
    */
   Reports: undefined;
+  /** Owner-only Edit profile page (name, photo, GST, business types) — no params. */
+  EditProfile: undefined;
   /** Owner-only customer profile + job history — opened with the customer's uuid. */
   CustomerDetail: { customerId: string };
   /**

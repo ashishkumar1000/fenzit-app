@@ -117,7 +117,7 @@ export default function HomeScreen({ navigation }: Props) {
     <QuickActions
       onNewJob={handleNewJob}
       // A job must be assigned to someone — with no technicians yet the New
-      // job tile disables and Add technician takes the primary slot.
+      // job tile disables and Add employee takes the primary slot.
       canCreateJob={hasTechnicians}
       // returnRouteName 'Home' → plain goBack after save; the list the user
       // returns to reads the shared useCustomers store, so no params needed.

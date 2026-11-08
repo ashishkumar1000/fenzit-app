@@ -130,6 +130,13 @@ export interface ApiCustomer {
    * the field entirely.
    */
   addressDetails?: string | null;
+  /**
+   * Saved map pin (null when the customer was saved from typed text only).
+   * Optional on the type: rows cached before the field existed omit it, and
+   * an omitted pin reads as "no pin" in the list warning.
+   */
+  latitude?: number | null;
+  longitude?: number | null;
   jobCount: number;
   /** ISO timestamp of the most recent job, or `null` if they've had none. */
   lastJobDate: string | null;

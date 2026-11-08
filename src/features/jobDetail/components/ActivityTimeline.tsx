@@ -103,6 +103,7 @@ function railMarker(eventType: string) {
  */
 type LocationCaption =
   | { kind: 'chip'; text: string; flagged: boolean }
+  | { kind: 'warning'; text: string }
   | { kind: 'text'; text: string };
 
 function locationCaptionFor(
@@ -119,7 +120,14 @@ function locationCaptionFor(
         : 'Location not captured',
     };
   }
-  if (!jobSite) return { kind: 'text', text: 'Location captured' };
+  // No job site means the customer has no map pin, so no distance can be
+  // measured. Say why, so the owner knows it is a missing pin, not a fault.
+  if (!jobSite) {
+    return {
+      kind: 'warning',
+      text: 'Employee location captured. Customer location not added, so the distance cannot be calculated.',
+    };
+  }
   const metres = haversineMetres(jobSite, {
     latitude: location.latitude,
     longitude: location.longitude,
@@ -161,6 +169,20 @@ export function ActivityTimeline({ entries, workflowTemplate, jobSite }: Props) 
               {(() => {
                 const caption = locationCaptionFor(entry, jobSite);
                 if (!caption) return null;
+                if (caption.kind === 'warning') {
+                  // Its own column wrapper, not captionRow (a row would size the
+                  // chip to its text and push it past the card edge).
+                  return (
+                    <View style={styles.warningRow}>
+                      <Badge
+                        status="scheduled"
+                        tone="soft"
+                        wrap>
+                        {caption.text}
+                      </Badge>
+                    </View>
+                  );
+                }
                 if (caption.kind === 'chip') {
                   return (
                     <View style={styles.captionRow}>
@@ -243,6 +265,9 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  warningRow: {
+    marginTop: spacing.s2,
   },
   captionRow: {
     flexDirection: 'row',

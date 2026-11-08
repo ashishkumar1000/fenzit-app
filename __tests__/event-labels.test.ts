@@ -17,7 +17,7 @@ const KNOWN_EVENT_TYPES = [
 
 const EXPECTED_LABELS: Record<(typeof KNOWN_EVENT_TYPES)[number], string> = {
   job_created: 'Job created',
-  job_reassigned: 'Reassigned to another technician',
+  job_reassigned: 'Reassigned to another employee',
   job_cancelled: 'Job cancelled',
   conflict_resolved: 'Sent a saved update',
 };

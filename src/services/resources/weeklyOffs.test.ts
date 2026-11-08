@@ -93,6 +93,7 @@ describe('weeklyOffsService.setOverride', () => {
     const row = {
       employeeId: 'e1',
       employeeName: 'A',
+      avatarUrl: null,
       current: view([5], '2026-09-27'),
       next: null,
     };

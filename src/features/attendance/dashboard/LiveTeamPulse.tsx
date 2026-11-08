@@ -129,7 +129,7 @@ export function LiveTeamPulse({ employees, onOpenEmployee }: Props) {
             accessibilityLabel={`${a11yName}, ${CHIP_LABELS[row.status]}${detail ? `, ${detail}` : ''}. Tap for the month view.`}
             style={styles.rowCard}>
             <View style={styles.row}>
-              <Avatar name={row.employeeName} size="lg" />
+              <Avatar name={row.employeeName} uri={row.avatarUrl ?? null} size="lg" />
               <View style={styles.rowText}>
                 <Text style={styles.rowName} numberOfLines={1}>
                   {row.employeeName}

@@ -232,7 +232,7 @@ it('shows the Invited caption for a technician still awaiting install', () => {
 
 it('filters rows on search and shows a no-match message', () => {
   const { root } = renderScreen();
-  const input = root.findAllByProps({ placeholder: 'Search technicians' })[0];
+  const input = root.findAllByProps({ placeholder: 'Search employees' })[0];
 
   act(() => {
     input.props.onChangeText('anita');
@@ -247,7 +247,7 @@ it('filters rows on search and shows a no-match message', () => {
   expect(
     root
       .findAllByType(Text)
-      .some(t => nodeText(t.props.children).includes('No technicians match')),
+      .some(t => nodeText(t.props.children).includes('No employees match')),
   ).toBe(true);
 });
 
@@ -255,7 +255,7 @@ it('matches a phone-digit search', () => {
   // Same semantics as the customers picker — digits of the query against the
   // stored bare number.
   const { root } = renderScreen();
-  const input = root.findAllByProps({ placeholder: 'Search technicians' })[0];
+  const input = root.findAllByProps({ placeholder: 'Search employees' })[0];
 
   act(() => {
     input.props.onChangeText('9000000002');
@@ -429,7 +429,7 @@ it('activeOnly with nobody active explains the active-only roster (not the job c
   expect(
     hasText(
       root,
-      'No technicians yet. A job has to be assigned to someone, so add a technician before creating one.',
+      'No employees yet. A job has to be assigned to someone, so add an employee before creating one.',
     ),
   ).toBe(false);
 });
@@ -472,8 +472,8 @@ it('shows a spinner on the first load instead of an empty list', () => {
   expect(root.findAllByType(ActivityIndicator).length).toBeGreaterThan(0);
   // Neither the empty-roster copy nor the search-failure copy may preempt
   // the load.
-  expect(hasText(root, 'No technicians yet')).toBe(false);
-  expect(hasText(root, 'No technicians match')).toBe(false);
+  expect(hasText(root, 'No employees yet')).toBe(false);
+  expect(hasText(root, 'No employees match')).toBe(false);
 });
 
 it('shows the empty-roster copy when the owner has no technicians', () => {
@@ -491,10 +491,10 @@ it('shows the empty-roster copy when the owner has no technicians', () => {
   expect(
     hasText(
       root,
-      'No technicians yet. A job has to be assigned to someone, so add a technician before creating one.',
+      'No employees yet. A job has to be assigned to someone, so add an employee before creating one.',
     ),
   ).toBe(true);
-  expect(hasText(root, 'No technicians match')).toBe(false);
+  expect(hasText(root, 'No employees match')).toBe(false);
 });
 
 it('shows the error with a retry while the store failed to load', () => {

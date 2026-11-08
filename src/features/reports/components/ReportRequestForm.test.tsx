@@ -163,10 +163,10 @@ describe('the Generate gate', () => {
 });
 
 describe('the technician MultiSelect', () => {
-  it('shows the All technicians placeholder when nothing is selected', () => {
+  it('shows the All employees placeholder when nothing is selected', () => {
     const { root } = renderForm({ selectedTechnicianIds: [] });
     expect(root.findAllByType(MultiSelect)[0].props.placeholder).toBe(
-      'All technicians',
+      'All employees',
     );
   });
 

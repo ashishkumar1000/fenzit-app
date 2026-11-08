@@ -145,6 +145,7 @@ const ROSTER: ProfileTechnician[] = [
     status: 'active',
     skills: ['Plumbing'],
     skillIds: ['skill-1'],
+    avatarUrl: 'https://signed.example/suresh.jpg',
     createdAt: '2026-09-18T09:00:00Z',
   },
   {
@@ -175,6 +176,7 @@ it('replaces the store with the roster, mapped onto the local shape and persiste
       status: 'active', // backend `active` maps straight through
       invitedAt: '2026-09-18T09:00:00Z',
       skillIds: ['skill-1'],
+      avatarUrl: 'https://signed.example/suresh.jpg',
     },
     {
       id: 'user-2',
@@ -184,6 +186,7 @@ it('replaces the store with the roster, mapped onto the local shape and persiste
       status: 'offline', // backend `invited` renders as offline
       invitedAt: '2026-09-19T09:00:00Z',
       skillIds: ['skill-2'],
+      avatarUrl: null,
     },
   ]);
   expect(persisted()).toEqual(list);

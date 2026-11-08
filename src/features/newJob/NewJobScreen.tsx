@@ -17,7 +17,7 @@
  *
  * Progressive disclosure (product feedback 2026-09-20): until a skill is
  * picked the screen shows the Skill section only — Customer, Date & time,
- * Assign technician and Notes appear once it is chosen.
+ * Assign employee and Notes appear once it is chosen.
  *
  * Sections render as rounded bands whose backgrounds alternate round-robin
  * between the two surface tokens (product feedback 2026-09-20: the sections
@@ -27,7 +27,7 @@
  * chip and Browse all on one line; Date & time and Notes keep the DS
  * `SectionHead` (hairline divider + eyebrow), which is their only name.
  *
- * "Add new technician" (product feedback 2026-09-20) opens the same sheet the
+ * "Add new employee" (product feedback 2026-09-20) opens the same sheet the
  * Technicians tab uses, over this form. The invite creates a real `users` row
  * server-side (status `invited`), so the new technician is assignable
  * immediately — but this picker reads the roster from `/users/me`, so the
@@ -129,7 +129,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
   const [submitError, setSubmitError] = useState('');
   const [addSheetVisible, setAddSheetVisible] = useState(false);
 
-  // The inline "Add new technician" sheet performs the invite itself via
+  // The inline "Add new employee" sheet performs the invite itself via
   // `add` (POST /auth/invite); New Job only reacts to its outcome.
   const { add: addTechnician } = useTechnicians();
 
@@ -336,7 +336,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
     if (submitting || canSubmit) return null;
     if (!draft.skillId) return 'Pick a skill to continue';
     if (!draft.customerId) return 'Pick a customer to continue';
-    if (!draft.technicianId) return 'Pick a technician to continue';
+    if (!draft.technicianId) return 'Pick an employee to continue';
     return 'Pick a time that is still to come';
   })();
 
@@ -592,8 +592,8 @@ export default function NewJobScreen({ navigation, route }: Props) {
       return (
         <View style={styles.sectionStatus}>
           <Text style={styles.statusText}>
-            No technicians yet. A job has to be assigned to someone, so add a
-            technician before creating one.
+            No employees yet. A job has to be assigned to someone, so add an
+            employee before creating one.
           </Text>
         </View>
       );
@@ -602,7 +602,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
     return (
       <>
         <TechnicianPicker
-          title="Technician"
+          title="Employee"
           options={technicianOptions}
           value={draft.technicianId}
           onChange={id => patch({ technicianId: id })}
@@ -610,7 +610,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
         />
         {noSkillMatch ? (
           <Text style={styles.statusText}>
-            No technician is tagged with this skill — showing everyone. Pick
+            No employee is tagged with this skill — showing everyone. Pick
             whoever will do the job.
           </Text>
         ) : null}
@@ -647,8 +647,8 @@ export default function NewJobScreen({ navigation, route }: Props) {
 
           {/* Progressive disclosure (product feedback 2026-09-20): nothing
               but the Skill section shows until a skill is picked — Customer,
-              Date & time, Assign technician and Notes all appear once it is.
-              The skill drives the technician filter, so it is the one
+              Date & time, Assign employee and Notes all appear once it is.
+              The skill drives the employee filter, so it is the one
               decision the rest of the form depends on. */}
           {draft.skillId ? (
             <>
@@ -687,18 +687,18 @@ export default function NewJobScreen({ navigation, route }: Props) {
                   accessibilityRole="button"
                   style={styles.inlineAddRow}>
                   <UserPlus size={18} color={colors.textLink} strokeWidth={2} />
-                  <Text style={styles.inlineAddText}>Add new technician</Text>
+                  <Text style={styles.inlineAddText}>Add new employee</Text>
                 </Pressable>
               </View>
 
               <View style={sectionBand(4)}>
-                <SectionHead title="Notes for technician" />
+                <SectionHead title="Notes for employee" />
                 <Input
                   value={draft.notes}
                   onChangeText={text => patch({ notes: text })}
                   placeholder="Any special instructions..."
                   multiline
-                  accessibilityLabel="Notes for technician"
+                  accessibilityLabel="Notes for employee"
                 />
               </View>
             </>

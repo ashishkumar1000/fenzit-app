@@ -58,7 +58,22 @@ export type ConfirmDialogProps = {
   onConfirm: () => void;
   /** Every non-confirm exit: scrim tap, X, secondary button. */
   onCancel: () => void;
+  /**
+   * Optional: what the secondary button does instead of `onCancel`. The
+   * scrim and X still call `onCancel`, so a caller can make the secondary a
+   * real action (e.g. "Save anyway") without a stray tap triggering it.
+   */
+  onSecondary?: () => void;
+  /**
+   * Opt-in: put the title beside the close X instead of under the header.
+   * Only meaningful with no `icon` (with an icon the title stays below).
+   * Other dialogs keep their layout.
+   */
+  titleInHeader?: boolean;
 };
+
+/** What a screen reader says for the X and the scrim — never the secondary's label. */
+const CLOSE_LABEL = 'Close dialog';
 
 export function ConfirmDialog({
   visible,
@@ -72,8 +87,11 @@ export function ConfirmDialog({
   submitting = false,
   onConfirm,
   onCancel,
+  onSecondary,
+  titleInHeader = false,
 }: ConfirmDialogProps) {
   const insets = useSafeAreaInsets();
+  const inlineTitle = titleInHeader && icon == null;
 
   return (
     <Modal
@@ -87,7 +105,7 @@ export function ConfirmDialog({
       <Pressable
         style={[styles.scrim, { paddingBottom: insets.bottom + spacing.s6 }]}
         onPress={submitting ? undefined : onCancel}
-        accessibilityLabel={cancelLabel}
+        accessibilityLabel={titleInHeader ? CLOSE_LABEL : cancelLabel}
         accessibilityRole="button">
         <View
           accessible
@@ -98,19 +116,29 @@ export function ConfirmDialog({
             {icon != null ? (
               <View style={styles.iconBadge}>{icon}</View>
             ) : null}
+            {inlineTitle ? (
+              <Text
+                style={[styles.title, styles.titleInline]}
+                maxFontSizeMultiplier={1.4}>
+                {title}
+              </Text>
+            ) : null}
             <IconButton
               variant="ghost"
               size="sm"
               disabled={submitting}
               onPress={onCancel}
-              label={cancelLabel}>
+              label={titleInHeader ? CLOSE_LABEL : cancelLabel}
+              style={titleInHeader ? styles.closeButton : undefined}>
               <X size={18} color={colors.textMuted} strokeWidth={2} />
             </IconButton>
           </View>
 
-          <Text style={styles.title} maxFontSizeMultiplier={1.4}>
-            {title}
-          </Text>
+          {inlineTitle ? null : (
+            <Text style={styles.title} maxFontSizeMultiplier={1.4}>
+              {title}
+            </Text>
+          )}
           <Text style={styles.message} maxFontSizeMultiplier={1.4}>
             {message}
           </Text>
@@ -142,7 +170,7 @@ export function ConfirmDialog({
             size="lg"
             fullWidth
             disabled={submitting}
-            onPress={onCancel}>
+            onPress={onSecondary ?? onCancel}>
             {cancelLabel}
           </Button>
         </View>
@@ -173,6 +201,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
+  // Pinned to the top-right corner even when there is no icon badge beside it.
+  closeButton: {
+    marginLeft: 'auto',
+  },
   iconBadge: {
     width: 44,
     height: 44,
@@ -185,6 +217,12 @@ const styles = StyleSheet.create({
     ...typography.heading,
     fontSize: 22,
     color: colors.textStrong,
+  },
+  // Title beside the close X (no-icon variant): takes the free width, and
+  // the X keeps its corner.
+  titleInline: {
+    flex: 1,
+    marginRight: 8,
   },
   message: {
     ...typography.body,

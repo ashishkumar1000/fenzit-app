@@ -231,7 +231,7 @@ it('treats a zero-count profile as first-run (no jobs yet)', async () => {
   const renderer = await mountScreen();
 
   const text = allText(renderer);
-  expect(text).toContain('Add a technician first, then you can create and assign jobs.');
+  expect(text).toContain('Add an employee first, then you can create and assign jobs.');
   // First-run Home still renders inside a ScrollView.
   expect(renderer.root.findAllByType(ScrollView).length).toBe(1);
 });

@@ -29,9 +29,14 @@ export interface Technician {
   invitedAt: string;
   /** Skill ids assigned at invite time (from `GET /skills`). */
   skillIds: string[];
+  /**
+   * Photo link from the last roster hydration (short-lived; the next profile
+   * load refreshes it). Null or absent shows initials.
+   */
+  avatarUrl?: string | null;
 }
 
-/** Shape captured by the "Add technician" form. */
+/** Shape captured by the "Add employee" form. */
 export interface NewTechnicianInput {
   name: string;
   /** Digits only, no dial code — see `DIAL_CODE` in this feature's constants. */

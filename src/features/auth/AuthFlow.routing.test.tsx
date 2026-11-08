@@ -124,7 +124,6 @@ describe('a brand-new person (no company AND no role) is sent to company setup',
       screen.props.onChange({
         ownerName: ' Asha Rao ',
         businessName: 'Rao Services',
-        businessTypes: ['Plumbing service'],
         stateCode: 'KA',
       });
     });
@@ -149,7 +148,7 @@ describe('a brand-new person (no company AND no role) is sent to company setup',
     const { renderer, onComplete } = await login(user({}));
     const screen = renderer.root.findByType(ProfileScreen);
     await ReactTestRenderer.act(async () => {
-      screen.props.onChange({ ownerName: 'Asha', businessName: 'B', businessTypes: ['x'], stateCode: 'KA' });
+      screen.props.onChange({ ownerName: 'Asha', businessName: 'B', stateCode: 'KA' });
     });
     await ReactTestRenderer.act(async () => {
       await screen.props.onFinish();

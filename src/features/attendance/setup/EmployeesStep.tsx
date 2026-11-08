@@ -204,7 +204,7 @@ export function EmployeesStep({
       // the sliver right of the switch (review finding 2026-10-23).
       <View>
         <View style={[styles.row, cannotEnable && styles.rowDisabled]}>
-          <Avatar name={row.employeeName} size="md" />
+          <Avatar name={row.employeeName} uri={row.avatarUrl ?? null} size="md" />
           <View style={styles.rowText}>
             <View style={styles.nameLine}>
               <Text style={styles.rowName}>{row.employeeName}</Text>
@@ -284,11 +284,11 @@ export function EmployeesStep({
           ListEmptyComponent={
             <EmptyState
               icon={<Users size={24} color={colors.primary} strokeWidth={1.5} />}
-              title={query ? 'No one matches' : 'Invite technicians first'}
+              title={query ? 'No one matches' : 'Invite employees first'}
               description={
                 query
                   ? 'No team member matches that search.'
-                  : 'Your team roster is empty. Invite technicians from the Home tab, then return here to switch on tracking.'
+                  : 'Your team roster is empty. Invite employees from the Home tab, then return here to switch on tracking.'
               }
             />
           }

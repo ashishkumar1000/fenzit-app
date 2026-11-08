@@ -7,7 +7,7 @@
  *
  * The idle grid shows the first two offered technicians (the caller already
  * skill-filters the roster and keeps the profile's order — this picker
- * reorders nothing) plus a "+N More technicians" tile that opens the same
+ * reorders nothing) plus a "+N More employees" tile that opens the same
  * full-screen page. A selection made outside those two (via "Browse all" or
  * an invite) is pinned to the front — otherwise the chosen tile would be
  * invisible on the default surface, leaving the section with no visible
@@ -99,13 +99,13 @@ export function TechnicianPicker({ title, options, value, onChange, onBrowseAll 
           <View style={styles.countChip}>
             <Text style={styles.countChipText}>
               {options.length}{' '}
-              {options.length === 1 ? 'technician' : 'technicians'}
+              {options.length === 1 ? 'employee' : 'employees'}
             </Text>
           </View>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Browse all technicians"
+          accessibilityLabel="Browse all employees"
           onPress={onBrowseAll}
           style={styles.browseRow}>
           <Text style={styles.browseText}>Browse all</Text>
@@ -116,8 +116,8 @@ export function TechnicianPicker({ title, options, value, onChange, onBrowseAll 
       <Input
         value={query}
         onChangeText={setQuery}
-        placeholder="Search technicians"
-        accessibilityLabel="Search technicians"
+        placeholder="Search employees"
+        accessibilityLabel="Search employees"
         leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
       />
 
@@ -145,7 +145,7 @@ export function TechnicianPicker({ title, options, value, onChange, onBrowseAll 
                 tileWidth ? { width: tileWidth } : null,
                 isSelected && styles.tileSelected,
               ]}>
-              <Avatar name={technician.name} size="md" />
+              <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="md" />
               <Text
                 numberOfLines={2}
                 style={[styles.label, isSelected && styles.labelSelected]}>
@@ -169,19 +169,19 @@ export function TechnicianPicker({ title, options, value, onChange, onBrowseAll 
         {!trimmedQuery && moreCount > 0 ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`More technicians — ${moreCount} more available`}
+            accessibilityLabel={`More employees — ${moreCount} more available`}
             onPress={onBrowseAll}
             style={[styles.tile, styles.tileMore, tileWidth ? { width: tileWidth } : null]}>
             <Text style={styles.moreCount}>+{moreCount}</Text>
             <Text numberOfLines={2} style={styles.moreLabel}>
-              More technicians
+              More employees
             </Text>
           </Pressable>
         ) : null}
       </View>
 
       {trimmedQuery && visibleTechnicians.length === 0 ? (
-        <Text style={styles.noMatch}>No technicians match "{query.trim()}"</Text>
+        <Text style={styles.noMatch}>No employees match "{query.trim()}"</Text>
       ) : null}
     </View>
   );

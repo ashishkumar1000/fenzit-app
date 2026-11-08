@@ -1,14 +1,13 @@
 /**
  * AuthFlow step-3 company-setup wiring (Story 5.1 matrix row 9): the
  * `setupCompany` payload must NOT carry `serviceCategories` (the old
- * business-type → category mapping is gone), while the pre-existing
- * ≥1-business-type validation still blocks an empty selection before any
- * request goes out.
+ * business-type → category mapping is gone). Business type itself was removed
+ * from the step-3 screen.
  *
  * The step screens are mocked at the module boundary and driven through
  * their props (same pattern as `__tests__/new-job-screen.test.tsx`), so the
- * assertions stay on the submit payload and validation rather than the
- * screens' internals. `authApi` is mocked at the services barrel.
+ * assertions stay on the submit payload rather than the screens' internals.
+ * `authApi` is mocked at the services barrel.
  */
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
@@ -89,7 +88,6 @@ it('the setupCompany payload carries no serviceCategories key', async () => {
     profileScreen.props.onChange({
       ownerName: 'Kumar Selvan',
       businessName: 'Fenzit Services',
-      businessTypes: ['Plumbing service'],
       stateCode: 'TN',
     });
   });
@@ -107,29 +105,6 @@ it('the setupCompany payload carries no serviceCategories key', async () => {
     companyName: 'Fenzit Services',
     stateCode: 'TN',
   });
-
-  await ReactTestRenderer.act(async () => {
-    renderer.unmount();
-  });
-});
-
-it('the ≥1-business-type validation still blocks an empty selection', async () => {
-  const renderer = await renderAtProfileStep();
-  const profileScreen = renderer.root.findByType(ProfileScreen);
-
-  // The screen requires a name too — fill it so the business-type check is
-  // the one that fires.
-  await ReactTestRenderer.act(async () => {
-    profileScreen.props.onChange({ ownerName: 'Kumar Selvan' });
-  });
-  await ReactTestRenderer.act(async () => {
-    await profileScreen.props.onFinish();
-  });
-
-  expect(setupCompany).not.toHaveBeenCalled();
-  expect(renderer.root.findByType(ProfileScreen).props.serverError).toBe(
-    'Select at least one business type.',
-  );
 
   await ReactTestRenderer.act(async () => {
     renderer.unmount();

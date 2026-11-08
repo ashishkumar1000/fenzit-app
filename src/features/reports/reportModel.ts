@@ -33,7 +33,7 @@ export interface ReportTypeOption {
 export const REPORT_TYPES: ReportTypeOption[] = [
   {
     type: TECHNICIAN_JOB_ACTIVITY_TYPE,
-    label: 'Technician job report',
+    label: 'Employee job report',
     subtitle: 'Jobs, timing and proofs for your team',
     requiresAttendance: false,
   },
@@ -194,8 +194,8 @@ export function formatRequestedAt(iso: string): string {
 
 /** The list row's subtitle for the technician scope. */
 export function technicianScopeLabel(technicianCount: number | null): string {
-  if (technicianCount === null) return 'All technicians';
-  return technicianCount === 1 ? '1 technician' : `${technicianCount} technicians`;
+  if (technicianCount === null) return 'All employees';
+  return technicianCount === 1 ? '1 employee' : `${technicianCount} employees`;
 }
 
 /** The list row's scope subtitle for an office-scoped report. */

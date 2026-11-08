@@ -175,7 +175,7 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
           .join('. ')}
         onPress={() => setPendingId(item.id)}
         style={styles.row}>
-        <Avatar name={item.name} size="md" />
+        <Avatar name={item.name} uri={item.avatarUrl ?? null} size="md" />
         <View style={styles.rowText}>
           <Text style={styles.rowName}>{item.name}</Text>
           {item.skills.length ? (
@@ -223,7 +223,7 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
           <ArrowLeft size={24} color={colors.textStrong} strokeWidth={2} />
         </Pressable>
         <Text style={styles.title}>
-          {activeOnly ? 'Pick an employee' : 'Select technicians'}
+          {activeOnly ? 'Pick an employee' : 'Select employees'}
         </Text>
       </View>
 
@@ -255,10 +255,8 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
         <Input
           value={query}
           onChangeText={setQuery}
-          placeholder={activeOnly ? 'Search employees' : 'Search technicians'}
-          accessibilityLabel={
-            activeOnly ? 'Search employees' : 'Search technicians'
-          }
+          placeholder="Search employees"
+          accessibilityLabel="Search employees"
           leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
         />
       </View>
@@ -296,8 +294,8 @@ export default function SelectTechniciansScreen({ navigation, route }: Props) {
                 {technicians.length === 0
                   ? activeOnly
                     ? 'No active employees yet. Employees appear here once they accept their invite.'
-                    : 'No technicians yet. A job has to be assigned to someone, so add a technician before creating one.'
-                  : `No technicians match "${query.trim()}"`}
+                    : 'No employees yet. A job has to be assigned to someone, so add an employee before creating one.'
+                  : `No employees match "${query.trim()}"`}
               </Text>
             }
           />

@@ -149,7 +149,7 @@ describe("search", () => {
     const { root } = renderScreen();
     search(root, "zzz");
     const t = allTexts(root);
-    expect(t.some((x) => x.startsWith("No technicians match"))).toBe(true);
+    expect(t.some((x) => x.startsWith("No employees match"))).toBe(true);
     expect(t).not.toContain(EMPTY_COPY);
   });
 });

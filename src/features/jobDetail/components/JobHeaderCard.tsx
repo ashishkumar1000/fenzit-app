@@ -114,7 +114,7 @@ export function JobHeaderCard({ detail, urgent, statusBadge }: Props) {
       {detail.notesForTechnician ? (
         <>
           <View style={styles.divider} />
-          <Text style={styles.notesLabel}>Notes for technician</Text>
+          <Text style={styles.notesLabel}>Notes for employee</Text>
           <Text style={styles.bodyText}>{detail.notesForTechnician}</Text>
         </>
       ) : null}

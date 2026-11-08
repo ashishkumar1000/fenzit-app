@@ -56,7 +56,7 @@ const CLOSE_DELAY_MS = 1500;
 const DROPPED_TEXT_HINT =
   "Empty or spacing-only text won't save — the field keeps its saved value.";
 const UNASSIGN_HINT =
-  "You can't remove the technician here — they stay assigned until you pick a different one.";
+  "You can't remove the employee here — they stay assigned until you pick a different one.";
 
 type Props = {
   visible: boolean;
@@ -318,7 +318,7 @@ export function EditJobSheet({ visible, job, technicians, onClose, onSaved }: Pr
         </View>
 
         <Input
-          label="Notes for technician"
+          label="Notes for employee"
           value={notes}
           onChangeText={text => {
             setFormError('');
@@ -359,7 +359,7 @@ export function EditJobSheet({ visible, job, technicians, onClose, onSaved }: Pr
         </View>
 
         <View style={styles.section}>
-          <SectionHead title="Technician" />
+          <SectionHead title="Employee" />
           <TechnicianPicker
             variant="rows"
             technicians={assignableTechnicians}

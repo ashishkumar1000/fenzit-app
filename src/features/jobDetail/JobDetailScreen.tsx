@@ -447,18 +447,19 @@ export default function JobDetailScreen() {
           </SectionCard>
 
           {/* 4. Technician */}
-          <SectionCard title="Technician">
+          <SectionCard title="Employee">
             <PersonRow
               name={detail.technician.name}
               countryCode={detail.technician.countryCode}
               phoneNumber={detail.technician.phoneNumber}
               subLine={formatPhone(detail.technician)}
+              avatarUrl={detail.technician.avatarUrl ?? null}
               action={
                 <>
                   <IconButton
                     variant="ghost"
                     size="sm"
-                    label="Copy technician phone number"
+                    label="Copy employee phone number"
                     onPress={() =>
                       copyPhone(
                         'technician',
@@ -515,7 +516,7 @@ export default function JobDetailScreen() {
               <View style={styles.disabledHintRow}>
                 <Info size={13} color={colors.textMuted} strokeWidth={2} style={{marginTop: spacing.s1}}/>
                 <Text style={styles.disabledHint}>
-                  Directions appear once the technician's location is
+                  Directions appear once the employee's location is
                   captured on a step.
                 </Text>
               </View>
@@ -525,7 +526,7 @@ export default function JobDetailScreen() {
               <View style={styles.disabledHintRow}>
                 <Info size={13} color={colors.textMuted} strokeWidth={2} style={{marginTop: spacing.s1}}/>
                 <Text style={styles.disabledHint}>
-                  Directions will take you to the technician's last known
+                  Directions will take you to the employee's last known
                   location, not live tracking.
                 </Text>
               </View>
@@ -570,7 +571,7 @@ export default function JobDetailScreen() {
         <ConfirmDialog
           visible={cancelConfirmOpen && detail != null}
           title="Cancel job"
-          message="The technician will no longer see this job."
+          message="The employee will no longer see this job."
           confirmLabel="Cancel job"
           confirmVariant="danger"
           icon={<XCircle size={20} color={colors.danger} strokeWidth={2} />}

@@ -276,8 +276,8 @@ export default function RosterScreen({ navigation, route }: Props) {
           ListEmptyComponent={
             <EmptyState
               icon={<Users size={24} color={colors.primary} strokeWidth={1.5} />}
-              title="Invite technicians first"
-              description="Your team roster is empty. Invite technicians from the Home tab, then return here to switch on tracking."
+              title="Invite employees first"
+              description="Your team roster is empty. Invite employees from the Home tab, then return here to switch on tracking."
             />
           }
           refreshControl={

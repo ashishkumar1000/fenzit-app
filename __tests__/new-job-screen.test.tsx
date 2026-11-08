@@ -327,7 +327,7 @@ it('a zero-match roster degrades to the full roster behind the existing notice',
   expect(
     texts.some(t =>
       typeof t.props.children === 'string' &&
-      t.props.children.includes('No technician is tagged with this skill'),
+      t.props.children.includes('No employee is tagged with this skill'),
     ),
   ).toBe(true);
 
@@ -361,7 +361,7 @@ it('an empty roster keeps the existing add-a-technician state', async () => {
   const texts = renderer.root.findAllByType(Text);
   expect(
     texts.some(t =>
-      typeof t.props.children === 'string' && t.props.children.includes('No technicians yet'),
+      typeof t.props.children === 'string' && t.props.children.includes('No employees yet'),
     ),
   ).toBe(true);
   expect(renderer.root.findAllByType(TechnicianPicker)).toHaveLength(0);
@@ -591,7 +591,7 @@ it('a profile error with no roster shows the error and a working retry, not the 
   });
 
   expect(hasText(renderer, "Couldn't load your team")).toBe(true);
-  expect(hasText(renderer, 'No technicians yet')).toBe(false);
+  expect(hasText(renderer, 'No employees yet')).toBe(false);
   expect(renderer.root.findAllByType(TechnicianPicker)).toHaveLength(0);
 
   const retry = renderer.root
@@ -608,7 +608,7 @@ it('a profile error with no roster shows the error and a working retry, not the 
   });
 });
 
-it('a loading profile does not show the premature "No technicians yet" copy', async () => {
+it('a loading profile does not show the premature "No employees yet" copy', async () => {
   useMyProfileMock.mockReturnValue({
     profile: null,
     isLoading: true,
@@ -630,7 +630,7 @@ it('a loading profile does not show the premature "No technicians yet" copy', as
     renderer.root.findByType(SkillPicker).props.onChange('sk-plumb');
   });
 
-  expect(hasText(renderer, 'No technicians yet')).toBe(false);
+  expect(hasText(renderer, 'No employees yet')).toBe(false);
   expect(renderer.root.findAllByType(ActivityIndicator).length).toBeGreaterThan(0);
 
   await ReactTestRenderer.act(async () => {

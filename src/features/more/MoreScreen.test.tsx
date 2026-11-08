@@ -166,10 +166,14 @@ describe('MoreScreen wiring', () => {
 
   it('navigates each tile and row to its own route', () => {
     const root = renderScreen();
-    for (const route of ['Technicians', 'Notifications']) {
+    // The tile says "Employees"; its route name stays "Technicians".
+    for (const [title, route] of [
+      ['Employees', 'Technicians'],
+      ['Notifications', 'Notifications'],
+    ] as const) {
       const tile = root
         .findAllByType(MoreTile)
-        .find(t => t.props.title === route);
+        .find(t => t.props.title === title);
       act(() => {
         tile?.props.onPress();
       });
@@ -255,7 +259,7 @@ describe('MoreScreen — a viewer (read-only)', () => {
     const root = renderScreen();
     const titles = [...root.findAllByType(MoreTile), ...root.findAllByType(MoreRow)].map(n => n.props.title);
 
-    for (const expected of ['Technicians', 'Notifications', 'Customers', 'Reports', 'Attendance', 'Log out']) {
+    for (const expected of ['Employees', 'Notifications', 'Customers', 'Reports', 'Attendance', 'Log out']) {
       expect(titles).toContain(expected);
     }
   });

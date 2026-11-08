@@ -15,26 +15,6 @@ export const RESEND_SECONDS = 90;
 
 /** Re-exported app-wide, so every feature agrees on them. */
 export { DIAL_CODE, PHONE_LENGTH } from '../../constants/phone';
-
-/**
- * Business types offered in step 3. Tailored to the small field-service
- * owners Fenzit targets (electricians, plumbers, AC/HVAC, etc.).
- *
- * Profile data only — nothing downstream derives from them; the old
- * business-type → service-category mapping is gone (Story 5.1).
- */
-export const BUSINESS_TYPES = [
-  'AC / HVAC service',
-  'Electrical service',
-  'Plumbing service',
-  'Appliance repair',
-  'Pest control',
-  'Cleaning service',
-  'Carpentry',
-  'General maintenance',
-  'Other',
-] as const;
-
 /**
  * India states and union territories, ISO 3166-2: IN codes — for the required
  * `stateCode` field on company setup. `{ value, label }` pairs for the

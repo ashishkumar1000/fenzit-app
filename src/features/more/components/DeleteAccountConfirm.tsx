@@ -20,7 +20,7 @@ import { isAdminRole } from '../../auth/roles';
 
 /** Everything the admin's company loses, then the review + sign-out posture. */
 const ADMIN_CONSEQUENCES =
-  "All of your company's data will be deleted — its jobs, photos, attendance and team records. Technicians who work only for your company will be deleted with it.";
+  "All of your company's data will be deleted — its jobs, photos, attendance and team records. Employees who work only for your company will be deleted with it.";
 
 /** What an employee or viewer loses, and what the company is told. */
 const MEMBER_CONSEQUENCES =

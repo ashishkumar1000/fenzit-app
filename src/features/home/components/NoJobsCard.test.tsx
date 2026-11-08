@@ -15,12 +15,12 @@ describe('NoJobsCard', () => {
   it('with technicians, invites the owner to create a job', () => {
     const t = texts(true);
     expect(t).toContain('No jobs yet');
-    expect(t).toContain('Create your first job to assign it to a technician.');
+    expect(t).toContain('Create your first job to assign it to an employee.');
   });
 
   it('without technicians, says to add one first', () => {
     const t = texts(false);
-    expect(t).toContain('Add a technician first, then you can create and assign jobs.');
-    expect(t).not.toContain('Create your first job to assign it to a technician.');
+    expect(t).toContain('Add an employee first, then you can create and assign jobs.');
+    expect(t).not.toContain('Create your first job to assign it to an employee.');
   });
 });

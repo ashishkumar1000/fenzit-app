@@ -75,7 +75,7 @@ export function MonthlyEmployeeRow({
       importantForAccessibility="no-hide-descendants"
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.8 }]}>
-      <Avatar name={row.employeeName} size="md" />
+      <Avatar name={row.employeeName} uri={row.avatarUrl ?? null} size="md" />
       <View style={styles.texts}>
         <Text style={styles.name} numberOfLines={1}>
           {row.employeeName}

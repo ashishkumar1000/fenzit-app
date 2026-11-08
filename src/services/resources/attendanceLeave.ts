@@ -123,6 +123,8 @@ export interface LeaveActionView extends LeaveRequestRow {
  */
 export type LeaveRequestRow = LeaveRequestView & {
   employeeName?: string;
+  /** Photo link or null; owner list reads only. */
+  employeeAvatarUrl?: string | null;
   /** Per-tenant human reference (`'EMP-004'`); owner list reads only. */
   employeeCode?: string;
 };

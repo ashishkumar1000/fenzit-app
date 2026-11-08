@@ -216,11 +216,26 @@ describe('normalizeDashboard — fail-closed envelope', () => {
       {
         employeeId: 'e1',
         employeeName: 'Arya',
+        avatarUrl: null,
         workDate: '2026-09-14',
         officeName: 'Hero wala',
         attemptCount: 3,
       },
     ]);
+  });
+
+  it('carries a flag row photo link through, and turns a non-text one into null', () => {
+    const res = normalizeDashboard(envelope({
+      flags: {
+        checkoutMissing: [
+          flagRow({ avatarUrl: 'https://signed.example/a.jpg' }),
+          flagRow({ employeeId: 'e2', avatarUrl: 42 }),
+        ],
+        fakeLocationAttempt: [],
+      },
+    }));
+    expect(res.flags.checkoutMissing[0].avatarUrl).toBe('https://signed.example/a.jpg');
+    expect(res.flags.checkoutMissing[1].avatarUrl).toBeNull();
   });
 });
 

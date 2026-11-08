@@ -70,7 +70,9 @@ function scrimOf(renderer: ReactTestRenderer.ReactTestRenderer): ReactTestRender
   // The scrim is the OUTERMOST Pressable: the tree's first Pressable that
   // labels itself with the cancel label (Buttons nest deeper inside).
   return renderer.root.find(
-    n => String(n.type).includes('Pressable') && n.props.accessibilityLabel === 'Keep request',
+    n =>
+      String(n.type).includes('Pressable') &&
+      ['Keep request', 'Close dialog'].includes(n.props.accessibilityLabel),
   );
 }
 
@@ -180,5 +182,64 @@ describe('the submitting guard (the write must settle)', () => {
     const renderer = renderDialog({ submitting: true });
     const modal = dialogModal(renderer);
     expect(modal.props.onRequestClose).toBeUndefined();
+  });
+});
+describe('onSecondary (the secondary is a real action; X and scrim still close)', () => {
+  it('the secondary calls onSecondary and not onCancel', () => {
+    const onSecondary = jest.fn();
+    const root = renderDialog({ onSecondary }).root;
+    act(() => {
+      button(root, 'Keep request')!.props.onPress();
+    });
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('the header X and the scrim call onCancel, never onSecondary', () => {
+    const onSecondary = jest.fn();
+    const renderer = renderDialog({ onSecondary });
+    act(() => {
+      renderer.root.findAllByType(IconButton)[0].props.onPress();
+    });
+    act(() => {
+      scrimOf(renderer).props.onPress();
+    });
+    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(onSecondary).not.toHaveBeenCalled();
+  });
+
+  it('with titleInHeader the X and the scrim are labelled "Close dialog", not the secondary label', () => {
+    const renderer = renderDialog({ cancelLabel: 'Save anyway', titleInHeader: true });
+    expect(renderer.root.findAllByType(IconButton)[0].props.label).toBe('Close dialog');
+    expect(scrimOf(renderer).props.accessibilityLabel).toBe('Close dialog');
+  });
+
+  it('other dialogs keep their cancel label on the X and the scrim', () => {
+    const renderer = renderDialog({ cancelLabel: 'Keep request' });
+    expect(renderer.root.findAllByType(IconButton)[0].props.label).toBe('Keep request');
+    expect(scrimOf(renderer).props.accessibilityLabel).toBe('Keep request');
+  });
+});
+
+describe('titleInHeader (opt-in: the title sits beside the X, no icon only)', () => {
+  const TITLE = 'Cancel leave request?';
+
+  function titleInHeaderRow(renderer: ReactTestRenderer.ReactTestRenderer): boolean {
+    const row = renderer.root.findAllByType(IconButton)[0].parent!;
+    return row.findAll(n => n.type === Text && n.props.children === TITLE).length > 0;
+  }
+
+  it('with no icon and titleInHeader, the title is in the header row', () => {
+    expect(titleInHeaderRow(renderDialog({ titleInHeader: true }))).toBe(true);
+  });
+
+  it('by default the title stays below the header row, unchanged for other dialogs', () => {
+    expect(titleInHeaderRow(renderDialog())).toBe(false);
+  });
+
+  it('with an icon, the title stays below even when titleInHeader is set', () => {
+    const renderer = renderDialog({ titleInHeader: true, icon: <View /> });
+    expect(titleInHeaderRow(renderer)).toBe(false);
+    expect(renderer.root.findAll(n => n.type === Text && n.props.children === TITLE).length).toBe(1);
   });
 });

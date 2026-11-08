@@ -51,6 +51,8 @@ type Props = {
   customerName?: string;
   /** Resolved technician display name; falls back to a neutral placeholder. */
   technicianName?: string;
+  /** Technician photo link or null; absent shows initials. */
+  technicianAvatarUrl?: string | null;
   /**
    * Owner lists render the footer (Avatar + technician name). The technician
    * side omits it — the technician is themselves — via `showFooter={false}`
@@ -86,6 +88,7 @@ export function JobCard({
   urgencyNow,
   customerName,
   technicianName,
+  technicianAvatarUrl,
   showFooter = true,
   onPress,
 }: Props) {
@@ -182,9 +185,9 @@ export function JobCard({
 
           <View style={styles.footerRow}>
             <View style={styles.techRow}>
-              <Avatar name={technicianName ?? 'Technician'} size="sm" />
+              <Avatar name={technicianName ?? 'Employee'} uri={technicianAvatarUrl ?? null} size="sm" />
               <Text style={styles.techName} numberOfLines={1}>
-                {technicianName ?? 'Technician'}
+                {technicianName ?? 'Employee'}
               </Text>
             </View>
           </View>

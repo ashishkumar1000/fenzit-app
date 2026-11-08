@@ -53,7 +53,7 @@ export default function ApplyOnBehalfScreen({ navigation, route }: Props) {
             <SectionHead title="Team member" />
             {form.employee ? (
               <View style={styles.employeeCard}>
-                <Avatar name={form.employee.employeeName} size="md" />
+                <Avatar name={form.employee.employeeName} uri={form.employee.avatarUrl ?? null} size="md" />
                 <View style={styles.employeeTexts}>
                   <Text style={styles.employeeName}>
                     {form.employee.employeeName}

@@ -23,7 +23,7 @@ export function TechnicianRow({ technician, onPress }: Props) {
       interactive={Boolean(onPress)}
       onPress={onPress ? () => onPress(technician) : undefined}
       style={styles.row}>
-      <Avatar name={technician.name} size="lg" />
+      <Avatar name={technician.name} uri={technician.avatarUrl ?? null} size="lg" />
 
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>

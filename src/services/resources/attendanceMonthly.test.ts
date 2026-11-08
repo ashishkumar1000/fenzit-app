@@ -149,6 +149,17 @@ describe('normalizeMonthly — the nullable office pair', () => {
     expect(res.employees[0].officeName).toBeNull();
   });
 
+  it('carries an employee photo link through, and turns a non-text one into null', () => {
+    const res = normalizeMonthly(envelope({
+      employees: [
+        employeeRow({ avatarUrl: 'https://signed.example/m.jpg' }),
+        employeeRow({ employeeId: 'e2', avatarUrl: { url: 'x' } }),
+      ],
+    }));
+    expect(res.employees[0].avatarUrl).toBe('https://signed.example/m.jpg');
+    expect(res.employees[1].avatarUrl).toBeNull();
+  });
+
   it('strips untrusted extras from the row and the summary', () => {
     const res = normalizeMonthly(envelope({
       employees: [
@@ -164,6 +175,7 @@ describe('normalizeMonthly — the nullable office pair', () => {
     expect(res.employees[0]).toEqual({
       employeeId: 'e1',
       employeeName: 'Asha',
+      avatarUrl: null,
       officeId: 'o1',
       officeName: 'Andheri West',
       summary: {

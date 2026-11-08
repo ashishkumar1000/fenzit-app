@@ -26,6 +26,11 @@ import { upsertCustomer, loadCustomers } from './useCustomers';
 import { runAllResets } from '../../services/resetRegistry';
 import type { PickedAddress } from './types';
 import AddCustomerScreen from './AddCustomerScreen';
+import {
+  NO_PIN_DIALOG_CONFIRM,
+  NO_PIN_DIALOG_SAVE_ANYWAY,
+  NO_PIN_DIALOG_TITLE,
+} from './locationStatus';
 
 const createSpy = jest.spyOn(customerService, 'create');
 const getByIdSpy = jest.spyOn(customerService, 'getById');
@@ -144,10 +149,23 @@ function submitButton(root: ReactTestRenderer.ReactTestInstance) {
   return button;
 }
 
-function submit(root: ReactTestRenderer.ReactTestInstance) {
-  act(() => {
-    void submitButton(root).props.onPress?.();
-  });
+function pressSubmit(root: ReactTestRenderer.ReactTestInstance) {
+  void submitButton(root).props.onPress?.();
+}
+
+// A save with no map pin opens the no-pin confirm first. These tests exercise
+// the save itself, so they answer it with "Save anyway" (the dialog's own
+// behaviour is covered separately). Call it AFTER the act() that pressed
+// Save has flushed, so the dialog is already open.
+function confirmNoPinIfAsked(root: ReactTestRenderer.ReactTestInstance) {
+  const noPin = root
+    .findAllByType(ConfirmDialog)
+    .find(d => d.props.title === NO_PIN_DIALOG_TITLE && d.props.visible);
+  if (noPin) {
+    act(() => {
+      noPin.props.onSecondary();
+    });
+  }
 }
 
 function locationBoxTrigger(root: ReactTestRenderer.ReactTestInstance) {
@@ -255,8 +273,9 @@ it('shows the duplicate-phone copy and stays open on a 409', async () => {
   typePhone(root, '9876543210');
 
   await act(async () => {
-    submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   expect(navigation.goBack).not.toHaveBeenCalled();
   const texts = root.findAllByType(Text).map(t => t.props.children);
@@ -354,8 +373,9 @@ describe('pick application (search resolve / pin drop / manual)', () => {
     repick(renderer, 'Customers', { pickedAddress: MANUAL_PICK });
 
     await act(async () => {
-      submit(root);
+      pressSubmit(root);
     });
+    confirmNoPinIfAsked(root);
 
     // The OLD pick's placeId/coordinates must not ride along with the NEW
     // text — the map pin would silently point at the abandoned place.
@@ -383,8 +403,9 @@ describe('submitting with returnRouteName: Customers', () => {
     typePhone(root, '9876543210');
 
     await act(async () => {
-      submit(root);
+      pressSubmit(root);
     });
+    confirmNoPinIfAsked(root);
 
     expect(upsertCustomerMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'cust-1' }),
@@ -412,8 +433,9 @@ describe('submitting with returnRouteName: NewJob', () => {
     typePhone(root, '9876500000');
 
     await act(async () => {
-      submit(root);
+      pressSubmit(root);
     });
+    confirmNoPinIfAsked(root);
 
     // popTo, not navigate — React Navigation 7's plain `navigate` pushes a
     // duplicate NewJob instead of going back to the one beneath this screen.
@@ -448,8 +470,9 @@ it('blocks hardware/gesture back while the save is in flight, then frees it', as
   expect(idleCalls).toHaveLength(1);
 
   act(() => {
-    void submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   const listenerCalls = (
     navigation.addListener as jest.Mock
@@ -494,8 +517,9 @@ it('skips the store write and navigation when the session resets mid-POST', asyn
   typePhone(root, '9876543210');
 
   act(() => {
-    void submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
   // A concurrent request's 401 fires the global reset while the POST is
   // still in flight — the customer exists server-side, but committing it
   // here would repopulate the just-cleared (previous session's) store.
@@ -531,8 +555,9 @@ it('sends the structured snapshot for a resolved search pick; street stays free 
   typePhone(root, '9876543210');
 
   await act(async () => {
-    submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   expect(createSpy).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -563,8 +588,9 @@ it('sends coordinates for a pin drop but never a placeId', async () => {
   typePhone(root, '9876543210');
 
   await act(async () => {
-    submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   // A reverse-geocoded pin has coordinates and text but no place id — the
   // structured block rides on the coordinates, each text field its own gate.
@@ -607,8 +633,9 @@ it('merges Street and Pincode into the address line; details travel separately',
   });
 
   await act(async () => {
-    submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   // requestMapping's existing merge: "<address>, <area>". The details field
   // is its own column — never folded into the address line (CAP-5).
@@ -639,8 +666,9 @@ it('omits the structured fields entirely when only City carries the location sig
   });
 
   await act(async () => {
-    submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   const [payload] = createSpy.mock.calls[0] as unknown as [Record<string, unknown>];
   expect(payload).not.toHaveProperty('formattedAddress');
@@ -761,8 +789,9 @@ it('trims leading/trailing whitespace from name and city on submit', async () =>
   });
 
   await act(async () => {
-    submit(root);
+    pressSubmit(root);
   });
+  confirmNoPinIfAsked(root);
 
   expect(createSpy).toHaveBeenCalledWith(
     expect.objectContaining({ name: 'Ramesh Kumar', city: 'Mumbai' }),
@@ -972,6 +1001,8 @@ describe('edit mode (customerId param — SPEC-edit-customer)', () => {
     await act(async () => {
       editSubmit(root);
     });
+    // This edit clears the pin, so the no-pin confirm opens; answer it.
+    confirmNoPinIfAsked(root);
 
     // The pick's city lands in the City field (same convention as add) —
     // the diff honestly carries it alongside the five nulled block keys.
@@ -1009,8 +1040,26 @@ describe('edit mode (customerId param — SPEC-edit-customer)', () => {
     await act(async () => {
       editSubmit(root);
     });
+    // Still no pin after this save, so the no-pin confirm opens; "Save
+    // anyway" lets the unrelated edit through.
+    confirmNoPinIfAsked(root);
 
     expect(updateSpy).toHaveBeenCalledWith('cust-77', { name: 'Renamed No-Loc' });
+  });
+
+  it('an edit that leaves the customer with no pin opens the confirm and sends nothing until answered', async () => {
+    const { root } = await renderEditScreen(NO_LOCATION_DETAIL);
+
+    typeName(root, 'Renamed No-Loc');
+    await act(async () => {
+      editSubmit(root);
+    });
+
+    const dialog = root
+      .findAllByType(ConfirmDialog)
+      .find(d => d.props.title === NO_PIN_DIALOG_TITLE);
+    expect(dialog?.props.visible).toBe(true);
+    expect(updateSpy).not.toHaveBeenCalled();
   });
 
   it('the picker opens centred on the current snapshot (CAP-2)', async () => {
@@ -1195,5 +1244,92 @@ describe('why Save customer is off (add mode)', () => {
     expect(saveHint(root)).toBeNull();
     typeName(root, '');
     expect(saveHint(root)).toBe("Enter the customer's name to continue");
+  });
+});
+
+describe('no-pin confirm — the save gate itself', () => {
+  function fillTypedAddressOnly(root: ReactTestRenderer.ReactTestInstance) {
+    typeName(root, 'Ramesh Kumar');
+    typePhone(root, '9876543210');
+    act(() => {
+      inputByPlaceholder(root, 'Mumbai').props.onChangeText('Mumbai');
+    });
+  }
+
+  function noPinDialog(root: ReactTestRenderer.ReactTestInstance) {
+    return root.findAllByType(ConfirmDialog).find(d => d.props.title === NO_PIN_DIALOG_TITLE);
+  }
+
+  function pressRenderedButton(
+    root: ReactTestRenderer.ReactTestInstance,
+    label: string,
+  ) {
+    const button = root.findAllByType(Button).find(b => b.props.children === label);
+    if (!button) throw new Error(`Button "${label}" not rendered`);
+    act(() => {
+      button.props.onPress();
+    });
+  }
+
+  it('a typed-address save opens the confirm and sends nothing until answered', async () => {
+    const { root } = renderScreen();
+    fillTypedAddressOnly(root);
+
+    await act(async () => {
+      pressSubmit(root);
+    });
+
+    expect(noPinDialog(root)?.props.visible).toBe(true);
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('"Save anyway" on the rendered button sends the save', async () => {
+    const { root } = renderScreen();
+    fillTypedAddressOnly(root);
+    await act(async () => {
+      pressSubmit(root);
+    });
+
+    pressRenderedButton(root, NO_PIN_DIALOG_SAVE_ANYWAY);
+
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'Ramesh Kumar' }));
+  });
+
+  it('"Pin on map" closes the confirm, opens the pin picker and sends nothing', async () => {
+    const { root, navigation } = renderScreen();
+    fillTypedAddressOnly(root);
+    await act(async () => {
+      pressSubmit(root);
+    });
+
+    pressRenderedButton(root, NO_PIN_DIALOG_CONFIRM);
+
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'MapPinPicker',
+      expect.objectContaining({ mode: 'customer' }),
+    );
+    expect(noPinDialog(root)?.props.visible).toBe(false);
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('a save with a map pin never opens the confirm', async () => {
+    createSpy.mockResolvedValueOnce({
+      id: 'cust-10',
+      name: 'Ramesh Kumar',
+      countryCode: '+91',
+      phoneNumber: '9876543210',
+      address: null,
+      city: PINNED_PICK.city,
+    });
+    const { root } = renderScreen('Customers', { pickedAddress: PINNED_PICK });
+    typeName(root, 'Ramesh Kumar');
+    typePhone(root, '9876543210');
+
+    await act(async () => {
+      pressSubmit(root);
+    });
+
+    expect(noPinDialog(root)?.props.visible).toBeFalsy();
+    expect(createSpy).toHaveBeenCalledTimes(1);
   });
 });

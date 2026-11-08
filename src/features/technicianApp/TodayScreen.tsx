@@ -145,6 +145,7 @@ export default function TodayScreen() {
     <SafeAreaView style={styles.root} edges={['top']}>
       <TodayHeader
         name={name}
+        avatarUrl={profile?.avatarUrl ?? null}
         online={online}
         unreadCount={unreadCount}
         onPressBell={handleOpenNotifications}

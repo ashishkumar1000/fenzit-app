@@ -48,6 +48,8 @@ import { customerService } from '../../services';
 import type { ApiError, CustomerDetail, JobHistoryItem } from '../../services';
 import type { RootStackParamList } from '../../navigation/types';
 import { customerLocation, customerPhone } from '../customers/format';
+import { hasMapPin } from '../customers/locationStatus';
+import { NoPinNotice } from '../customers/components/NoPinNotice';
 import { openTel } from '../../utils/linking';
 import { isAbort } from '../../utils';
 import { HistoryRow } from './components/HistoryRow';
@@ -245,6 +247,7 @@ export default function CustomerDetailScreen() {
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>{customerPhone(detail)}</Text>
           </View>
+          {hasMapPin(detail) ? null : <NoPinNotice />}
           {location ? (
             <View style={styles.metaRow}>
               <MapPin size={15} color={colors.textMuted} strokeWidth={2} />

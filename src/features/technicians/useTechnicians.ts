@@ -131,6 +131,7 @@ function toTechnician(row: ProfileTechnician): Technician {
     status: row.status === 'active' ? 'active' : 'offline',
     invitedAt: row.createdAt,
     skillIds: row.skillIds,
+    avatarUrl: row.avatarUrl ?? null,
   };
 }
 

@@ -18,6 +18,8 @@ type Props = {
   phoneNumber: string;
   /** Optional single line under the name (e.g. a role or note). */
   subLine?: string | null;
+  /** Photo link or null; absent shows initials. */
+  avatarUrl?: string | null;
   /** Optional small control (e.g. a copy icon) shown right after the phone number. */
   action?: ReactNode;
 };
@@ -27,11 +29,12 @@ export function PersonRow({
   countryCode,
   phoneNumber,
   subLine,
+  avatarUrl,
   action,
 }: Props) {
   return (
     <View style={styles.row}>
-      <Avatar name={name} size="md" />
+      <Avatar name={name} uri={avatarUrl ?? null} size="md" />
       <View style={styles.identity}>
         <Text style={styles.name} numberOfLines={1}>
           {name}

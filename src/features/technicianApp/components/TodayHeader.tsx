@@ -19,14 +19,17 @@ type Props = {
   online: boolean | null;
   unreadCount: number | null;
   onPressBell: () => void;
+  /** The person's own photo link, or null (initials shown). */
+  avatarUrl?: string | null;
 };
 
-export function TodayHeader({ name, online, unreadCount, onPressBell }: Props) {
+export function TodayHeader({ name, avatarUrl, online, unreadCount, onPressBell }: Props) {
   return (
     <View style={styles.header}>
       <View style={styles.avatarWrap}>
         <Avatar
           name={name ?? undefined}
+          uri={avatarUrl ?? null}
           size="lg"
           variant="onColor"
           style={styles.avatar}
