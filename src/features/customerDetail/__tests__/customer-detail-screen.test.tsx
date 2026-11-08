@@ -27,7 +27,6 @@ import type ReactTestRenderer from 'react-test-renderer';
 import React from 'react';
 import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
-import { IconButton } from '../../../components/ui';
 import { customerService } from '../../../services';
 import type { CustomerDetail } from '../../../services';
 import CustomerDetailScreen from '../CustomerDetailScreen';
@@ -78,10 +77,12 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
+// Edit now lives as a labelled Button in the profile card (not a header icon),
+// so the affordance is found by its accessible name.
 function editButton(root: ReactTestRenderer.ReactTestInstance) {
-  return root
-    .findAllByType(IconButton)
-    .find(b => b.props.label === 'Edit customer');
+  return root.findAll(
+    n => n.props.accessibilityLabel === `Edit ${DETAIL.name}` && typeof n.props.onPress === 'function',
+  )[0];
 }
 
 it('offers the edit affordance, navigating to the edit form with the exact customerId', async () => {
