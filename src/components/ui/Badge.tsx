@@ -24,6 +24,8 @@ export type BadgeProps = {
   /** Optional leading icon (e.g. a lucide glyph) rendered before the label. */
   icon?: ReactNode;
   size?: Size;
+  /** Let a long label wrap onto several lines (default: one line, cut short). */
+  wrap?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -39,6 +41,7 @@ export function Badge({
   dot = false,
   icon,
   size = 'md',
+  wrap = false,
   style,
 }: BadgeProps) {
   const c = colors.status[status];
@@ -60,6 +63,7 @@ export function Badge({
           paddingVertical: s.paddingV,
           paddingHorizontal: s.paddingH,
         },
+        wrap && styles.wrapBase,
         style,
       ]}>
       {dot ? (
@@ -74,8 +78,12 @@ export function Badge({
       ) : null}
       {icon}
       <Text
-        numberOfLines={1}
-        style={[styles.label, { fontSize: s.fontSize, color: textColor }]}>
+        numberOfLines={wrap ? undefined : 1}
+        style={[
+          styles.label,
+          wrap && styles.wrapLabel,
+          { fontSize: s.fontSize, color: textColor },
+        ]}>
         {children}
       </Text>
     </View>
@@ -94,5 +102,16 @@ const styles = StyleSheet.create({
   label: {
     fontWeight: weight.semibold,
     letterSpacing: 0.02,
+  },
+  // Wrap mode: the chip takes the full row width and the label may use
+  // several lines, so long copy is never cut off.
+  wrapBase: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-start',
+    borderRadius: radius.md,
+  },
+  wrapLabel: {
+    flexShrink: 1,
+    fontWeight: weight.regular,
   },
 });

@@ -8,7 +8,7 @@
  *   `onBrowseAll`;
  * - a 3-column grid whose idle state is the FIRST TWO technicians in the
  *   offered order (the caller skill-filters and keeps the profile's order —
- *   this picker reorders nothing) plus a "+N More technicians" tile — 2
+ *   this picker reorders nothing) plus a "+N More employees" tile — 2
  *   tiles + the more tile fill exactly one complete row (COLUMNS = 3);
  *   a search that, when non-empty, filters the whole offered roster
  *   (name, phone digits or employee-code digits, via the real
@@ -145,7 +145,7 @@ it('renders the offered technicians as tiles, with the name as the label', () =>
   // behind the "+N more" tile.
   expect(labels).not.toContain('Gopal Menon');
   expect(labels).toContain('+1');
-  expect(labels).toContain('More technicians');
+  expect(labels).toContain('More employees');
 });
 
 it('marks the selected technician via accessibilityState', () => {
@@ -187,21 +187,21 @@ it('shows the count chip, the inline title, and fires onBrowseAll from the Brows
   const onBrowseAll = jest.fn();
   const root = renderPicker(null, () => {}, onBrowseAll, TECHNICIANS, 'Technician');
 
-  expect(hasText(root, '3 technicians')).toBe(true);
+  expect(hasText(root, '3 employees')).toBe(true);
   expect(hasText(root, 'Technician')).toBe(true);
 
-  pressLabelled(root, 'Browse all technicians');
+  pressLabelled(root, 'Browse all employees');
   expect(onBrowseAll).toHaveBeenCalledTimes(1);
 });
 
 it('singularises the count chip for a single technician', () => {
   const root = renderPicker(null, () => {}, () => {}, [TECHNICIANS[0]]);
 
-  expect(hasText(root, '1 technician')).toBe(true);
-  expect(hasText(root, '1 technicians')).toBe(false);
+  expect(hasText(root, '1 employee')).toBe(true);
+  expect(hasText(root, '1 employees')).toBe(false);
 });
 
-it('caps the idle grid at two tiles in offered order and routes the rest through the "+N More technicians" tile', () => {
+it('caps the idle grid at two tiles in offered order and routes the rest through the "+N More employees" tile', () => {
   const onBrowseAll = jest.fn();
   const root = renderPicker(null, () => {}, onBrowseAll, SEVEN);
 
@@ -214,16 +214,16 @@ it('caps the idle grid at two tiles in offered order and routes the rest through
   expect(labels).not.toContain('Divya Iyer');
   expect(labels).not.toContain('Zoya Khan');
   expect(labels).toContain('+5');
-  expect(labels).toContain('More technicians');
+  expect(labels).toContain('More employees');
 
-  pressLabelled(root, 'More technicians — 5 more available');
+  pressLabelled(root, 'More employees — 5 more available');
   expect(onBrowseAll).toHaveBeenCalledTimes(1);
 });
 
 it('shows no "+N more" tile while a search is active', () => {
   const root = renderPicker(null, () => {}, () => {}, SEVEN);
   typeIntoSearch(root, 'zoya');
-  expect(tileLabels(root)).not.toContain('More technicians');
+  expect(tileLabels(root)).not.toContain('More employees');
   expect(tileLabels(root)).toContain('Zoya Khan');
 });
 
@@ -244,7 +244,7 @@ it('matches on phone digits too, and says so when nothing fits', () => {
   typeIntoSearch(root, 'zzz-no-such-technician');
   expect(tileLabels(root)).not.toContain('Ravi Kumar');
   expect(
-    tileLabels(root).some(label => label.includes('No technicians match')),
+    tileLabels(root).some(label => label.includes('No employees match')),
   ).toBe(true);
 });
 

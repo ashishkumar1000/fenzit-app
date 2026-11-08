@@ -92,7 +92,9 @@ describe('ActivityTimeline location caption (7.10)', () => {
       workflowTemplate: null,
       jobSite: null,
     });
-    expect(allTexts(root)).toContain('Location captured');
+    expect(allTexts(root)).toContain(
+      'Employee location captured. Customer location not added, so the distance cannot be calculated.',
+    );
   });
 
   it('shows the stored reason for a missed capture', () => {

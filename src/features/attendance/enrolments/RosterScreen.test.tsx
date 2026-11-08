@@ -312,7 +312,7 @@ describe('tri-state', () => {
   it('an empty roster shows the invite-first empty state', async () => {
     listMock.mockResolvedValue([]);
     const screen = await renderLoaded();
-    expect(textNodes(screen.root, 'Invite technicians first').length).toBe(1);
+    expect(textNodes(screen.root, 'Invite employees first').length).toBe(1);
   });
 });
 

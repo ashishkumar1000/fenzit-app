@@ -100,6 +100,6 @@ describe('TechnicianPicker (shared, sheet variant)', () => {
   it('the no-match copy is search-generic, not name-specific', () => {
     const root = renderPicker('tiles');
     typeIntoSearch(root, 'zzz');
-    expect(texts(root)).toContain('No technician matches that search.');
+    expect(texts(root)).toContain('No employee matches that search.');
   });
 });

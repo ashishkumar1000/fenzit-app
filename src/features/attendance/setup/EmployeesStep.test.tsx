@@ -396,7 +396,7 @@ describe('EmployeesStep — 20-1 loading feedback', () => {
     ).toBeGreaterThan(0);
     expect(renderer.root.findAllByType(Skeleton).length).toBeGreaterThan(0);
     expect(
-      renderer.root.findAll((n) => n.props.children === 'Invite technicians first').length,
+      renderer.root.findAll((n) => n.props.children === 'Invite employees first').length,
     ).toBe(0);
   });
 

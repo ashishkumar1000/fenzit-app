@@ -185,9 +185,9 @@ export function JobCard({
 
           <View style={styles.footerRow}>
             <View style={styles.techRow}>
-              <Avatar name={technicianName ?? 'Technician'} uri={technicianAvatarUrl ?? null} size="sm" />
+              <Avatar name={technicianName ?? 'Employee'} uri={technicianAvatarUrl ?? null} size="sm" />
               <Text style={styles.techName} numberOfLines={1}>
-                {technicianName ?? 'Technician'}
+                {technicianName ?? 'Employee'}
               </Text>
             </View>
           </View>

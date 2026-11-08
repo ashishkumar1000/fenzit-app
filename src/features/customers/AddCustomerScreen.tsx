@@ -70,6 +70,12 @@ import {
   toCustomerFormSeed,
   type CustomerUpdateBaseline,
 } from './requestMapping';
+import {
+  NO_PIN_DIALOG_BODY,
+  NO_PIN_DIALOG_CONFIRM,
+  NO_PIN_DIALOG_SAVE_ANYWAY,
+  NO_PIN_DIALOG_TITLE,
+} from './locationStatus';
 import type {
   NewCustomerInput,
   PickedAddress,
@@ -77,6 +83,7 @@ import type {
 } from './types';
 import type { RootStackParamList } from '../../navigation/types';
 import { FormSectionCard } from './components/FormSectionCard';
+import { NoPinNotice } from './components/NoPinNotice';
 import { useCreateCustomer } from './useCreateCustomer';
 import { DIAL_CODE, PHONE_LENGTH } from './constants';
 
@@ -111,6 +118,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   const [previewLine, setPreviewLine] = useState('');
   // Discard guard (CAP-6): leaving with unsaved input asks first.
   const [discardVisible, setDiscardVisible] = useState(false);
+  // No-pin confirm (text-only save): shown before the save goes through.
+  const [noPinVisible, setNoPinVisible] = useState(false);
   // Edit mode only (OfficeFormScreen precedent): load-and-seed from the
   // detail endpoint, with the same three load states — spinner, 404 notice,
   // inline load error over the (unseeded, unsavable) form.
@@ -325,8 +334,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
       : {}),
   });
 
-  const onSubmit = () => {
-    if (!canSubmit) return;
+  const submitForm = () => {
     // The baseline can't be null on a save press (the form only renders
     // after the seed, and the load-error form has nothing seeded to save) —
     // the guard is a belt for a state the form can't reach, not a
@@ -345,6 +353,48 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
       return;
     }
     void handleSubmit(toCreateCustomerRequest(buildRequest()));
+  };
+
+  const onSubmit = () => {
+    if (!canSubmit) return;
+    // Any save that leaves the customer without a map pin asks first, on add
+    // and on edit. "Save anyway" keeps the save one tap away.
+    if (!snapshot) {
+      setNoPinVisible(true);
+      return;
+    }
+    submitForm();
+  };
+
+  const handleSaveWithoutPin = () => {
+    // Re-check the gate at press time: a save already in flight, or a form
+    // that no longer passes, must not be sent a second time.
+    if (submitting || !canSubmit) return;
+    setNoPinVisible(false);
+    submitForm();
+  };
+
+  // The set-location screen (MapPinPicker). Used by the address box and by
+  // "Pin on map" in the no-pin confirm, so both open the same screen.
+  const openPinPicker = () => {
+    navigation.navigate('MapPinPicker', {
+      mode: 'customer',
+      // CAP-2 prefill: the CURRENT snapshot (seeded or freshly picked)
+      // centres the picker; a manual-entry customer opens cold, exactly as
+      // add mode always has.
+      ...(snapshot
+        ? {
+            initialLatitude: snapshot.latitude,
+            initialLongitude: snapshot.longitude,
+          }
+        : {}),
+    });
+  };
+
+  // "Pin on map" closes the confirm and opens the pin screen.
+  const handlePinFromNoPinDialog = () => {
+    setNoPinVisible(false);
+    openPinPicker();
   };
 
   // Edit-mode load states (OfficeFormScreen precedent): a spinner while the
@@ -454,25 +504,12 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           <FormSectionCard
             icon={<MapPin size={18} color={colors.primary} strokeWidth={2} />}
             title="Customer address"
-            subtitle="Where your technician will visit"
+            subtitle="Where your employee will visit"
             required>
             {/* Resolved-address preview: read-only box + Change — the whole
                 box opens the map picker. Empty until a pick lands. */}
             <Pressable
-              onPress={() =>
-                navigation.navigate('MapPinPicker', {
-                  mode: 'customer',
-                  // CAP-2 prefill: the CURRENT snapshot (seeded or freshly
-                  // picked) centres the picker; a manual-entry customer
-                  // opens cold, exactly as add mode always has.
-                  ...(snapshot
-                    ? {
-                        initialLatitude: snapshot.latitude,
-                        initialLongitude: snapshot.longitude,
-                      }
-                    : {}),
-                })
-              }
+              onPress={openPinPicker}
               disabled={submitting}
               accessibilityRole="button"
               accessibilityLabel="Open the map to set the customer's location"
@@ -491,6 +528,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
                 <ChevronRight size={14} color={colors.primary} strokeWidth={2.5} />
               </View>
             </Pressable>
+            {/* Edit only: a saved customer with no pin shows the chip under the map box. */}
+            {isEdit && !snapshot ? <NoPinNotice /> : null}
 
             <Input
               label="Flat / House no., Building & Wing"
@@ -538,7 +577,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             <View style={styles.infoRow}>
               <Info size={13} color={colors.textMuted} strokeWidth={2} />
               <Text style={styles.infoText}>
-                Your technician will use this address and the map pin to reach
+                Your employee will use this address and the map pin to reach
                 the customer.
               </Text>
             </View>
@@ -586,6 +625,19 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
         icon={<AlertTriangle size={18} color={colors.primary} strokeWidth={2} />}
         onConfirm={handleDiscard}
         onCancel={handleKeepEditing}
+      />
+
+      <ConfirmDialog
+        visible={noPinVisible}
+        title={NO_PIN_DIALOG_TITLE}
+        message={NO_PIN_DIALOG_BODY}
+        confirmLabel={NO_PIN_DIALOG_CONFIRM}
+        cancelLabel={NO_PIN_DIALOG_SAVE_ANYWAY}
+        titleInHeader
+        submitting={submitting}
+        onConfirm={handlePinFromNoPinDialog}
+        onSecondary={handleSaveWithoutPin}
+        onCancel={() => setNoPinVisible(false)}
       />
     </SafeAreaView>
   );

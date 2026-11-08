@@ -255,11 +255,11 @@ it('fetches on mount with the route param and renders the full detail', async ()
   expect(text).toContain('Skills'); // the muted label above the skill chips
   expect(text).toContain('Step 3 of 6 — In progress'); // current step line
   expect(text).toContain('Leaking tap in the kitchen'); // description
-  expect(text).toContain('Notes for technician');
+  expect(text).toContain('Notes for employee');
   expect(text).toContain('Ring the bell twice'); // notes body
   expect(text).toContain('Customer');
   expect(text).toContain('Ravi Kumar');
-  expect(text).toContain('Technician');
+  expect(text).toContain('Employee');
   expect(text).toContain('Anil Kumar');
   expect(text).toContain('AC repair'); // skills render as individual chips
   expect(text).toContain('Photos & signature');
@@ -530,7 +530,7 @@ it('cancel confirms via the ConfirmDialog and PATCHes exactly { status: "cancell
   // The ConfirmDialog presents its question; nothing has PATCHed yet.
   const [dialog] = upDialogs(renderer.root);
   expect(dialog.props.title).toBe('Cancel job');
-  expect(dialog.props.message).toBe('The technician will no longer see this job.');
+  expect(dialog.props.message).toBe('The employee will no longer see this job.');
   expect(update).not.toHaveBeenCalled();
   expect(getById).toHaveBeenCalledTimes(1);
 

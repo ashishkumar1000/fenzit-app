@@ -169,7 +169,7 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
       // stuck). A mid-flight dismissal would also skip the reset, so a
       // reopen would show stale form values.
       dismissible={!submitting}
-      title="Add technician"
+      title="Add employee"
       subtitle="They'll get an SMS invite to download the Fenzit app and come online.">
       <View style={styles.form}>
         <Input

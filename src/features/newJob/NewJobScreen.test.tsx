@@ -11,7 +11,7 @@
  *    picked only the Skill section renders; Customer, Date & time, Assign
  *    technician and Notes appear once it is chosen.
  *
- * 3. Inline "Add new technician" (product feedback 2026-09-20) — the link
+ * 3. Inline "Add new employee" (product feedback 2026-09-20) — the link
  *    opens the invite sheet; a successful invite forces a profile refresh
  *    (the picker's roster reads `/users/me`, not the local store the invite
  *    writes to) and auto-selects the newcomer when they carry the selected
@@ -339,12 +339,12 @@ it('shows only the Skill section until a skill is picked', () => {
     root.findAllByProps({ accessibilityLabel: 'Plumbing' }).length,
   ).toBeGreaterThan(0);
   expect(root.findAllByProps({ accessibilityLabel: 'Browse all customers' })).toEqual([]);
-  expect(root.findAllByProps({ accessibilityLabel: 'Notes for technician' })).toEqual([]);
+  expect(root.findAllByProps({ accessibilityLabel: 'Notes for employee' })).toEqual([]);
   // No section heads either — the only visible section (Skill) names itself
   // inline in the picker header.
   expect(root.findAllByProps({ accessibilityRole: 'header' })).toEqual([]);
   expect(root.findAllByProps({ testID: 'section-divider' })).toEqual([]);
-  expect(findButtonWithText(root, 'Add new technician')).toBeUndefined();
+  expect(findButtonWithText(root, 'Add new employee')).toBeUndefined();
 });
 
 it('reveals Customer, technician and Notes once a skill is picked', () => {
@@ -355,9 +355,9 @@ it('reveals Customer, technician and Notes once a skill is picked', () => {
   // RN mirrors accessibilityLabel onto host wrapper nodes — count the
   // presence, not exactly one node.
   expect(
-    root.findAllByProps({ accessibilityLabel: 'Notes for technician' }).length,
+    root.findAllByProps({ accessibilityLabel: 'Notes for employee' }).length,
   ).toBeGreaterThan(0);
-  expect(findButtonWithText(root, 'Add new technician')).toBeDefined();
+  expect(findButtonWithText(root, 'Add new employee')).toBeDefined();
 });
 
 it('separates the sections: eyebrows for the form fields, inline titles for the pickers', () => {
@@ -375,7 +375,7 @@ it('separates the sections: eyebrows for the form fields, inline titles for the 
         .map(t => t.props.children),
     ),
   ];
-  expect(names).toEqual(['Date & time', 'Notes for technician']);
+  expect(names).toEqual(['Date & time', 'Notes for employee']);
   // One hairline per eyebrow — RN mirrors the testID onto the host wrapper,
   // doubling the node count; assert the floor, not the doubled exact count.
   expect(
@@ -383,10 +383,10 @@ it('separates the sections: eyebrows for the form fields, inline titles for the 
   ).toBeGreaterThanOrEqual(2);
   // The picker sections carry their names inline instead.
   expect(root.findAllByProps({ title: 'Customer' }).length).toBe(1);
-  expect(root.findAllByProps({ title: 'Technician' }).length).toBe(1);
+  expect(root.findAllByProps({ title: 'Employee' }).length).toBe(1);
 });
 
-// --- Inline "Add new technician" --------------------------------------------
+// --- Inline "Add new employee" --------------------------------------------
 
 it('opens the invite sheet from the technician section link', () => {
   const { root } = renderScreen();
@@ -395,7 +395,7 @@ it('opens the invite sheet from the technician section link', () => {
   expect(root.findAllByProps({ testID: 'add-sheet-submit' })).toEqual([]);
 
   act(() => {
-    findButtonWithText(root, 'Add new technician')?.props.onPress();
+    findButtonWithText(root, 'Add new employee')?.props.onPress();
   });
 
   expect(
@@ -425,7 +425,7 @@ it('invites, forces a profile refresh, and auto-selects the newcomer who carries
   pickFirstSkill(root);
 
   act(() => {
-    findButtonWithText(root, 'Add new technician')?.props.onPress();
+    findButtonWithText(root, 'Add new employee')?.props.onPress();
   });
   await act(async () => {
     root.findAllByProps({ testID: 'add-sheet-submit' })[0].props.onPress();
@@ -457,7 +457,7 @@ it('does not auto-select a newcomer whose skills exclude the picked skill', asyn
   pickFirstSkill(root);
 
   act(() => {
-    findButtonWithText(root, 'Add new technician')?.props.onPress();
+    findButtonWithText(root, 'Add new employee')?.props.onPress();
   });
   await act(async () => {
     root.findAllByProps({ testID: 'add-sheet-submit' })[0].props.onPress();
@@ -479,7 +479,7 @@ it('refreshes nothing when the invite fails — the sheet keeps its error state'
   pickFirstSkill(root);
 
   act(() => {
-    findButtonWithText(root, 'Add new technician')?.props.onPress();
+    findButtonWithText(root, 'Add new employee')?.props.onPress();
   });
   await act(async () => {
     root.findAllByProps({ testID: 'add-sheet-submit' })[0].props.onPress();
@@ -503,7 +503,7 @@ it('degrades silently when the fresh roster does not carry the newcomer', async 
   pickFirstSkill(root);
 
   act(() => {
-    findButtonWithText(root, 'Add new technician')?.props.onPress();
+    findButtonWithText(root, 'Add new employee')?.props.onPress();
   });
   // A rejection here would fail the test — the handler must always resolve.
   await act(async () => {
@@ -558,7 +558,7 @@ it('collapses the form when SelectSkills returns an empty selection (Clear)', ()
   // `null` is a decision — the skill (and any technician needing it) is
   // dropped and the form re-collapses to just the Skill section.
   expect(root.findAllByProps({ accessibilityLabel: 'Browse all customers' })).toEqual([]);
-  expect(root.findAllByProps({ accessibilityLabel: 'Notes for technician' })).toEqual([]);
+  expect(root.findAllByProps({ accessibilityLabel: 'Notes for employee' })).toEqual([]);
   expect(navigation.setParams).toHaveBeenCalledWith({
     selectedSkillId: undefined,
   });
@@ -636,7 +636,7 @@ it('"Browse all" pushes SelectTechnicians carrying the current selection and ski
   });
   act(() => {
     root
-      .findAllByProps({ accessibilityLabel: 'Browse all technicians' })[0]
+      .findAllByProps({ accessibilityLabel: 'Browse all employees' })[0]
       .props.onPress();
   });
 
@@ -758,7 +758,7 @@ it('shows the empty-book copy when the owner has no customers yet', () => {
 const JOB_HINT_COPY = [
   'Pick a skill to continue',
   'Pick a customer to continue',
-  'Pick a technician to continue',
+  'Pick an employee to continue',
   'Pick a time that is still to come',
 ];
 
@@ -812,7 +812,7 @@ describe('why Create job is off', () => {
     const { root } = renderScreen();
     pickFirstSkill(root);
     pressByName(root, 'Priya Sharma');
-    expect(jobHint(root)).toBe('Pick a technician to continue');
+    expect(jobHint(root)).toBe('Pick an employee to continue');
   });
 
   it('shows no hint once skill, customer and technician are set and the slot is ahead', () => {
@@ -876,7 +876,7 @@ describe('a server error does not outlive the edit that fixes it', () => {
     expect(hasText(root, 'Could not create the job')).toBe(true);
 
     const notes = root.findAll(
-      n => n.props.accessibilityLabel === 'Notes for technician' &&
+      n => n.props.accessibilityLabel === 'Notes for employee' &&
         typeof n.props.onChangeText === 'function',
     )[0];
     act(() => {
@@ -914,7 +914,7 @@ describe('a server error does not outlive the edit that fixes it', () => {
     const pending = pressCreateJob(root);
     // The owner edits the notes while the create is still running.
     const notes = root.findAll(
-      n => n.props.accessibilityLabel === 'Notes for technician' &&
+      n => n.props.accessibilityLabel === 'Notes for employee' &&
         typeof n.props.onChangeText === 'function',
     )[0];
     act(() => {
@@ -958,7 +958,7 @@ describe('the reason comes back once a stale error clears', () => {
     // Ravi only has Plumbing, so picking Electrical clears him and the form is incomplete.
     pressByName(root, 'Electrical');
     expect(hasText(root, 'Could not create the job')).toBe(false);
-    expect(jobHint(root)).toBe('Pick a technician to continue');
+    expect(jobHint(root)).toBe('Pick an employee to continue');
   });
 });
 

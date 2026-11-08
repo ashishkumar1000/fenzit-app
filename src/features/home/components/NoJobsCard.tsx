@@ -80,8 +80,8 @@ export function NoJobsCard({ hasTechnicians, canWrite = true }: Props) {
           {!canWrite
             ? 'Jobs your team creates will show up here.'
             : hasTechnicians
-              ? 'Create your first job to assign it to a technician.'
-              : 'Add a technician first, then you can create and assign jobs.'}
+              ? 'Create your first job to assign it to an employee.'
+              : 'Add an employee first, then you can create and assign jobs.'}
         </Text>
       </View>
     </Card>

@@ -85,15 +85,15 @@ describe('activeOnly copy', () => {
     expect(t).toContain('Pick an employee');
     expect(t).toContain('Choose who this weekly off is for.');
     expect(root.findByType(TextInput).props.placeholder).toBe('Search employees');
-    expect(t).not.toContain('Select technicians');
+    expect(t).not.toContain('Select employees');
   });
 
   it('keeps the job wording for the New Job flow', () => {
     const root = renderScreen(false);
     const t = allTexts(root);
-    expect(t).toContain('Select technicians');
+    expect(t).toContain('Select employees');
     expect(t).toContain('Choose who will do the job.');
-    expect(root.findByType(TextInput).props.placeholder).toBe('Search technicians');
+    expect(root.findByType(TextInput).props.placeholder).toBe('Search employees');
   });
 });
 
@@ -135,7 +135,7 @@ describe('alphabetical order and odd rows', () => {
     expect(() => typeSearch(root, 'bal')).not.toThrow();
     expect(rowNames(root, ['Asha', 'Bala'])).toEqual(['Bala']);
     expect(() => typeSearch(root, '9000')).not.toThrow();
-    expect(allTexts(root).some((t) => t.startsWith('No technicians match'))).toBe(true);
+    expect(allTexts(root).some((t) => t.startsWith('No employees match'))).toBe(true);
     expect(() => typeSearch(root, 'EMP-1')).not.toThrow();
   });
 

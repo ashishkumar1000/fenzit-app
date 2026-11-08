@@ -78,7 +78,7 @@ export default function MoreScreen({ navigation }: Props) {
       ? canWrite
         ? 'Add your team'
         : 'No team members yet'
-      : `${technicianCount} ${technicianCount === 1 ? 'technician' : 'technicians'}`;
+      : `${technicianCount} ${technicianCount === 1 ? 'employee' : 'employees'}`;
 
   // The count arrives async (null until the throttled count lands).
   const notificationsSubtitle =
@@ -176,7 +176,7 @@ export default function MoreScreen({ navigation }: Props) {
           <MoreTile
             icon={<HardHat size={22} color={colors.status.progress.solid} strokeWidth={1.5} />}
             iconBg={colors.status.progress.bg}
-            title="Technicians"
+            title="Employees"
             subtitle={techSubtitle}
             size={tileSize}
             onPress={() => navigation.navigate('Technicians')}

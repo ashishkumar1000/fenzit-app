@@ -29,7 +29,7 @@ export interface EditJobDraft {
 }
 
 export const EDIT_STARTED_MESSAGE = "This job has already started and can't be changed";
-export const TECHNICIAN_GONE_MESSAGE = 'That technician is no longer available';
+export const TECHNICIAN_GONE_MESSAGE = 'That employee is no longer available';
 /**
  * Shown when a save fails without a usable server message (empty, or an
  * unrecognized shape) — always better feedback than a blank error line.

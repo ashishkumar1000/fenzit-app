@@ -1,7 +1,7 @@
 /**
  * QuickActions — pins the setup gate (product feedback 2026-09-20): a job
  * must be assigned to someone, so with no technicians (`canCreateJob: false`)
- * the New job tile renders as a disabled pressable and Add technician takes
+ * the New job tile renders as a disabled pressable and Add employee takes
  * over the row's primary treatment. Tiles are found via their `onPress`
  * handler identity — Card forwards it to the Pressable unchanged. Also pins
  * the plain count lines ("24 total") on the add tiles: shown only above zero,
@@ -82,9 +82,9 @@ it('with technicians available: New job is enabled and stays the primary', () =>
   expect(
     labelStyle('New job').some(s => s?.color === colors.onPrimary),
   ).toBe(true);
-  // Add technician keeps the secondary look while New job is actionable.
+  // Add employee keeps the secondary look while New job is actionable.
   expect(
-    labelStyle('Add technician').some(s => s?.color === colors.onPrimary),
+    labelStyle('Add employee').some(s => s?.color === colors.onPrimary),
   ).toBe(false);
   // And no disabled dimming on the enabled tile.
   expect(
@@ -92,7 +92,7 @@ it('with technicians available: New job is enabled and stays the primary', () =>
   ).toBe(false);
 });
 
-it('without technicians: New job is disabled and Add technician goes primary', () => {
+it('without technicians: New job is disabled and Add employee goes primary', () => {
   const handlers = makeHandlers();
   render(false, handlers);
 
@@ -103,7 +103,7 @@ it('without technicians: New job is disabled and Add technician goes primary', (
   expect(styleOf(newJobTile).some(s => s?.opacity === 0.5)).toBe(true);
 
   expect(
-    labelStyle('Add technician').some(s => s?.color === colors.onPrimary),
+    labelStyle('Add employee').some(s => s?.color === colors.onPrimary),
   ).toBe(true);
 
   // The other tiles stay tappable.

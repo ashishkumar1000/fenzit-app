@@ -213,17 +213,17 @@ describe('formatRequestedAt', () => {
 });
 
 describe('technicianScopeLabel', () => {
-  it('says All technicians when the selection is empty (null)', () => {
-    expect(technicianScopeLabel(null)).toBe('All technicians');
+  it('says All employees when the selection is empty (null)', () => {
+    expect(technicianScopeLabel(null)).toBe('All employees');
   });
 
   it('uses the singular for one technician', () => {
-    expect(technicianScopeLabel(1)).toBe('1 technician');
+    expect(technicianScopeLabel(1)).toBe('1 employee');
   });
 
   it('uses the plural for more than one', () => {
-    expect(technicianScopeLabel(3)).toBe('3 technicians');
-    expect(technicianScopeLabel(12)).toBe('12 technicians');
+    expect(technicianScopeLabel(3)).toBe('3 employees');
+    expect(technicianScopeLabel(12)).toBe('12 employees');
   });
 });
 describe('availableReportTypes (21-4) — the attendance gate', () => {
@@ -247,7 +247,7 @@ describe('availableReportTypes (21-4) — the attendance gate', () => {
 describe('reportTypeLabel (21-4) — history row titles', () => {
   it('maps both registered types to their sentence-case labels', () => {
     expect(reportTypeLabel('technician_job_activity')).toBe(
-      'Technician job report',
+      'Employee job report',
     );
     expect(reportTypeLabel('attendance_report')).toBe('Attendance report');
   });
@@ -265,7 +265,7 @@ describe('scopeLabel (21-4) — the per-type row subtitle', () => {
         technicianCount: 3,
         officeCount: null,
       }),
-    ).toBe('3 technicians');
+    ).toBe('3 employees');
   });
 
   it('attendance rows read offices × employees, with the all-arms spelled out', () => {

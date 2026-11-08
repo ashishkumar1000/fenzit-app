@@ -513,7 +513,7 @@ export default function NotificationsScreen({ navigation }: Props) {
                   description={
                     role === 'employee'
                       ? 'Updates for you will show up here.'
-                      : 'Updates from your technicians — job arrivals, progress, completions and report updates — will show up here.'
+                      : 'Updates from your employees — job arrivals, progress, completions and report updates — will show up here.'
                   }
                 />
               )

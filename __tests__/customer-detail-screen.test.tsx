@@ -182,7 +182,8 @@ it('renders history rows as given: jobNumber, badge, date', async () => {
   expect(text).toContain('Done'); // badge label
   expect(text).toContain('12 Aug 2026'); // en-IN date line
   expect(text).toContain('Cancelled');
-  expect(renderer.root.findAllByType(Badge).length).toBe(2);
+  // Two history-row badges, plus the no-pin chip (this fixture has no saved pin).
+  expect(renderer.root.findAllByType(Badge).length).toBe(3);
 });
 
 it('pushes JobDetail with the row id when a history row is tapped (AC 3)', async () => {

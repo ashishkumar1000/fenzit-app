@@ -73,7 +73,7 @@ const EMPTY_BY_FILTER: Record<JobFilter, { icon: LucideIcon; description: string
   all: {
     icon: ClipboardList,
     description:
-      'Create your first job to assign it to a technician and track it through to completion.',
+      'Create your first job to assign it to an employee and track it through to completion.',
   },
   scheduled: {
     icon: CalendarClock,
@@ -82,11 +82,11 @@ const EMPTY_BY_FILTER: Record<JobFilter, { icon: LucideIcon; description: string
   in_progress: {
     icon: Wrench,
     description:
-      'Jobs a technician has started, but not yet finished, will show up here.',
+      'Jobs an employee has started, but not yet finished, will show up here.',
   },
   completed: {
     icon: CircleCheck,
-    description: 'Jobs a technician has marked complete will show up here.',
+    description: 'Jobs an employee has marked complete will show up here.',
   },
   cancelled: {
     icon: CircleX,

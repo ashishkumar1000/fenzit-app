@@ -36,7 +36,7 @@ export interface Technician {
   avatarUrl?: string | null;
 }
 
-/** Shape captured by the "Add technician" form. */
+/** Shape captured by the "Add employee" form. */
 export interface NewTechnicianInput {
   name: string;
   /** Digits only, no dial code — see `DIAL_CODE` in this feature's constants. */

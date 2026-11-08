@@ -2,7 +2,7 @@
  * TechniciansScreen — full-screen route (pushed over the tabs). Shows the
  * zero-data empty state for a new account, or the technician list once the
  * owner has invited their team. The header "Add" button opens the
- * AddTechnicianSheet; Home's "Add technician" quick action lands here with
+ * AddTechnicianSheet; Home's "Add employee" quick action lands here with
  * that sheet already open (`autoOpenAdd` param).
  *
  * The roster it renders is the shared profile store's mirror (`GET /users/me`
@@ -47,7 +47,7 @@ export default function TechniciansScreen({ navigation, route }: Props) {
   // The roster is readable by a viewer; inviting is not. The Add button and
   // the Add sheet are not rendered for them (no auto-open either).
   const canWrite = useCanWrite();
-  // Home's "Add technician" quick action pushes us with `autoOpenAdd` — read
+  // Home's "Add employee" quick action pushes us with `autoOpenAdd` — read
   // once as the initial state, so the sheet never re-opens on later visits
   // (stack params are per-push, but a re-render must not reset a user-closed
   // sheet either).
@@ -116,7 +116,7 @@ export default function TechniciansScreen({ navigation, route }: Props) {
         // First load with nothing persisted yet: a roster-shaped shimmer
         // (skeleton over spinner, per the loading-feedback sweep) instead of
         // the empty state, which would read as a confident "no team".
-        <View style={styles.skeleton} accessibilityLabel="Loading technicians">
+        <View style={styles.skeleton} accessibilityLabel="Loading employees">
           <Skeleton rows={5} height={76} />
         </View>
       ) : !hasTechnicians && loadError ? (
@@ -154,7 +154,7 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           refreshControl={refreshControl}>
           <EmptyState
             icon={<HardHat size={36} color={colors.primary} strokeWidth={1.5} />}
-            title="No technicians yet"
+            title="No employees yet"
             description={
               canWrite
                 ? "Add your team so you can assign jobs to them. They'll get an SMS invite to download the Fenzit app."

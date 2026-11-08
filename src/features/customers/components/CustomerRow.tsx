@@ -14,7 +14,9 @@ import {
   formatShortDate,
   jobCountLabel,
 } from '../format';
+import { hasMapPin } from '../locationStatus';
 import type { Customer } from '../types';
+import { NoPinNotice } from './NoPinNotice';
 
 type Props = {
   customer: Customer;
@@ -45,6 +47,7 @@ export function CustomerRow({ customer, onPress }: Props) {
         <Text style={styles.meta} numberOfLines={1}>
           {customerPhone(customer)}
         </Text>
+        {hasMapPin(customer) ? null : <NoPinNotice />}
       </View>
 
       <View style={styles.stats}>
@@ -56,9 +59,11 @@ export function CustomerRow({ customer, onPress }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // Top-aligned: the avatar, name and job count line up on the first row,
+  // even when the no-pin warning adds a line under the text.
   card: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: spacing.s3,
   },
   info: {

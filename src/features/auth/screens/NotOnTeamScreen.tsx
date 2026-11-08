@@ -59,7 +59,7 @@ export function NotOnTeamScreen({ phone, onSetUpInstead, onUseAnotherNumber }: P
           <View style={styles.warnStrip}>
             <TriangleAlert size={18} color={colors.warning} strokeWidth={2.2} />
             <View style={styles.warnText}>
-              <Text style={styles.warnTitle}>Are you an employee or technician?</Text>
+              <Text style={styles.warnTitle}>Are you an employee?</Text>
               <Text style={styles.warnBody}>
                 Please{' '}
                 <Text style={styles.warnStrong}>do NOT set up a company</Text>{' '}
@@ -75,7 +75,7 @@ export function NotOnTeamScreen({ phone, onSetUpInstead, onUseAnotherNumber }: P
             </View>
             <View style={styles.staffCol}>
               <View style={styles.staffTitleRow}>
-                <Text style={styles.staffTitle}>Staff & Technician Setup</Text>
+                <Text style={styles.staffTitle}>Staff Setup</Text>
                 <Text style={styles.chip}>Waiting for invite</Text>
               </View>
               <Text style={styles.staffBody}>

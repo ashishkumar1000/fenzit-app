@@ -76,7 +76,7 @@ type Props = {
 };
 
 const UNIFIED_PANEL = [
-  'Staff & technicians — attendance and job updates',
+  'Staff & employees — attendance and job updates',
   'Owners — assign jobs and track work',
 ] as const;
 

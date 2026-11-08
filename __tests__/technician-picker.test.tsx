@@ -151,14 +151,14 @@ describe('TechnicianPicker (rows)', () => {
 describe('TechnicianPicker empty states', () => {
   it('says the roster is empty when there are no technicians at all', () => {
     const renderer = mount({ technicians: [] });
-    expect(allText(renderer)).toContain('No technicians added yet.');
+    expect(allText(renderer)).toContain('No employees added yet.');
   });
 
   it('distinguishes a no-match search from an empty roster', async () => {
     const renderer = mount();
     await type(renderer, 'zzz');
 
-    expect(allText(renderer)).toContain('No technician matches that search.');
-    expect(allText(renderer)).not.toContain('No technicians added yet.');
+    expect(allText(renderer)).toContain('No employee matches that search.');
+    expect(allText(renderer)).not.toContain('No employees added yet.');
   });
 });

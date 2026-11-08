@@ -281,7 +281,7 @@ it('shows the per-filter empty state copy', async () => {
 
   const text = renderedText(renderer);
   expect(text).toContain('No jobs yet');
-  expect(text).toContain('Jobs a technician has marked complete will show up here.');
+  expect(text).toContain('Jobs an employee has marked complete will show up here.');
 });
 
 it('loads the next page when the list reaches its end', async () => {

@@ -174,7 +174,7 @@ describe('EditJobSheet', () => {
     expect(text).toContain('Edit job');
     expect(text).toContain('Only scheduled jobs can be edited.');
     expect(text).toContain('Description');
-    expect(text).toContain('Notes for technician');
+    expect(text).toContain('Notes for employee');
     // Text inputs hold their content in `value`, not as Text children.
     const inputs = renderer.root.findAll(
       node => typeof node.type !== 'string' && node.type === TextInput,
@@ -189,7 +189,7 @@ describe('EditJobSheet', () => {
     // The dropped-edit hints are conditional — a fresh, untouched form drops
     // nothing, so neither hint shows above Save.
     expect(text).not.toContain("Empty or spacing-only text won't save");
-    expect(text).not.toContain("You can't remove the technician here");
+    expect(text).not.toContain("You can't remove the employee here");
 
     expect(pressableFor(renderer, 'Save changes').props.disabled).toBe(true);
 
@@ -212,12 +212,12 @@ describe('EditJobSheet', () => {
     expect(descriptionInput).toBeDefined();
     await act_(renderer, () => descriptionInput!.props.onChangeText(''));
     expect(allText(renderer)).toContain("Empty or spacing-only text won't save");
-    expect(allText(renderer)).not.toContain("You can't remove the technician here");
+    expect(allText(renderer)).not.toContain("You can't remove the employee here");
 
     // Deselect the technician (tap the assigned row again) → its hint fires
     // alongside, and both point at edits this API build cannot send.
     await act_(renderer, () => pressableFor(renderer, 'Suresh Kumar').props.onPress());
-    expect(allText(renderer)).toContain("You can't remove the technician here");
+    expect(allText(renderer)).toContain("You can't remove the employee here");
 
     // Typing real text back drops the hint again — the patch would carry it.
     await act_(renderer, () => descriptionInput!.props.onChangeText('AC leaking now'));

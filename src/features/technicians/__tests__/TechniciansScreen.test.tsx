@@ -1,7 +1,7 @@
 /**
  * TechniciansScreen — pins what the screen itself owns:
  *
- *  - the `autoOpenAdd` route param (Home's "Add technician" quick action,
+ *  - the `autoOpenAdd` route param (Home's "Add employee" quick action,
  *    product feedback 2026-09-20): the Add sheet is already open on arrival,
  *    a plain push leaves it closed, and once the user closes it a re-render
  *    with identical params must not reopen it — the param is read once as
@@ -9,7 +9,7 @@
  *  - the 20-1 loading-feedback sweep postures (the screen drives the roster
  *    GET because it can be the first consumer after a cold start):
  *    first load with nothing persisted → a labelled roster shimmer, never
- *    a confident "No technicians yet"; a failure with nothing persisted →
+ *    a confident "No employees yet"; a failure with nothing persisted →
  *    the error + "Try again"; a loaded roster → the rows.
  *  - pull-to-refresh drives the handle's `refresh` once per tick (the latch
  *    is a ref); a DOWN refresh still drops the spinner.
@@ -206,9 +206,9 @@ describe('the 20-1 loading-feedback postures', () => {
     profile.isLoading = true;
     const { root } = renderScreen();
 
-    expect(root.findAllByProps({ accessibilityLabel: 'Loading technicians' }).length).toBeGreaterThan(0);
+    expect(root.findAllByProps({ accessibilityLabel: 'Loading employees' }).length).toBeGreaterThan(0);
     expect(root.findAllByType(Skeleton).length).toBeGreaterThan(0);
-    expect(root.findAll(n => n.props.children === 'No technicians yet').length).toBe(0);
+    expect(root.findAll(n => n.props.children === 'No employees yet').length).toBe(0);
   });
 
   it('loading WITH a persisted roster: the rows show, no shimmer over them', () => {
@@ -219,7 +219,7 @@ describe('the 20-1 loading-feedback postures', () => {
 
     expect(flatList.props.data).toHaveLength(1);
     expect(root.findAllByType(Skeleton).length).toBe(0);
-    expect(root.findAll(n => n.props.children === 'No technicians yet').length).toBe(0);
+    expect(root.findAll(n => n.props.children === 'No employees yet').length).toBe(0);
   });
 
   it('a failure with nothing persisted: the error view + Try again; Try again re-fetches', async () => {
@@ -275,7 +275,7 @@ describe('the 20-1 review — failed-refresh and per-posture pull', () => {
   it('the empty posture is scrollable: the pull works from it too', () => {
     const { root } = renderScreen();
     expect(root.findAllByType(RefreshControl).length).toBeGreaterThan(0);
-    expect(root.findAll(n => n.props.children === 'No technicians yet').length).toBeGreaterThan(0);
+    expect(root.findAll(n => n.props.children === 'No employees yet').length).toBeGreaterThan(0);
   });
 });
 
