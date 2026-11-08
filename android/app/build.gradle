@@ -90,8 +90,10 @@ afterEvaluate {
 
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * On since 1.2.5 (R8 shrinks the release APK/AAB and produces the mapping file
+ * that makes crash reports readable). Needs device testing of a release build.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -106,6 +108,9 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Sentry Gradle script (symbol and mapping upload). Static path, so the build
+// does not shell out to node during Gradle configuration.
+apply from: new File(rootProject.projectDir, "../node_modules/@sentry/react-native/sentry.gradle")
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -136,8 +141,8 @@ android {
         // Synced with package.json "version" and the iOS MARKETING_VERSION/
         // CURRENT_PROJECT_VERSION — validated by `bun run verify:version`
         // (scripts/verify-version-sync.js) and on every commit via .githooks.
-        versionCode 10204
-        versionName "1.2.4"
+        versionCode 10205
+        versionName "1.2.5"
     }
     // Split the APK per CPU architecture — each ABI APK carries only its own
     // native libs (Hermes etc.), roughly a quarter of the universal size.

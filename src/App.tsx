@@ -60,6 +60,7 @@ import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { checkMembershipAfterForbidden } from './features/auth/membershipCheck';
 import { syncSessionFromServer } from './features/auth/sessionSync';
 import { claimLaunchTap } from './features/push/pendingTapTarget';
+import * as Sentry from '@sentry/react-native';
 
 const LEGACY_PENDING_DELETION_KEY = 'fenzit.push.pendingTokenDeletion';
 
@@ -237,4 +238,4 @@ function App() {
   );
 }
 
-export default App;
+export default Sentry.wrap(App);

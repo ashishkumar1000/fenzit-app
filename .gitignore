@@ -88,3 +88,7 @@ dist/
 web-build/
 expo-env.d.ts
 .idea/
+
+# Sentry CLI config holds an auth token; never commit
+android/sentry.properties
+ios/sentry.properties

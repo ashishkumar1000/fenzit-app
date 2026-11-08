@@ -2,6 +2,9 @@
  * @format
  */
 
+// Sentry must be the first import so it starts before the app loads and can
+// catch startup errors. Do not move it below the App import.
+import './src/services/sentry';
 import { AppRegistry } from 'react-native';
 // Firebase push (CAP-3): the background handler MUST be registered before
 // AppRegistry — a data-less hybrid message arriving while the app is quit

@@ -110,6 +110,10 @@ jobs:
           ASC_KEY_ID: ${{ secrets.FENZIT_ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.FENZIT_ASC_ISSUER_ID }}
           ASC_TEAM_ID: ${{ secrets.FENZIT_APPLE_TEAM_ID }}
+          # Sentry uploads the JS source map and debug symbols (Release only).
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: fenzit
+          SENTRY_PROJECT: fenzit-app
         run: |
           set -o pipefail
           xcodebuild \
