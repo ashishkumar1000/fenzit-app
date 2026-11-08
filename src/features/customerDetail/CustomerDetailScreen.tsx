@@ -29,8 +29,6 @@ import {
   ChevronLeft,
   FileQuestion,
   MapPin,
-  Pencil,
-  Phone,
 } from 'lucide-react-native';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -236,13 +234,6 @@ export default function CustomerDetailScreen() {
                 {detail.name}
               </Text>
             </View>
-            <IconButton
-              variant="ghost"
-              size="md"
-              label={`Call ${detail.name}`}
-              onPress={() => void openTel(detail.countryCode, detail.phoneNumber)}>
-              <Phone size={18} color={colors.primary} strokeWidth={2} />
-            </IconButton>
           </View>
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>{customerPhone(detail)}</Text>
@@ -268,12 +259,36 @@ export default function CustomerDetailScreen() {
             </View>
           ) : null}
           <Text style={styles.sinceCaption}>Customer since {dateLine(detail.createdAt)}</Text>
+          <View style={styles.actionRow}>
+            <View style={styles.actionCell}>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                accessibilityLabel={`Call ${detail.name}`}
+                onPress={() => void openTel(detail.countryCode, detail.phoneNumber)}>
+                Call
+              </Button>
+            </View>
+            {canWrite ? (
+              <View style={styles.actionCell}>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
+                  accessibilityLabel={`Edit ${detail.name}`}
+                  onPress={() => navigation.navigate('AddCustomer', { customerId })}>
+                  Edit
+                </Button>
+              </View>
+            ) : null}
+          </View>
         </Card>
 
         <Text style={styles.sectionTitle}>Job history</Text>
       </View>
     );
-  }, [detail]);
+  }, [detail, canWrite, customerId, navigation]);
 
   const notFound = Boolean(error && (error.status === 404 || error.status === 403));
   const failedWithNoDetail = Boolean(error && !detail && !notFound);
@@ -295,19 +310,6 @@ export default function CustomerDetailScreen() {
           {/* Placeholder while loading / on an error view (deep-link safe). */}
           {detail?.name ?? 'Customer'}
         </Text>
-        {/* Header-right Edit entry (SPEC-edit-customer): the edit form
-            load-and-seeds by id itself, so it is safe to offer before the
-            detail has loaded — but not on the not-found view, where a tap
-            is a guaranteed second 404. */}
-        {!notFound && canWrite ? (
-          <IconButton
-            variant="ghost"
-            size="md"
-            label="Edit customer"
-            onPress={() => navigation.navigate('AddCustomer', { customerId })}>
-            <Pencil size={18} color={colors.primary} strokeWidth={2} />
-          </IconButton>
-        ) : null}
       </View>
 
       {notFound ? (
@@ -437,6 +439,15 @@ const styles = StyleSheet.create({
   sinceCaption: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+  // Call and Edit side by side at the foot of the profile card.
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.s3,
+    marginTop: spacing.s2,
+  },
+  actionCell: {
+    flex: 1,
   },
   sectionTitle: {
     ...typography.heading,
