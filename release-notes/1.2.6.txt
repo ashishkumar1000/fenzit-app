@@ -1,0 +1,5 @@
+Profile photos: add your own photo, and see team photos where people appear.
+Take a selfie for your profile with a face guide and square crop.
+Customers: a warning when a customer has no map pin. New Call and Edit buttons on the customer card.
+Technicians: optional skills when you invite someone, and a searchable skill picker.
+Fixes: tapping a notification opens the right screen, and office forms scroll to the first error when save is blocked.
