@@ -1,0 +1,1 @@
+Fixes a startup crash on Android. The app now opens normally after the update.
