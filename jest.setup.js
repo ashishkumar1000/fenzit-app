@@ -187,6 +187,19 @@ jest.mock('@react-native-firebase/messaging', () => ({
   isDeviceRegisteredForRemoteMessages: () => true,
 }));
 
+// Sentry ships ES modules that Jest cannot parse, so the SDK is stubbed here.
+// This stub hides the init options from every test. Tests of the privacy
+// settings in services/sentry.ts are still to be written.
+jest.mock('@sentry/react-native', () => ({
+  __esModule: true,
+  init: jest.fn(),
+  wrap: (component) => component,
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+  addBreadcrumb: jest.fn(),
+  setUser: jest.fn(),
+}));
+
 jest.mock('@react-native-firebase/crashlytics', () => ({
   __esModule: true,
   getCrashlytics: jest.fn(() => ({})),

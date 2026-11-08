@@ -219,3 +219,11 @@ This app runs **React Native New Architecture (Fabric/TurboModules)** and uses
    and if one must be used, state the interop risk explicitly in the story.
 4. Pure-JS libraries (no native module) are always safe with the New
    Architecture and need no rebuild — prefer them when the feature allows.
+
+## Sentry (crash reporting)
+
+- **Use the `sentry-cli` skill for any Sentry task:** viewing issues or events, projects, organizations, API calls, auth, release or source-map upload. Load the skill before running Sentry CLI commands.
+- Sentry runs alongside Firebase Crashlytics. Uncaught JavaScript errors reach both. Errors caught by `AppErrorBoundary` reach Crashlytics only, because React does not rethrow them to Sentry. Keep that in mind when changing error handling.
+- Sentry is set up in `src/services/sentry.ts`, which is imported first in `index.js`. Keep its privacy settings: no default PII, no session replay, no screenshots, no view hierarchy, no logs, no traces, and the console, touch and ui.click breadcrumbs dropped. Error text is redacted (emails and phone-like numbers) before sending.
+- Never commit `android/sentry.properties` or `ios/sentry.properties`. They hold the auth token and are git-ignored.
+- In CI the auth token comes from the `SENTRY_AUTH_TOKEN` secret. Do not hard-code it.

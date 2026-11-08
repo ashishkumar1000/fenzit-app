@@ -48,6 +48,13 @@ export const SUPABASE_URL = 'https://pnlvreaijzslfymlnoti.supabase.co';
 export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_PysMKIKlQIul6KyAh8-58w_ArsfVh3L';
 
 /**
+ * Sentry project DSN. A DSN is public by design (it can only send events,
+ * not read them). Empty disables Sentry entirely.
+ */
+export const SENTRY_DSN =
+  'https://8fd5c8dc4bae0432114a6efcd9e26e1c@o4512395948916736.ingest.de.sentry.io/4512395959992400';
+
+/**
  * Public pages on the marketing site (fenzit.com). The privacy-policy link
  * is a Google Play requirement inside the app (User Data policy): the policy
  * must be reachable in-app. Owned by fenzit-web — these must match its

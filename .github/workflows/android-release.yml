@@ -134,9 +134,19 @@ jobs:
 
       # Fails the run if the output is debug-signed.
       - name: Build release APKs (per-ABI)
+        env:
+          # Sentry uploads the R8 mapping file so crash traces are readable.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: fenzit
+          SENTRY_PROJECT: fenzit-app
         run: bun run android:build:release
 
       - name: Build release AAB
+        env:
+          # Sentry uploads the R8 mapping file for the bundle as well.
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: fenzit
+          SENTRY_PROJECT: fenzit-app
         run: bun run android:build:aab
 
       - name: Upload APKs
