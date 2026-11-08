@@ -227,3 +227,13 @@ This app runs **React Native New Architecture (Fabric/TurboModules)** and uses
 - Sentry is set up in `src/services/sentry.ts`, which is imported first in `index.js`. Keep its privacy settings: no default PII, no session replay, no screenshots, no view hierarchy, no logs, no traces, and the console, touch and ui.click breadcrumbs dropped. Error text is redacted (emails and phone-like numbers) before sending.
 - Never commit `android/sentry.properties` or `ios/sentry.properties`. They hold the auth token and are git-ignored.
 - In CI the auth token comes from the `SENTRY_AUTH_TOKEN` secret. Do not hard-code it.
+
+## Play Store release notes (MANDATORY for every release)
+
+- Every version that goes to `release` needs `release-notes/<version>.txt`, where `<version>` matches `package.json` exactly (for example `release-notes/1.2.7.txt`). Write it before the version bump is pushed.
+- The release workflow reads that file as the Play "What's new" text and fails the publish job if it is missing or empty. Do not push `release` without it.
+- Keep it under 500 characters (Play's limit) and count before committing (`wc -m`).
+- Plain business English, one line per user-visible change. Name the screen or feature a user would see, such as "Customers" or "Profile photos". No version numbers, ticket IDs, library names, or internal terms such as "refactor", "Sentry" or "R8".
+- Cover every user-facing change since the last version that went to Play, not only the newest commits. Check the git log from the last published `v<version>` tag, and skip internal-only work like crash reporting or build changes.
+- Leave out fixes nobody would notice. Include a fix only when it changes what the user sees.
+- Edit the file in the same commit as the version bump, and rename it if the version changes.

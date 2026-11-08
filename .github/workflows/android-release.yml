@@ -113,6 +113,34 @@ jobs:
       - name: Verify store version downgrade
         run: bun run verify:store
 
+      # Play "What's new" text must exist, fit Play's 500-character limit, and
+      # be written for this release, not copied from the last one. A rebuild of
+      # an already-tagged version skips the freshness check (its notes were
+      # already checked when that version was first released).
+      - name: Verify What's new notes
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          NOTES="release-notes/$VERSION.txt"
+          if [ ! -s "$NOTES" ]; then
+            echo "::error::$NOTES is missing or empty — write the Play What's new text before releasing"
+            exit 1
+          fi
+          CHARS="$(wc -m < "$NOTES" | tr -d ' ')"
+          if [ "$CHARS" -gt 500 ]; then
+            echo "::error::$NOTES is $CHARS characters — Play allows 500"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$VERSION" > /dev/null; then
+            echo "v$VERSION already tagged — skipping the freshness check on rebuild"
+            exit 0
+          fi
+          # Compare with the newest other notes file (highest version).
+          PREV_NOTES="$(ls release-notes/*.txt 2>/dev/null | grep -vx "$NOTES" | sort -V | tail -n 1 || true)"
+          if [ -n "$PREV_NOTES" ] && [ "$(cat "$PREV_NOTES")" = "$(cat "$NOTES")" ]; then
+            echo "::error::$NOTES is identical to $PREV_NOTES — rewrite it for this release"
+            exit 1
+          fi
+
       # Rebuilds the release keystore and keystore.properties from GitHub
       # secrets (never stored in the repo). The runner's copy is discarded
       # with the job.

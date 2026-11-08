@@ -29,6 +29,39 @@ if ! git diff --quiet -- package.json; then
   exit 1
 fi
 
+# 3b. A version bump needs its own Play "What's new" text, written fresh. The
+#     release workflow reads release-notes/<version>.txt, and Play rejects a
+#     release with none. Checks the staged copies (what the commit will hold),
+#     and refuses notes copied unchanged from the previous release.
+version_of() {
+  sed -n 's/^[[:space:]]*"version": "\([^"]*\)".*/\1/p' | head -n 1
+}
+staged_version=$(git show :package.json 2>/dev/null | version_of)
+head_version=$(git show HEAD:package.json 2>/dev/null | version_of)
+if [ -n "$staged_version" ] && [ "$staged_version" != "$head_version" ]; then
+  notes="release-notes/$staged_version.txt"
+  if ! git cat-file -e ":$notes" 2>/dev/null; then
+    echo "pre-commit: version is moving to $staged_version — add $notes with the Play What's new text and stage it" >&2
+    exit 1
+  fi
+  chars=$(git show ":$notes" | wc -m | tr -d ' ')
+  if [ "$chars" -eq 0 ]; then
+    echo "pre-commit: $notes is empty — write the What's new text" >&2
+    exit 1
+  fi
+  if [ "$chars" -gt 500 ]; then
+    echo "pre-commit: $notes is $chars characters — Play allows 500, shorten it" >&2
+    exit 1
+  fi
+  # Same rule as the release workflow's CI gate: compare with the newest
+  # other notes file (highest version) in the index.
+  prev_notes=$(git ls-files 'release-notes/*.txt' | grep -vx "$notes" | sort -V | tail -n 1)
+  if [ -n "$prev_notes" ] && [ "$(git show ":$notes")" = "$(git show ":$prev_notes")" ]; then
+    echo "pre-commit: $notes is identical to $prev_notes — rewrite it for this release" >&2
+    exit 1
+  fi
+fi
+
 # 4. Never let a build number regress below one already uploaded to the
 #    stores (recorded as store-v* tags — see scripts/check-store-downgrade.js).
 #    Runs before sync so a doomed commit never rewrites the worktree.
