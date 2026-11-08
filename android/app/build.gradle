@@ -111,6 +111,12 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 // Sentry Gradle script (symbol and mapping upload). Static path, so the build
 // does not shell out to node during Gradle configuration.
 apply from: new File(rootProject.projectDir, "../node_modules/@sentry/react-native/sentry.gradle")
+// Source map and mapping upload runs only in GitHub Actions (CI=true is set
+// there automatically). Local builds skip the upload, so nothing is sent to
+// Sentry from a laptop. The Sentry script honours this override.
+if (System.getenv("CI") != "true") {
+    project.ext.shouldSentryAutoUploadGeneral = { -> false }
+}
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -141,8 +147,8 @@ android {
         // Synced with package.json "version" and the iOS MARKETING_VERSION/
         // CURRENT_PROJECT_VERSION — validated by `bun run verify:version`
         // (scripts/verify-version-sync.js) and on every commit via .githooks.
-        versionCode 10205
-        versionName "1.2.5"
+        versionCode 10206
+        versionName "1.2.6"
     }
     // Split the APK per CPU architecture — each ABI APK carries only its own
     // native libs (Hermes etc.), roughly a quarter of the universal size.
@@ -233,6 +239,11 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            // Crashlytics mapping upload runs only in GitHub Actions (CI=true).
+            // Without this the plugin uploads the R8 mapping from every local release build.
+            firebaseCrashlytics {
+                mappingFileUploadEnabled = System.getenv("CI") == "true"
+            }
         }
     }
 }
