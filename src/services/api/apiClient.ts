@@ -70,6 +70,16 @@ export function setOnForbidden(handler: (() => void) | null): void {
   onForbidden = handler;
 }
 
+let onSubscriptionExpired: (() => void) | null = null;
+/**
+ * Runs when a write comes back `402` with `SUBSCRIPTION_EXPIRED`. Only the
+ * App root uses it, to re-read the profile so the owner's subscription
+ * roadblock appears. Technicians get no extra handling at all.
+ */
+export function setOnSubscriptionExpired(handler: (() => void) | null): void {
+  onSubscriptionExpired = handler;
+}
+
 /** The configured axios instance. Prefer `ApiService` over calling this directly. */
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -242,6 +252,9 @@ apiClient.interceptors.response.use(
     });
     if (hadToken && error.response?.status === 403) {
       onForbidden?.();
+    }
+    if (error.response?.status === 402 && apiError.code === 'SUBSCRIPTION_EXPIRED') {
+      onSubscriptionExpired?.();
     }
     return Promise.reject(apiError);
   },

@@ -232,6 +232,12 @@ export interface MyProfile {
    * the tile just doesn't render — instead of crashing.
    */
   attendance?: ProfileAttendanceMirror;
+  /**
+   * Company subscription (fenzit-be `/users/me`). `validUntil` is the company's
+   * validity as a UTC ISO-8601 string, or null when no date is set. Optional so
+   * an older backend fails hidden: no date means no roadblock.
+   */
+  subscription?: { validUntil: string | null };
   customers: Paginated<unknown>;
   jobs: Paginated<ProfileJob>;
   jobCounts: JobCounts;

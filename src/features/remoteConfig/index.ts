@@ -1,8 +1,9 @@
 /**
- * Server-driven config UI (SPEC-server-driven-config, CAP-1/2/4): the
- * React-facing half of `services/remoteConfig.ts` — a subscription hook,
- * the forced-update gate screen, and the maintenance banner. The App root
- * composes all three; screens never touch config directly.
+ * Server-driven config UI (SPEC-server-driven-config, CAP-1/2/4; SPEC-app-
+ * roadblocks): the React-facing half of `services/remoteConfig.ts` — a
+ * subscription hook, the two full-screen roadblocks (force update, and the
+ * owner's subscription-expired screen) and the maintenance banner. The App
+ * root composes them; screens never touch config directly.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -37,3 +38,5 @@ export function isVersionUnsupported(minVersion: string): boolean {
 export { compareVersions } from '../../services/remoteConfig';
 export { ForcedUpdateScreen } from './ForcedUpdateScreen';
 export { MaintenanceBanner } from './MaintenanceBanner';
+export { SubscriptionExpiredScreen } from './SubscriptionExpiredScreen';
+export { isSubscriptionExpired, formatExpiryDateIst } from './subscriptionDate';

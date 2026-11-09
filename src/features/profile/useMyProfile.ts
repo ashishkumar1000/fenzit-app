@@ -208,6 +208,11 @@ export function getMyProfileSnapshot(): MyProfile | null {
   return state.profile;
 }
 
+/** The last load's error message, or null when the last load succeeded. */
+export function getMyProfileError(): string | null {
+  return state.error;
+}
+
 /**
  * Reset to the pre-login state. Call on logout (via the reset registry).
  *
@@ -223,6 +228,16 @@ export function clearMyProfile(): void {
 
 // Join the global 401 reset flow (story 5.3) — see services/resetRegistry.ts.
 registerReset(clearMyProfile);
+
+/**
+ * The current profile, read from the shared store WITHOUT starting a load.
+ * For the App root's subscription gate: it must see the profile other screens
+ * already loaded, and must never add a `/users/me` request of its own.
+ * `null` until the first successful load (the gate fails safe on null).
+ */
+export function useMyProfileSnapshot(): MyProfile | null {
+  return useSyncExternalStore(subscribe, getSnapshot).profile;
+}
 
 export function useMyProfile() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
