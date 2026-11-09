@@ -54,6 +54,10 @@ jest.mock('../src/services', () => ({
   setOnForbidden: jest.fn(),
   // App pulls server-driven config on mount + foreground (remoteConfig spec).
   refreshRemoteConfig: jest.fn(),
+  // Per-platform force-update rule and the 402 hook (SPEC-app-roadblocks). The
+  // default rule keeps the pre-existing behaviour: nothing is forced at 1.0.0.
+  getForceUpdateRule: jest.fn(() => ({ minVersion: '1.0.0', message: '', storeUrl: '' })),
+  setOnSubscriptionExpired: jest.fn(),
   // App clears the legacy pending-deletion MMKV slot on mount.
   storage: { remove: jest.fn() },
 }));

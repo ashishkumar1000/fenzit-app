@@ -20,14 +20,19 @@ const renderedTexts = (element: React.ReactElement): string[] => {
 };
 
 describe('ForcedUpdateScreen', () => {
-  it('renders the server copy and the installed version', () => {
+  it('renders the server copy, the installed version and the required version', () => {
     const texts = renderedTexts(
-      <ForcedUpdateScreen message="Please update the Fenzit app to continue." />,
+      <ForcedUpdateScreen
+        message="Please update the Fenzit app to continue."
+        requiredVersion="1.5.0"
+      />,
     );
 
-    expect(texts).toContain('Update required');
+    expect(texts).toContain('Update is here!');
+    expect(texts).toContain('Exciting update ready!');
     expect(texts).toContain('Please update the Fenzit app to continue.');
-    expect(texts).toContain('Installed version: v1.0.0');
+    expect(texts).toContain('Current: v1.0.0');
+    expect(texts).toContain('Required: v1.5.0');
   });
 });
 

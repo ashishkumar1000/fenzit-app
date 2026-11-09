@@ -22,14 +22,27 @@
  * behavior (forward-compatibility constraint: old binaries must keep
  * working as the server grows the key set).
  */
+import { Platform } from 'react-native';
 import { API_BASE_URL, API_TIMEOUT } from '../config';
 import { storage } from './storage';
 
 export interface RemoteConfigValues {
-  /** Minimum app version allowed against this API (semver). */
+  /** Legacy minimum version (both platforms). Fallback only when a platform key is missing. */
   min_supported_version: string;
-  /** Copy shown by the forced-update screen. */
+  /** Legacy force-update copy (both platforms). Fallback only when a platform key is missing. */
   force_update_message: string;
+  /** Per-platform minimum app version (semver). */
+  min_supported_version_android: string;
+  min_supported_version_ios: string;
+  /** Per-platform force-update copy. */
+  force_update_message_android: string;
+  force_update_message_ios: string;
+  /** Per-platform store listing URL. Empty = not set yet (the update button is disabled). */
+  store_url_android: string;
+  store_url_ios: string;
+  /** Support contact shown on the subscription roadblock (plain text, never a link). */
+  support_email: string;
+  support_phone: string;
   /** Request timeout (ms) applied to API calls; apiClient clamps it. */
   api_timeout_ms: number;
   /** Non-empty = maintenance banner text shown in the app. */
@@ -43,6 +56,14 @@ export interface RemoteConfigValues {
 export const REMOTE_CONFIG_DEFAULTS: RemoteConfigValues = {
   min_supported_version: '1.0.0',
   force_update_message: 'Please update the Fenzit app to continue.',
+  min_supported_version_android: '1.0.0',
+  min_supported_version_ios: '1.0.0',
+  force_update_message_android: 'Please update the Fenzit app to continue.',
+  force_update_message_ios: 'Please update the Fenzit app to continue.',
+  store_url_android: '',
+  store_url_ios: '',
+  support_email: 'hello@fenzit.com',
+  support_phone: '+91 92792 30451',
   api_timeout_ms: API_TIMEOUT,
   maintenance_banner: '',
 };
@@ -64,6 +85,30 @@ function pickKnown(raw: unknown): Partial<RemoteConfigValues> {
   }
   if (typeof record.force_update_message === 'string') {
     picked.force_update_message = record.force_update_message;
+  }
+  // Legacy keys seed a platform key only when the server did not send that
+  // platform key at all, so an older config keeps working unchanged.
+  const legacyVersion = record.min_supported_version;
+  const legacyMessage = record.force_update_message;
+  for (const platform of ['android', 'ios'] as const) {
+    const versionKey = `min_supported_version_${platform}` as const;
+    const messageKey = `force_update_message_${platform}` as const;
+    if (typeof record[versionKey] === 'string') picked[versionKey] = record[versionKey];
+    else if (typeof legacyVersion === 'string') picked[versionKey] = legacyVersion;
+    if (typeof record[messageKey] === 'string') picked[messageKey] = record[messageKey];
+    else if (typeof legacyMessage === 'string') picked[messageKey] = legacyMessage;
+  }
+  if (typeof record.store_url_android === 'string') {
+    picked.store_url_android = record.store_url_android;
+  }
+  if (typeof record.store_url_ios === 'string') {
+    picked.store_url_ios = record.store_url_ios;
+  }
+  if (typeof record.support_email === 'string') {
+    picked.support_email = record.support_email;
+  }
+  if (typeof record.support_phone === 'string') {
+    picked.support_phone = record.support_phone;
   }
   if (
     typeof record.api_timeout_ms === 'number' &&
@@ -150,6 +195,43 @@ export async function refreshRemoteConfig(force = false): Promise<boolean> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+export type ForceUpdatePlatform = 'android' | 'ios';
+
+/** The force-update rule for one platform, ready for the gate and the screen. */
+export interface ForceUpdateRule {
+  minVersion: string;
+  message: string;
+  /** Store listing URL, or '' when not set (or not an https URL). */
+  storeUrl: string;
+}
+
+/** Android or iOS, from the running build. Anything that is not iOS is Android. */
+export function currentForceUpdatePlatform(): ForceUpdatePlatform {
+  return Platform.OS === 'ios' ? 'ios' : 'android';
+}
+
+/**
+ * The force-update rule for `platform`. A platform key that is empty falls
+ * back to the legacy key, then to the shipped default. A store URL that is
+ * not https is treated as not set, so the screen never opens a bad link.
+ */
+export function getForceUpdateRule(
+  platform: ForceUpdatePlatform = currentForceUpdatePlatform(),
+  config: RemoteConfigValues = getRemoteConfig(),
+): ForceUpdateRule {
+  const isIos = platform === 'ios';
+  const version = (isIos ? config.min_supported_version_ios : config.min_supported_version_android).trim();
+  const message = (isIos ? config.force_update_message_ios : config.force_update_message_android).trim();
+  const storeUrl = (isIos ? config.store_url_ios : config.store_url_android).trim();
+  return {
+    minVersion:
+      version || config.min_supported_version.trim() || REMOTE_CONFIG_DEFAULTS.min_supported_version,
+    message:
+      message || config.force_update_message.trim() || REMOTE_CONFIG_DEFAULTS.force_update_message,
+    storeUrl: storeUrl.startsWith('https://') ? storeUrl : '',
+  };
 }
 
 /**

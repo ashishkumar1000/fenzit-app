@@ -27,17 +27,22 @@ import {
   AuthFlow,
   NoAccessScreen,
   hasCompanyAccess,
+  isAdminRole,
   isEmployeeRole,
   useAuth,
   expireSession,
   revokeCompanyAccess,
 } from './features/auth';
+import { getSession } from './features/auth/useAuth';
 import {
   ForcedUpdateScreen,
   MaintenanceBanner,
+  SubscriptionExpiredScreen,
+  isSubscriptionExpired,
   isVersionUnsupported,
   useRemoteConfig,
 } from './features/remoteConfig';
+import { loadMyProfile, useMyProfileSnapshot } from './features/profile/useMyProfile';
 import { RealtimeBridge } from './features/notifications/RealtimeBridge';
 // Firebase (spec CAP-1/3/4/5): the push bridge mounts beside RealtimeBridge
 // in BOTH role branches; the 401 handler drops the token locally; the
@@ -49,9 +54,11 @@ import {
   unregisterPush,
 } from './features/push';
 import {
+  getForceUpdateRule,
   refreshRemoteConfig,
   runAllResets,
   setOnForbidden,
+  setOnSubscriptionExpired,
   setOnUnauthorized,
   storage,
 } from './services';
@@ -71,7 +78,15 @@ function App() {
     useOnboarding();
   const { status: authStatus, session, complete: completeAuth } = useAuth();
   const config = useRemoteConfig();
-  const updateRequired = isVersionUnsupported(config.min_supported_version);
+  // Per-platform rule (CAP-6): the minimum version and copy come from the helper.
+  const rule = getForceUpdateRule(undefined, config);
+  const updateRequired = isVersionUnsupported(rule.minVersion);
+  // Subscription roadblock (CAP-1): company admins only ("owner" on the spec
+  // side), and only once the profile has loaded. No profile = no roadblock.
+  const profile = useMyProfileSnapshot();
+  const validUntil = profile?.subscription?.validUntil ?? null;
+  const subscriptionExpired =
+    isAdminRole(session?.role) && isSubscriptionExpired(validUntil, Date.now());
 
   // Server-driven config (SPEC-server-driven-config): pull on start and on
   // every foreground return (throttled inside the service — a cold start
@@ -101,6 +116,30 @@ function App() {
       }
     });
     return () => subscription.remove();
+  }, []);
+
+  // A company admin's subscription can end (or be extended) while the app is
+  // in the background. A foreground return re-reads the profile, throttled by
+  // the profile store, so the roadblock follows the server (CAP-5). Other
+  // roles never need this, so they make no extra request.
+  useEffect(() => {
+    // Cold start: an admin's roadblock needs the profile before any screen loads it.
+    if (isAdminRole(getSession()?.role)) void loadMyProfile();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active' && isAdminRole(getSession()?.role)) {
+        void loadMyProfile();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  // A write refused with 402 SUBSCRIPTION_EXPIRED: an admin re-reads the
+  // profile so the full roadblock appears. Technicians get nothing extra.
+  useEffect(() => {
+    setOnSubscriptionExpired(() => {
+      if (isAdminRole(getSession()?.role)) void loadMyProfile({ force: true });
+    });
+    return () => setOnSubscriptionExpired(null);
   }, []);
 
   // Global 401 handling (story 5.3): any authenticated request that comes
@@ -151,9 +190,8 @@ function App() {
   // force-update gate dominates the whole chain — an app older than the
   // server's minimum must not reach login or data, whatever its state.
   let content;
-  if (updateRequired) {
-    content = <ForcedUpdateScreen message={config.force_update_message} />;
-  } else if (!welcomeDone) {
+  // Gate order: (a) force update, (b) owner's subscription roadblock, (c) app.
+  if (!welcomeDone) {
     content = <WelcomeFlow onDone={completeWelcome} />;
   } else if (authStatus !== 'done') {
     content = (
@@ -229,6 +267,22 @@ function App() {
         {!updateRequired && <MaintenanceBanner text={config.maintenance_banner} />}
 
         {content}
+
+        {/* Roadblock cards sit over the content (UX-app-roadblocks, Presentation). */}
+        {updateRequired ? (
+          <ForcedUpdateScreen
+            message={rule.message}
+            storeUrl={rule.storeUrl}
+            requiredVersion={rule.minVersion}
+          />
+        ) : null}
+        {subscriptionExpired && !updateRequired ? (
+          <SubscriptionExpiredScreen
+            validUntil={validUntil}
+            supportEmail={config.support_email}
+            supportPhone={config.support_phone}
+          />
+        ) : null}
 
         {splashVisible && (
           <AnimatedBootSplash onAnimationEnd={() => setSplashVisible(false)} />

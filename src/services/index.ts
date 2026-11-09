@@ -15,7 +15,12 @@
  * individual files — it keeps call sites stable if files move around inside
  * this folder later.
  */
-export { apiClient, setOnForbidden, setOnUnauthorized } from './api/apiClient';
+export {
+  apiClient,
+  setOnForbidden,
+  setOnSubscriptionExpired,
+  setOnUnauthorized,
+} from './api/apiClient';
 export type { ApiError } from './api/apiClient';
 export { ApiService, createCancelSignal } from './api/ApiService';
 export type { ListParams } from './api/ApiService';
@@ -31,11 +36,12 @@ export {
 export { storage } from './storage';
 export {
   compareVersions,
+  getForceUpdateRule,
   getRemoteConfig,
   onRemoteConfigChange,
   refreshRemoteConfig,
 } from './remoteConfig';
-export type { RemoteConfigValues } from './remoteConfig';
+export type { ForceUpdatePlatform, ForceUpdateRule, RemoteConfigValues } from './remoteConfig';
 export { clientMetadataHeaders } from './clientMetadata';
 export { currentResetEpoch, registerReset, runAllResets } from './resetRegistry';
 export {
