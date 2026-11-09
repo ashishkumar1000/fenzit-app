@@ -11,7 +11,7 @@ import { Building2, Calendar, RefreshCw } from 'lucide-react-native';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { colors, radius, spacing, typography } from '../../theme';
-import { getMyProfileSnapshot, loadMyProfile } from '../profile/useMyProfile';
+import { getMyProfileError, getMyProfileSnapshot, loadMyProfile } from '../profile/useMyProfile';
 import { formatExpiryDateIst, isSubscriptionExpired } from './subscriptionDate';
 import { ExpiredHeroIcon } from './ExpiredHeroIcon';
 import { RoadblockModal } from './RoadblockModal';
@@ -55,6 +55,11 @@ export function SubscriptionExpiredScreen({
     setCheckResult('idle');
     try {
       await loadMyProfile({ force: true });
+      // The loader stores a failed load in its error state instead of throwing.
+      if (getMyProfileError()) {
+        setCheckResult('failed');
+        return;
+      }
       const renewed = getMyProfileSnapshot()?.subscription?.validUntil ?? validUntil;
       if (isSubscriptionExpired(renewed, Date.now())) setCheckResult('stillExpired');
     } catch {

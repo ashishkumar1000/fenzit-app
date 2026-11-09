@@ -24,7 +24,9 @@ export function RoadblockModal({ children, onRequestClose, testID }: RoadblockMo
       accessibilityViewIsModal
       onRequestClose={onRequestClose}>
       <View style={styles.scrim} testID={testID}>
-        <View style={styles.card}>{children}</View>
+        <View style={styles.card}>
+          <View style={styles.content}>{children}</View>
+        </View>
       </View>
     </Modal>
   );
@@ -39,15 +41,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.s8,
     backgroundColor: colors.scrim,
   },
+  // Fixed size: a screen that needs to scroll (a long message) scrolls its own
+  // text, so the title and the action stay in view.
   card: {
     width: '100%',
     maxWidth: 360,
-    alignItems: 'center',
-    gap: spacing.s4,
-    padding: spacing.s6,
+    maxHeight: '100%',
     borderRadius: radius.xl,
     overflow: 'hidden',
     backgroundColor: colors.surfaceCard,
     ...shadow.md,
+  },
+  content: {
+    alignItems: 'center',
+    gap: spacing.s4,
+    padding: spacing.s6,
   },
 });

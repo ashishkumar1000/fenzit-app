@@ -208,6 +208,11 @@ export function getMyProfileSnapshot(): MyProfile | null {
   return state.profile;
 }
 
+/** The last load's error message, or null when the last load succeeded. */
+export function getMyProfileError(): string | null {
+  return state.error;
+}
+
 /**
  * Reset to the pre-login state. Call on logout (via the reset registry).
  *

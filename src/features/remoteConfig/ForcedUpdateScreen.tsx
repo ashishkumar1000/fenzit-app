@@ -3,6 +3,8 @@ import {
   AccessibilityInfo,
   BackHandler,
   Linking,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -19,7 +21,9 @@ import { UpdateHeroIcon } from './UpdateHeroIcon';
 
 const NOT_SET_TEXT = 'Update link is not set yet. Please try again later.';
 const OPEN_FAILED_TEXT =
-  'Could not open the store. Open it yourself and search for Fenzit.';
+  Platform.OS === 'android'
+    ? 'Could not open the Play Store. Open it yourself and search for Fenzit.'
+    : 'Could not open the App Store. Open it yourself and search for Fenzit.';
 
 interface ForcedUpdateScreenProps {
   /** Server copy for this platform (from `getForceUpdateRule`). */
@@ -80,7 +84,9 @@ export function ForcedUpdateScreen({
       <View ref={titleRef} accessible accessibilityRole="header">
         <Text style={[typography.heading, styles.title]}>Exciting update ready!</Text>
       </View>
-      <Text style={[typography.body, styles.message]}>{message}</Text>
+      <ScrollView style={styles.messageScroll} bounces={false}>
+        <Text style={[typography.body, styles.message]}>{message}</Text>
+      </ScrollView>
 
       <View style={styles.versionRow}>
         <Text style={[typography.bodySm, styles.muted]}>{`Current: v${installedAppVersion()}`}</Text>
@@ -129,6 +135,11 @@ const styles = StyleSheet.create({
   title: {
     color: colors.textStrong,
     textAlign: 'center',
+  },
+  // A long server message scrolls inside this height; the title and button stay put.
+  messageScroll: {
+    width: '100%',
+    maxHeight: 200,
   },
   message: {
     color: colors.textBody,

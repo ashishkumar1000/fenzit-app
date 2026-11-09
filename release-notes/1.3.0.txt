@@ -1,0 +1,3 @@
+Update prompt: when your app is too old, a card asks you to update, with a button that opens the store.
+Subscription notice: company owners see a card when the subscription has ended, with support contact details and a check-again button.
+Support details now come from Fenzit settings, so they can change without an app update.
