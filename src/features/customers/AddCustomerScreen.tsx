@@ -37,6 +37,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
   KeyboardAvoidingView,
   Pressable,
@@ -86,6 +87,12 @@ import { FormSectionCard } from './components/FormSectionCard';
 import { NoPinNotice } from './components/NoPinNotice';
 import { useCreateCustomer } from './useCreateCustomer';
 import { DIAL_CODE, PHONE_LENGTH } from './constants';
+import { pickContact } from 'react-native-pick-contact';
+import { toLocalMobile } from '../technicians/pickedPhone';
+import { PickContactButton } from '../../components/ui';
+
+const NOT_MOBILE_COPY = "This number isn't a 10-digit mobile number. Type the number instead.";
+const PICK_FAILED_COPY = "Couldn't open your contacts. Type the number instead.";
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddCustomer'>;
 
@@ -103,6 +110,9 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [pickError, setPickError] = useState('');
+  const [picking, setPicking] = useState(false);
+  const pickingRef = useRef(false);
   const [city, setCity] = useState('');
   const [area, setArea] = useState('');
   // Street, Landmark or Locality — the user's own navigational text; the
@@ -150,9 +160,41 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
     setter(text);
   };
 
-  const handlePhoneChange = editField(text =>
-    setPhone(text.replace(/[^0-9]/g, '').slice(0, PHONE_LENGTH)),
-  );
+  const handlePhoneChange = editField(text => {
+    setPickError('');
+    setPhone(text.replace(/[^0-9]/g, '').slice(0, PHONE_LENGTH));
+  });
+
+  // Phone-book picker (same behaviour as the employee invite). Only the one
+  // contact the owner taps is read; a cancel changes nothing; a number that is
+  // not a 10-digit mobile leaves the form as it was.
+  const handlePickContact = async () => {
+    if (pickingRef.current || submitting) return;
+    pickingRef.current = true;
+    setPicking(true);
+    setPickError('');
+    try {
+      const contact = await pickContact();
+      if (!contact) return;
+      const local = toLocalMobile(contact.phone);
+      if (local === null) {
+        setPickError(NOT_MOBILE_COPY);
+        AccessibilityInfo.announceForAccessibility(NOT_MOBILE_COPY);
+        return;
+      }
+      if (submitError) clearSubmitError();
+      const pickedName = contact.name.trim();
+      if (pickedName) setName(pickedName);
+      setPhone(local);
+      AccessibilityInfo.announceForAccessibility('Filled in from your contacts.');
+    } catch {
+      setPickError(PICK_FAILED_COPY);
+      AccessibilityInfo.announceForAccessibility(PICK_FAILED_COPY);
+    } finally {
+      pickingRef.current = false;
+      setPicking(false);
+    }
+  };
 
   const handlePick = (picked: PickedAddress) => {
     setPreviewLine(picked.addressLine);
@@ -471,6 +513,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           <Input
             label="Customer name"
             required
+            floatingLabel
+            clearable
             value={name}
             onChangeText={editField(setName)}
             placeholder="e.g. Ramesh Kumar"
@@ -485,6 +529,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
           <Input
             label="Phone number"
             required
+            floatingLabel
             value={phone}
             onChangeText={handlePhoneChange}
             placeholder="98765 43210"
@@ -493,11 +538,17 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             editable={!isEdit}
             disabled={isEdit}
             helper={isEdit ? "Phone numbers can't be changed" : undefined}
+            error={pickError}
             leadingIcon={
               <View style={styles.dialRow}>
                 <Phone size={18} color={colors.textMuted} strokeWidth={2} />
                 <Text style={styles.dial}>{DIAL_CODE}</Text>
               </View>
+            }
+            trailingAdornment={
+              isEdit ? null : (
+                <PickContactButton onPress={handlePickContact} disabled={submitting || picking} />
+              )
             }
           />
 
@@ -533,6 +584,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
 
             <Input
               label="Flat / House no., Building & Wing"
+              floatingLabel
+              clearable
               value={addressDetails}
               onChangeText={editField(setAddressDetails)}
               placeholder="e.g. Flat 402, Sunshine Towers"
@@ -545,6 +598,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
 
             <Input
               label="Street, Landmark or Locality"
+              floatingLabel
+              clearable
               value={street}
               onChangeText={editField(setStreet)}
               placeholder="e.g. Opposite Metro Station"
@@ -558,6 +613,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
             <View style={styles.row}>
               <Input
                 label="City"
+                floatingLabel
+                clearable
                 value={city}
                 onChangeText={editField(setCity)}
                 placeholder="Mumbai"
@@ -566,6 +623,8 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
               />
               <Input
                 label="Pincode"
+                floatingLabel
+                clearable
                 value={area}
                 onChangeText={editField(setArea)}
                 placeholder="e.g. 400058"

@@ -8,6 +8,7 @@
  */
 import { forwardRef, useState, type ReactNode } from 'react';
 import {
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -17,7 +18,9 @@ import {
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
-import {colors, radius, typography, touch, spacing} from '../../theme';
+import {colors, fontSize, radius, typography, touch, spacing} from '../../theme';
+import { X } from 'lucide-react-native';
+import { FloatingLabel } from './FloatingLabel';
 
 export type InputProps = {
   label?: string;
@@ -38,6 +41,14 @@ export type InputProps = {
    * `disabled`, it doesn't gray out the field.
    */
   editable?: boolean;
+  /**
+   * Label sits inside the border while the field is empty and unfocused, and
+   * moves up onto the border line once the field is focused or has a value
+   * (the Material "outlined floating label" pattern). Off by default.
+   */
+  floatingLabel?: boolean;
+  /** Shows a round ✕ at the end while the field has text; tapping it empties the field. */
+  clearable?: boolean;
   style?: StyleProp<ViewStyle>;
 } & Pick<
   TextInputProps,
@@ -60,6 +71,8 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
   disabled = false,
   required = false,
   editable = true,
+  floatingLabel = false,
+  clearable = false,
   style,
   onFocus,
   onBlur,
@@ -67,6 +80,7 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
 }, ref) {
   const [focused, setFocused] = useState(false);
   const invalid = Boolean(error);
+  const fieldBg = disabled ? colors.surfaceSunken : colors.surfaceCard;
 
   const borderColor = invalid
     ? colors.danger
@@ -76,7 +90,7 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
 
   return (
     <View style={[styles.wrap, style]}>
-      {label ? (
+      {label && !floatingLabel ? (
         <Text style={styles.label}>
           {label}
           {required ? <Text style={styles.required}> *</Text> : null}
@@ -90,6 +104,7 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
             borderColor,
             backgroundColor: disabled ? colors.surfaceSunken : colors.surfaceCard,
           },
+          floatingLabel ? styles.fieldLarge : null,
           rest.multiline ? styles.fieldMultiline : null,
           focused && !invalid ? styles.fieldFocused : null,
         ]}>
@@ -120,10 +135,34 @@ export const Input = forwardRef<TextInputInstance, InputProps>(function Input({
           // accessibilityLabel (in `rest`) still wins.
           accessibilityLabel={label || undefined}
           accessibilityHint={error || helper || undefined}
-          style={[styles.input, rest.multiline ? styles.inputMultiline : null]}
+          style={[
+            styles.input,
+            floatingLabel ? styles.inputLarge : null,
+            rest.multiline ? styles.inputMultiline : null,
+          ]}
           {...rest}
         />
         {trailingAdornment ? <View style={styles.trailing}>{trailingAdornment}</View> : null}
+        {clearable && value && editable && !disabled ? (
+          <Pressable
+            onPress={() => onChangeText?.('')}
+            accessibilityRole="button"
+            accessibilityLabel={label ? `Clear ${label.toLowerCase()}` : 'Clear'}
+            hitSlop={8}
+            style={styles.clearHit}>
+            <View style={styles.clearCircle}>
+              <X size={14} color={colors.surfaceCard} strokeWidth={3} />
+            </View>
+          </Pressable>
+        ) : null}
+        {floatingLabel && label ? (
+          <FloatingLabel
+            label={label}
+            required={required}
+            focused={focused}
+            maskColor={fieldBg}
+          />
+        ) : null}
       </View>
 
       {helper || error ? (
@@ -155,6 +194,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderWidth: 1,
     borderRadius: radius.md,
+  },
+  // Floating-label fields are taller with larger text, so the typed value
+  // reads as clearly as the notched label above it.
+  fieldLarge: {
+    height: 56,
+  },
+  inputLarge: {
+    fontSize: fontSize.lg,
   },
   fieldFocused: {
     // Soft-blue focus emphasis (RN can't render the web's 3px ring shadow
@@ -195,6 +242,21 @@ const styles = StyleSheet.create({
   helper: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+  clearHit: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -10,
+  },
+  clearCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.textMuted,
   },
   helperError: {
     color: colors.danger,
