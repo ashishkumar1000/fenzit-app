@@ -24,10 +24,11 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, HardHat, UserPlus } from 'lucide-react-native';
+import { ArrowLeft, HardHat, Search, UserPlus } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, InlineError, Skeleton } from '../../components/ui';
 import { colors, spacing, typography } from '../../theme';
@@ -36,7 +37,8 @@ import { useTechnicians } from './useTechnicians';
 import { AddTechnicianSheet } from './components/AddTechnicianSheet';
 import { TechnicianRow } from './components/TechnicianRow';
 import { useMyProfile } from '../profile';
-import { useCanWrite } from '../auth';
+import { useCanWrite, useSessionRole } from '../auth';
+import { isAdminRole } from '../auth/roles';
 import type { NewTechnicianInput } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Technicians'>;
@@ -47,6 +49,8 @@ export default function TechniciansScreen({ navigation, route }: Props) {
   // The roster is readable by a viewer; inviting is not. The Add button and
   // the Add sheet are not rendered for them (no auto-open either).
   const canWrite = useCanWrite();
+  // Resend (invite SMS) is a company-admin action; the server checks again.
+  const canResend = isAdminRole(useSessionRole());
   // Home's "Add employee" quick action pushes us with `autoOpenAdd` — read
   // once as the initial state, so the sheet never re-opens on later visits
   // (stack params are per-push, but a re-render must not reset a user-closed
@@ -55,6 +59,19 @@ export default function TechniciansScreen({ navigation, route }: Props) {
     canWrite && (route.params?.autoOpenAdd ?? false),
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Search narrows the list only; the counts always describe the whole team.
+  const [query, setQuery] = useState('');
+  const activeCount = technicians.filter(t => t.status === 'active').length;
+  const offlineCount = technicians.length - activeCount;
+  const needle = query.trim().toLowerCase();
+  const visibleTechnicians = needle
+    ? technicians.filter(
+        t =>
+          t.name.toLowerCase().includes(needle) ||
+          (t.employeeCode ?? '').toLowerCase().includes(needle) ||
+          t.phone.includes(needle),
+      )
+    : technicians;
   // The latch is a REF, not the spinner state — a same-tick double pull
   // would pass a state guard twice before React re-renders (the race the
   // 20-1 sweep latches guard everywhere else too).
@@ -131,10 +148,50 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           </Button>
         </ScrollView>
       ) : hasTechnicians ? (
+        <>
+          <View style={styles.toolbar}>
+            <View style={styles.searchField}>
+              <Search size={20} color={colors.textMuted} strokeWidth={2} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="Search employees..."
+                placeholderTextColor={colors.textMuted}
+                accessibilityLabel="Search employees"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                style={styles.searchInput}
+              />
+            </View>
+            <View style={styles.summary}>
+              <Text style={styles.summaryTotal}>
+                {technicians.length} {technicians.length === 1 ? 'employee' : 'employees'}
+              </Text>
+              <Text style={styles.summaryDot}>·</Text>
+              <View style={styles.summaryItem}>
+                <View style={[styles.dot, { backgroundColor: colors.success }]} />
+                <Text style={[styles.summaryText, { color: colors.success }]}>
+                  {activeCount} active
+                </Text>
+              </View>
+              <Text style={styles.summaryDot}>·</Text>
+              <View style={styles.summaryItem}>
+                <View style={[styles.dot, { backgroundColor: colors.textMuted }]} />
+                <Text style={styles.summaryText}>{offlineCount} offline</Text>
+              </View>
+            </View>
+          </View>
         <FlatList
-          data={technicians}
+          data={visibleTechnicians}
+          ListEmptyComponent={
+            needle ? (
+              <Text style={styles.noMatch}>No employees match "{query.trim()}".</Text>
+            ) : undefined
+          }
           keyExtractor={item => item.id}
-          renderItem={({ item }) => <TechnicianRow technician={item} />}
+          renderItem={({ item }) => (
+            <TechnicianRow technician={item} canResend={canResend} />
+          )}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           // A failed pull over live rows says so above them; the rows
@@ -147,6 +204,7 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           refreshControl={refreshControl}
           showsVerticalScrollIndicator={false}
         />
+        </>
       ) : (
         <ScrollView
           style={styles.scroll}
@@ -197,11 +255,76 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backButton: {
-    marginLeft: -spacing.s1,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
   },
   title: {
     ...typography.title,
     color: colors.textStrong,
+  },
+  toolbar: {
+    paddingHorizontal: spacing.s4,
+    paddingTop: spacing.s3,
+    paddingBottom: spacing.s2,
+    gap: spacing.s3,
+  },
+  searchField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
+    minHeight: 44,
+    paddingHorizontal: spacing.s3,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceCard,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+  },
+  searchInput: {
+    flex: 1,
+    ...typography.body,
+    color: colors.textStrong,
+    paddingVertical: spacing.s2,
+  },
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.s2,
+  },
+  summaryTotal: {
+    ...typography.bodySm,
+    fontWeight: '600',
+    color: colors.textStrong,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s1,
+  },
+  summaryText: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  summaryDot: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  noMatch: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    paddingTop: spacing.s6,
   },
   listContent: {
     padding: spacing.s4,

@@ -34,7 +34,18 @@ export interface Technician {
    * load refreshes it). Null or absent shows initials.
    */
   avatarUrl?: string | null;
+  /**
+   * What happened to the invite SMS, from the invite response. Set only on a
+   * row created by this session's invite; roster rows never carry it.
+   */
+  smsStatus?: InviteSmsStatus | null;
 }
+
+/**
+ * Outcome of the invite SMS, from `sms_status`. `refused_cap` means the
+ * per-phone limit (5 an hour) stopped the text; the invite is kept.
+ */
+export type InviteSmsStatus = 'sent' | 'failed' | 'not_configured' | 'refused_cap';
 
 /** Shape captured by the "Add employee" form. */
 export interface NewTechnicianInput {
@@ -56,7 +67,13 @@ export interface InviteTechnicianRequest {
   skillIds: string[];
 }
 
-/** Response from `POST /auth/invite` — the backend only ever returns this id, nothing else. */
+/**
+ * Response from `POST /auth/invite`: the invite id and the raw `sms_status`.
+ * The raw value is not narrowed here; `parseInviteSmsStatus` (inviteSms.ts)
+ * turns it into `InviteSmsStatus`, or `null` for a value the app does not know.
+ * Optional because a backend that predates the field omits it.
+ */
 export interface InviteTechnicianResponse {
   inviteId: string;
+  smsStatus?: string | null;
 }

@@ -43,9 +43,13 @@ function renderRow(technician: Technician) {
 }
 
 describe('TechnicianRow employee code', () => {
-  it('prefixes the phone line with the code when the roster carries one', () => {
+  // Requirement (owner, 2026-11-11): the employee code is its own chip, on the
+  // same line as the phone number, not written into the phone text.
+  it('shows the code as its own chip beside the phone number', () => {
     const strings = renderRow({ ...BASE, employeeCode: 'EMP-004' });
-    expect(strings.join('')).toContain('EMP-004 · 9111111111');
+    expect(strings).toContain('EMP-004');
+    expect(strings).toContain('9111111111');
+    expect(strings.join('')).not.toContain('EMP-004 · 9111111111');
     expect(strings).toContain('Ravi Kumar');
   });
 

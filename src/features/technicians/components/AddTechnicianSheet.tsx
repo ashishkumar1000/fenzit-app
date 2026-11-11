@@ -62,9 +62,9 @@ function inviteErrorMessage(err: ApiError): string {
     return 'Check the phone number and skills — one of them looks invalid.';
   }
   if (err.status === 403) {
-    return "You don't have permission to invite technicians.";
+    return "You don't have permission to invite employees.";
   }
-  return err.message;
+  return 'Could not send the invite. Try again.';
 }
 
 export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
@@ -219,7 +219,7 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     (!loadingSkills && skills.length === 0
       ? "Skills aren't available right now. You can still send the invite."
       : skillIds.length >= MAX_SKILLS
-        ? `Maximum ${MAX_SKILLS} skills per technician.`
+        ? `Maximum ${MAX_SKILLS} skills per employee.`
         : 'Optional. Skills decide which jobs they are matched to.');
 
   return (

@@ -24,6 +24,7 @@ import { technicianService } from '../../services';
 import type { ProfileTechnician } from '../../services';
 import { currentResetEpoch, registerReset } from '../../services/resetRegistry';
 import { DIAL_CODE } from './constants';
+import { parseInviteSmsStatus } from './inviteSms';
 import type { NewTechnicianInput, Technician } from './types';
 
 const KEY = 'fenzit.technicians';
@@ -202,7 +203,7 @@ export function useTechnicians() {
     // just-cleared store — or its MMKV copy — with the previous session's
     // technician (see services/resetRegistry.ts).
     const epochAtStart = currentResetEpoch();
-    const { inviteId } = await technicianService.invite({
+    const { inviteId, smsStatus } = await technicianService.invite({
       countryCode: DIAL_CODE,
       phoneNumber: input.phone.trim(),
       name: input.name.trim(),
@@ -216,6 +217,8 @@ export function useTechnicians() {
       status: 'offline', // invited; flips to 'active' once they install the app
       invitedAt: new Date().toISOString(),
       skillIds: input.skillIds,
+      // Unknown or missing `sms_status` → null, so no status line shows.
+      smsStatus: parseInviteSmsStatus(smsStatus),
     };
     // The invite itself did succeed server-side, so the return value is
     // still valid for the caller — only the local write is skipped.

@@ -75,8 +75,15 @@ import {
   loadMyProfile,
   useMyProfile,
 } from '../profile';
-import { AddTechnicianSheet, useTechnicians } from '../technicians';
-import type { NewTechnicianInput } from '../technicians';
+import {
+  AddTechnicianSheet,
+  InviteSmsNotice,
+  membershipUserIdOf,
+  useTechnicians,
+} from '../technicians';
+import type { NewTechnicianInput, Technician } from '../technicians';
+import { isAdminRole } from '../auth/roles';
+import { useSessionRole } from '../auth';
 import { loadSkills, useSkills } from '../skills';
 import { DateTimeFields } from './components/DateTimeFields';
 import { SkillPicker } from './components/SkillPicker';
@@ -128,6 +135,10 @@ export default function NewJobScreen({ navigation, route }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [addSheetVisible, setAddSheetVisible] = useState(false);
+  // The latest invite made from this screen: its SMS outcome is shown under
+  // the employee picker (a failed text can be resent from here, by an admin).
+  const [lastInvite, setLastInvite] = useState<Technician | null>(null);
+  const canResendInvite = isAdminRole(useSessionRole());
 
   // The inline "Add new employee" sheet performs the invite itself via
   // `add` (POST /auth/invite); New Job only reacts to its outcome.
@@ -423,7 +434,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
    * relationship to the real user id the API doesn't guarantee.
    */
   const handleAddTechnicianSubmit = async (input: NewTechnicianInput) => {
-    await addTechnician(input);
+    setLastInvite(await addTechnician(input));
     await loadMyProfile({ force: true });
     const added = getMyProfileSnapshot()?.technicians?.find(
       t => t.phoneNumber === input.phone.trim(),
@@ -608,6 +619,15 @@ export default function NewJobScreen({ navigation, route }: Props) {
           onChange={id => patch({ technicianId: id })}
           onBrowseAll={handleBrowseTechnicians}
         />
+        {lastInvite ? (
+          <InviteSmsNotice
+            key={lastInvite.id}
+            membershipUserId={membershipUserIdOf(lastInvite.id)}
+            smsStatus={lastInvite.smsStatus ?? null}
+            isInvited={false}
+            canResend={canResendInvite}
+          />
+        ) : null}
         {noSkillMatch ? (
           <Text style={styles.statusText}>
             No employee is tagged with this skill — showing everyone. Pick
