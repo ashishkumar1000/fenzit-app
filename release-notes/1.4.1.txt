@@ -1,0 +1,3 @@
+Employee cards show the invite SMS status, with a Resend option for invited employees.
+Phone numbers on employee cards are partly hidden.
+Check-in no longer fails with a location error on some phones.
