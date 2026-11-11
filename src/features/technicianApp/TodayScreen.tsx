@@ -227,9 +227,14 @@ export default function TodayScreen() {
             />
           }
           ListEmptyComponent={
-            // The mockup's empty day: the schedule card holding a dashed
-            // well with the medallion, copy and the refresh pill.
-            <TodayEmptySchedule onRefresh={() => void handleRefresh()} />
+            // The mockup's empty day, in two variants (owner call
+            // 2026-11-10): attendance-enabled technicians get the compact
+            // one-row card — the punch zone owns their attention — while
+            // everyone else keeps the tall dashed well.
+            <TodayEmptySchedule
+              compact={punchEnabled}
+              onRefresh={() => void handleRefresh()}
+            />
           }
         />
         </>

@@ -3,13 +3,16 @@ import {
   deriveTodayButtonState,
   formatCountdown,
   formatCountdownWords,
+  formatFixAge,
+  formatMinutesCompact,
+  formatShiftClock,
   formatMetresGrouped,
-  freshDistanceM,
+  snapshotDistanceM,
   messageForApiError,
   needsHolidayConfirm,
   needsLeaveConfirm,
   punchStatusCard,
-  PUNCH_FIX_FRESH_MS,
+  tileVerdictText,
 } from './attendanceTodayModel';
 import { haversineMetres } from '../../../utils/distanceUtils';
 import type { AttendanceTodayFacts } from '../../../services/resources/attendanceMe';
@@ -61,7 +64,7 @@ describe('deriveTodayButtonState — the priority ladder (first match wins)', ()
   it('offline beats EVERYTHING (even resolving) — a doomed request must never be shown as progress', () => {
     expect(
       deriveTodayButtonState({ ...base, online: false, resolving: true }),
-    ).toEqual({ kind: 'offline' });
+    ).toEqual({ kind: 'offline', action: 'in' });
   });
 
   it.each([
@@ -69,7 +72,10 @@ describe('deriveTodayButtonState — the priority ladder (first match wins)', ()
     ['preciseOff', 'preciseOff'],
     ['serviceOff', 'serviceOff'],
   ] as const)('location state %s blocks before any readiness state', (permission, kind) => {
-    expect(deriveTodayButtonState({ ...base, permission })).toEqual({ kind });
+    expect(deriveTodayButtonState({ ...base, permission })).toEqual({
+      kind,
+      action: 'in',
+    });
   });
 
   it('a LIVE rate limit outranks ready (its disabled-ness is time-bound)', () => {
@@ -111,10 +117,30 @@ describe('deriveTodayButtonState — the priority ladder (first match wins)', ()
   it('the dialog latch and resolving are momentary and outrank the record state', () => {
     expect(
       deriveTodayButtonState({ ...base, dialogPending: true, record: openRecord }),
-    ).toEqual({ kind: 'dialogPending' });
+    ).toEqual({ kind: 'dialogPending', action: 'out' });
     expect(
       deriveTodayButtonState({ ...base, resolving: true, record: openRecord }),
-    ).toEqual({ kind: 'resolving' });
+    ).toEqual({ kind: 'resolving', action: 'out' });
+  });
+
+  it('done outranks EVERY blocker — a finished day has no action left to block (2026-11-10 device-pass find)', () => {
+    expect(
+      deriveTodayButtonState({ ...base, record: closedRecord, online: false }),
+    ).toEqual({ kind: 'done' });
+    expect(
+      deriveTodayButtonState({
+        ...base,
+        record: closedRecord,
+        permission: 'serviceOff',
+      }),
+    ).toEqual({ kind: 'done' });
+    expect(
+      deriveTodayButtonState({
+        ...base,
+        record: closedRecord,
+        rateLimitedUntil: base.now + 60_000,
+      }),
+    ).toEqual({ kind: 'done' });
   });
 
   it('a closed record → done; an open record → readyOut (the button flips, never shows both)', () => {
@@ -347,273 +373,341 @@ describe('countdown and checked-in formatting', () => {
   });
 });
 
-describe('buildTodayTiles — the punch card\'s data (2026-10 tab redesign)', () => {
+describe('buildTodayTiles — the punch card\'s data (2026-11-10 tiles + severity)', () => {
   const formatTime = (iso: string) => (iso.includes('10:16') ? '10:16 AM' : '6:05 PM');
+  const schedule = {
+    endText: '6:30 PM',
+    rangeText: '9:30 AM - 6:30 PM',
+    spanMinutes: 540,
+  };
 
-  it('a closed record builds both tile times, the worked pill and the late pill from the merge(checkIn, checkOut) shape', () => {
-    expect(buildTodayTiles(closedRecord, formatTime)).toEqual({
+  it('a closed record builds both tile times, verdicts and the WORKED chip (a short day)', () => {
+    expect(buildTodayTiles(closedRecord, formatTime, schedule)).toEqual({
       checkinText: '10:16 AM',
       checkoutText: '6:05 PM',
-      workedText: '7 hrs 49 min',
-      lateText: 'Checked in late by 1 hr 1 min',
-      earlyText: null,
-      earlyBeforeShiftText: null,
+      checkinVerdict: { kind: 'late', minutes: 61 },
+      checkoutVerdict: { kind: 'onTime' },
+      checkoutHintMeridiem: 'PM',
+      worked: {
+        value: '7h 49m',
+        caption: 'Short by 1h 11m',
+        full: false,
+        shortfallMinutes: 71,
+      },
     });
   });
 
-  it('a MID-SESSION record still builds the card — the checkout tile reads null ("—" on screen), no worked pill yet', () => {
-    expect(buildTodayTiles(openRecord, formatTime)).toEqual({
+  it('a MID-SESSION record still builds the card — pending checkout, dashed placeholder hint, no worked chip yet', () => {
+    expect(buildTodayTiles(openRecord, formatTime, schedule)).toEqual({
       checkinText: '10:16 AM',
       checkoutText: null,
-      workedText: null,
-      lateText: 'Checked in late by 1 hr 1 min',
-      earlyText: null,
-      earlyBeforeShiftText: null,
+      checkinVerdict: { kind: 'late', minutes: 61 },
+      checkoutVerdict: { kind: 'pending' },
+      checkoutHintMeridiem: 'PM',
+      worked: null,
     });
   });
 
-  it('early checkout surfaces its pill + the before-shift caption; a non-late day has no late pill', () => {
-    expect(
-      buildTodayTiles(
-        { ...closedRecord, isLate: false, lateMinutes: 0, earlyCheckout: true, earlyCheckoutMinutes: 30 },
-        formatTime,
-      ),
-    ).toMatchObject({
-      lateText: null,
-      earlyText: 'Checked out early by 30 min',
-      earlyBeforeShiftText: '30 min before shift',
+  it('a FULL shift celebrates: "Full shift completed • Sched …" with no shortfall', () => {
+    const tiles = buildTodayTiles({ ...closedRecord, workedMinutes: 540 }, formatTime, schedule);
+    expect(tiles.worked).toEqual({
+      value: '9h 00m',
+      caption: 'Full shift completed • Sched 9:30 AM - 6:30 PM',
+      full: true,
+      shortfallMinutes: null,
     });
   });
 
-  it('a corrupt worked value (non-finite) renders no pill — never a negative or NaN string', () => {
+  it('EARLY severity: crossing the shift midpoint is MAJOR, under it minor, no schedule never majors', () => {
+    const record = { ...closedRecord, isLate: false, lateMinutes: 0 };
+    // 330 min early of the 540-min span — past the 270 midpoint → red.
     expect(
-      buildTodayTiles({ ...closedRecord, workedMinutes: Number.NaN } as never, formatTime),
-    ).toMatchObject({ workedText: null });
+      buildTodayTiles({ ...record, earlyCheckout: true, earlyCheckoutMinutes: 330 }, formatTime, schedule)
+        .checkoutVerdict,
+    ).toEqual({ kind: 'early', minutes: 330, major: true });
+    // The boundary: exactly HALF the span early is major (half the shift or less worked).
+    expect(
+      buildTodayTiles({ ...record, earlyCheckout: true, earlyCheckoutMinutes: 270 }, formatTime, schedule)
+        .checkoutVerdict,
+    ).toEqual({ kind: 'early', minutes: 270, major: true });
+    // Under it — the ordinary amber early leave.
+    expect(
+      buildTodayTiles({ ...record, earlyCheckout: true, earlyCheckoutMinutes: 269 }, formatTime, schedule)
+        .checkoutVerdict,
+    ).toEqual({ kind: 'early', minutes: 269, major: false });
+    // A legacy wire without a span cannot draw the line — minor, always.
+    expect(
+      buildTodayTiles({ ...record, earlyCheckout: true, earlyCheckoutMinutes: 330 }, formatTime, null)
+        .checkoutVerdict,
+    ).toEqual({ kind: 'early', minutes: 330, major: false });
+  });
+
+  it('no schedule on the wire (legacy) → value-only chips, plain caption, no meridiem hint', () => {
+    const tiles = buildTodayTiles(openRecord, formatTime, null);
+    expect(tiles).toEqual({
+      checkinText: '10:16 AM',
+      checkoutText: null,
+      checkinVerdict: { kind: 'late', minutes: 61 },
+      checkoutVerdict: { kind: 'pending' },
+      checkoutHintMeridiem: null,
+      worked: null,
+    });
+    const closed = buildTodayTiles(closedRecord, formatTime, {
+      endText: null,
+      rangeText: null,
+      spanMinutes: null,
+    });
+    expect(closed.worked).toEqual({
+      value: '7h 49m',
+      caption: 'Shift duration',
+      full: false,
+      shortfallMinutes: null,
+    });
+    expect(closed.checkoutHintMeridiem).toBeNull();
+  });
+
+  it('a corrupt worked value (non-finite) renders no chip — never a negative or NaN string', () => {
+    expect(
+      buildTodayTiles({ ...closedRecord, workedMinutes: Number.NaN } as never, formatTime, schedule),
+    ).toMatchObject({ worked: null });
   });
 });
 
-// --- 20-3: the geofence prescreen (client lock rungs + the status card) ---
+describe('tileVerdictText — the tiles\' verdict copy (2026-11-10 redesign)', () => {
+  it('onTime / late / early / pending render the mockup\'s lines', () => {
+    expect(tileVerdictText({ kind: 'onTime' })).toBe('On time');
+    expect(tileVerdictText({ kind: 'late', minutes: 52 })).toBe('Late by 52 min');
+    expect(tileVerdictText({ kind: 'early', minutes: 390 })).toBe('Early by 6h 30m');
+    expect(tileVerdictText({ kind: 'pending' })).toBeNull();
+  });
+});
 
-/** Office at (12, 77); the fix sits ~28.5 m north of it — inside a 150 m
- *  fence but outside a 20 m one, and ~11.1 km from the far anchor. */
+describe('formatMinutesCompact + formatShiftClock — the chips\' formats', () => {
+  it('compact minutes: sub-hour reads "N min", hours read "Xh YYm" (minutes padded past the hour)', () => {
+    expect(formatMinutesCompact(1)).toBe('1 min');
+    expect(formatMinutesCompact(47)).toBe('47 min');
+    expect(formatMinutesCompact(478)).toBe('7h 58m');
+    expect(formatMinutesCompact(120)).toBe('2h 00m');
+    expect(formatMinutesCompact(0)).toBe('0 min');
+    expect(formatMinutesCompact(-5)).toBe('0 min');
+  });
+
+  it('shift clock: "09:30"+15 → "9:45 AM" (the late-after start), "18:30" → "6:30 PM", midnight and malformed fail safe', () => {
+    expect(formatShiftClock('09:30', 15)).toBe('9:45 AM');
+    expect(formatShiftClock('09:30')).toBe('9:30 AM');
+    expect(formatShiftClock('18:30')).toBe('6:30 PM');
+    expect(formatShiftClock('00:15')).toBe('12:15 AM');
+    expect(formatShiftClock('12:00')).toBe('12:00 PM');
+    expect(formatShiftClock('25:00')).toBe('1:00 AM'); // wraps, never crashes
+    expect(formatShiftClock('nope')).toBeNull();
+    expect(formatShiftClock('')).toBeNull();
+  });
+});
+
+// --- 20-3 → 2026-11 simplification: the prescreen snapshot (no client
+// --- lock — the fence verdict is card copy, never a button posture) -----
+
+/** Office at (12, 77); IN_FIX sits ~28.5 m north of it — inside the
+ *  150 m fence; OUT_FIX ~1.35 km north — far outside it. Fixes are 30 s
+ *  old (fresh: no age caption) unless a test overrides capturedAt. */
 const OFFICE = { latitude: 12.0, longitude: 77.0, radiusM: 150, name: 'Hero wala' };
-const FAR_OFFICE = { ...OFFICE, radiusM: 20 };
-const IN_FIX = { latitude: 12.000256, longitude: 77.0, capturedAt: 900_000 };
-const OUT_FIX = { latitude: 12.1, longitude: 77.0, capturedAt: 900_000 };
+const IN_FIX = { latitude: 12.000256, longitude: 77.0, capturedAt: base.now - 30_000 };
+const OUT_FIX = { latitude: 12.0122, longitude: 77.0, capturedAt: base.now - 30_000 };
 
-describe('deriveTodayButtonState — the geofence rungs (20-3 prescreen)', () => {
-  it('a fresh fix beyond the radius LOCKS the punch-in (the client prescreen posture, distance carried)', () => {
-    expect(
-      deriveTodayButtonState({ ...base, fix: OUT_FIX, office: FAR_OFFICE }),
-    ).toEqual({
-      kind: 'locked',
-      distanceM: haversineMetres(OUT_FIX, FAR_OFFICE),
-    });
-  });
-
-  it('beyond the radius with an OPEN record locks the CHECK OUT instead', () => {
-    expect(
-      deriveTodayButtonState({
-        ...base,
-        record: openRecord,
-        fix: OUT_FIX,
-        office: OFFICE,
-      }),
-    ).toEqual({
-      kind: 'lockedOut',
-      distanceM: haversineMetres(OUT_FIX, OFFICE),
-    });
-  });
-
-  it('a fresh IN-fence fix stays a PLAIN ready rung — the ready faces are sticky, no distance rides them', () => {
-    expect(
-      deriveTodayButtonState({ ...base, fix: IN_FIX, office: OFFICE }),
-    ).toEqual({
-      kind: 'readyIn',
-    });
-    expect(
-      deriveTodayButtonState({
-        ...base,
-        record: openRecord,
-        fix: IN_FIX,
-        office: OFFICE,
-      }),
-    ).toEqual({
+describe('deriveTodayButtonState — the fence NEVER blocks the button (2026-11 simplification)', () => {
+  it('the plain ready rungs are unconditional once facts are known — the press decides, the server gates', () => {
+    expect(deriveTodayButtonState(base)).toEqual({ kind: 'readyIn' });
+    expect(deriveTodayButtonState({ ...base, record: openRecord })).toEqual({
       kind: 'readyOut',
     });
   });
 
-  it.each([
-    ['no fix', { office: OFFICE }],
-    ['no office', { fix: OUT_FIX }],
-    ['radiusless office', { fix: OUT_FIX, office: { ...OFFICE, radiusM: null } }],
-  ] as const)('%s NEVER locks — the plain ready rung (the row-5 fallback)', (_name, input) => {
-    expect(deriveTodayButtonState({ ...base, ...input })).toEqual({ kind: 'readyIn' });
+  it('the ladder above readiness is untouched: offline, rate-limit and done outrank everything', () => {
     expect(
-      deriveTodayButtonState({ ...base, record: openRecord, ...input }),
-    ).toEqual({ kind: 'readyOut' });
-  });
-
-  it('the freshness lease is exactly 120 s — one millisecond past it fails OPEN', () => {
-    const boundary = { ...OUT_FIX, capturedAt: base.now - PUNCH_FIX_FRESH_MS };
-    expect(
-      deriveTodayButtonState({ ...base, fix: boundary, office: FAR_OFFICE }),
-    ).toEqual({
-      kind: 'locked',
-      distanceM: haversineMetres(boundary, FAR_OFFICE),
-    });
-    const expired = { ...OUT_FIX, capturedAt: base.now - PUNCH_FIX_FRESH_MS - 1 };
-    expect(
-      deriveTodayButtonState({ ...base, fix: expired, office: FAR_OFFICE }),
-    ).toEqual({ kind: 'readyIn' });
-  });
-
-  it('a backward clock step (fix timestamp in the future) fails open like any stale fix', () => {
-    const timeTraveled = { ...OUT_FIX, capturedAt: base.now + 60_000 };
-    expect(
-      deriveTodayButtonState({ ...base, fix: timeTraveled, office: FAR_OFFICE }),
-    ).toEqual({ kind: 'readyIn' });
-  });
-
-  it('the lock is a PRESREEN: it never masks the blocking postures above it, nor done below', () => {
-    expect(
-      deriveTodayButtonState({
-        ...base,
-        online: false,
-        fix: OUT_FIX,
-        office: FAR_OFFICE,
-      }),
-    ).toEqual({ kind: 'offline' });
+      deriveTodayButtonState({ ...base, online: false }),
+    ).toEqual({ kind: 'offline', action: 'in' });
     expect(
       deriveTodayButtonState({
         ...base,
         rateLimitedUntil: base.now + 60_000,
-        fix: OUT_FIX,
-        office: FAR_OFFICE,
+        record: openRecord,
       }),
-    ).toEqual({ kind: 'rateLimited', remainingS: 60, action: 'in' });
+    ).toEqual({ kind: 'rateLimited', remainingS: 60, action: 'out' });
     expect(
-      deriveTodayButtonState({
-        ...base,
-        record: closedRecord,
-        fix: OUT_FIX,
-        office: FAR_OFFICE,
-      }),
+      deriveTodayButtonState({ ...base, record: closedRecord }),
     ).toEqual({ kind: 'done' });
   });
 });
 
-describe('freshDistanceM — the status card input', () => {
-  it('answers the straight-line distance only for a fresh fix + known radius', () => {
-    expect(freshDistanceM(IN_FIX, OFFICE, base.now)).toBe(
+describe('snapshotDistanceM — the status card input (no freshness cap)', () => {
+  it('answers the straight-line distance for any fix + office with a radius', () => {
+    expect(snapshotDistanceM(IN_FIX, OFFICE)).toBe(
       haversineMetres(IN_FIX, OFFICE),
     );
-    expect(
-      freshDistanceM({ ...IN_FIX, capturedAt: 0 }, OFFICE, base.now),
-    ).toBeNull();
-    expect(freshDistanceM(null, OFFICE, base.now)).toBeNull();
-    expect(freshDistanceM(IN_FIX, null, base.now)).toBeNull();
-    expect(
-      freshDistanceM(IN_FIX, { ...OFFICE, radiusM: null }, base.now),
-    ).toBeNull();
+    // An hour-old fix still speaks — the card captions its age instead.
+    const hourOld = { ...IN_FIX, capturedAt: base.now - 3_600_000 };
+    expect(snapshotDistanceM(hourOld, OFFICE)).toBe(
+      haversineMetres(hourOld, OFFICE),
+    );
+  });
+
+  it('null when there is nothing to judge — no fix, no office, radiusless office', () => {
+    expect(snapshotDistanceM(null, OFFICE)).toBeNull();
+    expect(snapshotDistanceM(IN_FIX, null)).toBeNull();
+    expect(snapshotDistanceM(IN_FIX, { ...OFFICE, radiusM: null })).toBeNull();
   });
 });
 
-describe('formatMetresGrouped — the mockup\'s comma-grouped metres', () => {
-  it('rounds to whole metres and groups thousands', () => {
-    expect(formatMetresGrouped(0)).toBe('0 m');
-    expect(formatMetresGrouped(28)).toBe('28 m');
-    expect(formatMetresGrouped(1357)).toBe('1,357 m');
-    expect(formatMetresGrouped(1355.4)).toBe('1,355 m');
-    expect(formatMetresGrouped(-3)).toBe('0 m');
+describe('formatFixAge — the card caption', () => {
+  it('a fix younger than a minute carries NO caption (it would just be noise)', () => {
+    expect(formatFixAge({ ...IN_FIX, capturedAt: base.now }, base.now)).toBeNull();
+    expect(formatFixAge({ ...IN_FIX, capturedAt: base.now - 59_000 }, base.now)).toBeNull();
+  });
+
+  it('minutes and hours render human captions', () => {
+    expect(formatFixAge({ ...IN_FIX, capturedAt: base.now - 60_000 }, base.now)).toBe(
+      'Checked 1 min ago',
+    );
+    expect(formatFixAge({ ...IN_FIX, capturedAt: base.now - 1_800_000 }, base.now)).toBe(
+      'Checked 30 min ago',
+    );
+    expect(formatFixAge({ ...IN_FIX, capturedAt: base.now - 7_200_000 }, base.now)).toBe(
+      'Checked 2 h ago',
+    );
+  });
+
+  it('no fix / a future-stamped fix (backward clock step) never captions', () => {
+    expect(formatFixAge(null, base.now)).toBeNull();
+    expect(formatFixAge({ ...IN_FIX, capturedAt: base.now + 60_000 }, base.now)).toBeNull();
   });
 });
 
-describe('punchStatusCard — the approved mockup table, copy verbatim', () => {
+describe('formatMetresGrouped — the at-office card\'s plain metres', () => {
+  it('rounds to whole metres, groups thousands, spells "meters" (owner copy 2026-11-10)', () => {
+    expect(formatMetresGrouped(0)).toBe('0 meters');
+    expect(formatMetresGrouped(28)).toBe('28 meters');
+    expect(formatMetresGrouped(1357)).toBe('1,357 meters');
+    expect(formatMetresGrouped(1355.4)).toBe('1,355 meters');
+    expect(formatMetresGrouped(-3)).toBe('0 meters');
+  });
+});
+
+describe('punchStatusCard — the snapshot-verdict table, copy verbatim', () => {
   const flat = (c: { segments: { text: string }[] }) =>
     c.segments.map(s => s.text).join('');
 
-  it('readyIn in-fence → the green card (row 1)', () => {
+  it('readyIn in-fence → the green card, the OWNER\'S VERBATIM COPY (2026-11-10)', () => {
     const card = punchStatusCard({
       state: { kind: 'readyIn' },
       fix: IN_FIX,
       office: OFFICE,
       now: base.now,
-      checkinTimeText: null,
     });
     expect(card).toMatchObject({
       tone: 'done',
-      title: 'At your office',
-      chip: 'GEOFENCE MATCHED',
+      title: "You're at the office",
     });
     expect(flat(card!)).toBe(
-      `You are at Hero wala (${formatMetresGrouped(
+      `You're at Hero wala, just ${formatMetresGrouped(
         haversineMetres(IN_FIX, OFFICE),
-      )} away). Location checked.`,
+      )} away. Your location is verified.`,
     );
   });
 
-  it('readyOut in-fence → the BLUE card, the check-in time and the next step (row 2)', () => {
+  it('readyIn OUT-of-fence → the red TOO FAR card under the still-ready button (no lock — advice, not a gate)', () => {
     const card = punchStatusCard({
-      state: { kind: 'readyOut' },
-      fix: IN_FIX,
-      office: OFFICE,
-      now: base.now,
-      checkinTimeText: '9:02 AM',
-    });
-    expect(card).toMatchObject({
-      tone: 'progress',
-      title: 'On shift · At your office',
-      chip: 'READY TO CHECK OUT',
-    });
-    expect(flat(card!)).toBe(
-      'Checked in at 9:02 AM. Tap Check out when your work is done.',
-    );
-  });
-
-  it('locked → the red card with the radius instruction (row 3)', () => {
-    const card = punchStatusCard({
-      state: { kind: 'locked', distanceM: 1357 },
+      state: { kind: 'readyIn' },
       fix: OUT_FIX,
       office: OFFICE,
       now: base.now,
-      checkinTimeText: null,
     });
     expect(card).toMatchObject({
       tone: 'cancelled',
       title: 'Too far from Hero wala',
-      chip: 'TOO FAR',
     });
     expect(flat(card!)).toBe(
       'You are 1.4 km from Hero wala. Go closer, then check in.',
     );
   });
 
-  it('lockedOut → the amber card addressed to the checked-in employee (row 4)', () => {
-    const card = punchStatusCard({
-      state: { kind: 'lockedOut', distanceM: 1357 },
-      fix: OUT_FIX,
+  it('readyOut renders NO card — the tiles own the check-in time, the button owns the action (owner decision 2026-11-10)', () => {
+    expect(
+      punchStatusCard({
+        state: { kind: 'readyOut' },
+        fix: IN_FIX,
+        office: OFFICE,
+        now: base.now,
+      }),
+    ).toBeNull();
+    expect(
+      punchStatusCard({
+        state: { kind: 'readyOut' },
+        fix: OUT_FIX,
+        office: OFFICE,
+        now: base.now,
+      }),
+    ).toBeNull();
+  });
+
+  it('a stale fix captions its age on the TOO-FAR card — but NEVER on the green card (owner copy has no age line)', () => {
+    const old = { ...IN_FIX, capturedAt: base.now - 1_800_000 }; // 30 min
+    const green = punchStatusCard({
+      state: { kind: 'readyIn' },
+      fix: old,
       office: OFFICE,
       now: base.now,
-      checkinTimeText: '9:02 AM',
     });
-    expect(card).toMatchObject({
-      tone: 'scheduled',
-      title: 'Too far to check out',
-      chip: 'TOO FAR',
-    });
-    expect(flat(card!)).toBe(
-      'You checked in at 9:02 AM. You are 1,357 m away. Move closer to check out.',
+    expect(flat(green!)).toBe(
+      `You're at Hero wala, just ${formatMetresGrouped(
+        haversineMetres(old, OFFICE),
+      )} away. Your location is verified.`,
     );
+    const far = punchStatusCard({
+      state: { kind: 'readyIn' },
+      fix: { ...OUT_FIX, capturedAt: base.now - 1_800_000 },
+      office: OFFICE,
+      now: base.now,
+    });
+    expect(flat(far!)).toBe(
+      'You are 1.4 km from Hero wala. Go closer, then check in. Checked 30 min ago.',
+    );
+  });
+
+  it('serviceOff is the RED blocker card; denied/preciseOff stay neutral (2026-11-10 owner decisions)', () => {
+    const blocker = punchStatusCard({
+      state: { kind: 'serviceOff', action: 'in' },
+      fix: null,
+      office: OFFICE,
+      now: base.now,
+    });
+    expect(blocker).toMatchObject({ tone: 'blocker', title: 'Location is off' });
+    expect(flat(blocker!)).toBe(
+      'Turn on your location to verify your office presence and mark attendance.',
+    );
+    const denied = punchStatusCard({
+      state: { kind: 'permissionDenied', action: 'in' },
+      fix: null,
+      office: null,
+      now: base.now,
+    });
+    expect(flat(denied!)).toBe(
+      'Attendance needs your location to check in and out. You can still view your records and apply for leave without it.',
+    );
+    const preciseOut = punchStatusCard({
+      state: { kind: 'preciseOff', action: 'out' },
+      fix: null,
+      office: null,
+      now: base.now,
+    });
+    expect(flat(preciseOut!)).toBe('Turn on precise location to check out');
   });
 
   it('the row-5 postures carry the EXISTING remediation copy in the neutral card', () => {
     const offline = punchStatusCard({
-      state: { kind: 'offline' },
+      state: { kind: 'offline', action: 'in' },
       fix: null,
       office: null,
       now: base.now,
-      checkinTimeText: null,
     });
     expect(flat(offline!)).toBe(
       "You're offline. Check-in needs a working connection.",
@@ -623,28 +717,36 @@ describe('punchStatusCard — the approved mockup table, copy verbatim', () => {
       fix: null,
       office: null,
       now: base.now,
-      checkinTimeText: null,
     });
     expect(flat(rateLimited!)).toBe('Too many attempts. Try again in 9:42');
     const resolving = punchStatusCard({
-      state: { kind: 'resolving' },
+      state: { kind: 'resolving', action: 'in' },
       fix: null,
       office: null,
       now: base.now,
-      checkinTimeText: null,
     });
     expect(resolving).toMatchObject({ tone: 'neutral', title: 'Getting your location…' });
   });
 
-  it('a ready posture WITHOUT a fresh fix is the getting-location card — never a green lie', () => {
+  it('a ready posture WITHOUT a fix is the getting-location card — never a green lie', () => {
     expect(
       punchStatusCard({
         state: { kind: 'readyIn' },
         fix: null,
         office: OFFICE,
         now: base.now,
-        checkinTimeText: null,
-      }),
+        }),
+    ).toMatchObject({ tone: 'neutral', title: 'Getting your location…' });
+  });
+
+  it('a radiusless office has no fence to judge — the getting-location card, never a verdict', () => {
+    expect(
+      punchStatusCard({
+        state: { kind: 'readyIn' },
+        fix: IN_FIX,
+        office: { ...OFFICE, radiusM: null },
+        now: base.now,
+        }),
     ).toMatchObject({ tone: 'neutral', title: 'Getting your location…' });
   });
 
@@ -655,27 +757,24 @@ describe('punchStatusCard — the approved mockup table, copy verbatim', () => {
         fix: IN_FIX,
         office: OFFICE,
         now: base.now,
-        checkinTimeText: null,
-      }),
+        }),
     ).toBeNull();
     expect(
       punchStatusCard({
-        state: { kind: 'dialogPending' },
+        state: { kind: 'dialogPending', action: 'in' },
         fix: IN_FIX,
         office: OFFICE,
         now: base.now,
-        checkinTimeText: null,
-      }),
+        }),
     ).toBeNull();
   });
 
   it('every card announces its title + flat body for screen readers', () => {
     const card = punchStatusCard({
-      state: { kind: 'locked', distanceM: 1357 },
+      state: { kind: 'readyIn' },
       fix: OUT_FIX,
       office: OFFICE,
       now: base.now,
-      checkinTimeText: null,
     });
     expect(card!.announce).toBe(
       'Too far from Hero wala You are 1.4 km from Hero wala. Go closer, then check in.',

@@ -1,0 +1,4 @@
+Punch screen redesigned: one clear button, check-in and check-out times side by side with "On time", "Late by", "Early by" verdicts and a Worked summary showing full shift or how short it fell.
+Location problems explain themselves — clear cards and popups guide you to turn on location or allow access.
+Far from the office? Retrying closer never locks you out — the gate now runs on the server.
+Empty-day schedule is now a compact card.

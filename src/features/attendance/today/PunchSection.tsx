@@ -2,21 +2,24 @@
  * PunchSection — the Today tab's punch block (story 20-3): the relocated
  * AttendanceTodayView subtree (punch tiles, button, messages, dialogs)
  * restyled to the approved mockup — PunchButton + PunchStatusCard — with
- * the geofence prescreen feeding the model. The press pipeline is the
- * SAME useCheckInOut contract (dialogs, rate-limit, idempotency, a11y
- * announcements): the move is a re-host, not a rewrite. The old
- * display-only distance hint is gone — the status card is its successor.
+ * the prescreen feeding the card's snapshot verdict. The press pipeline is
+ * the SAME useCheckInOut contract (dialogs, rate-limit, idempotency, a11y
+ * announcements): the move is a re-host, not a rewrite.
+ *
+ * 2026-11-10 simplification: no client geofence lock — the button stays
+ * ready and tappable and the server gates every press; the card speaks
+ * from the prescreen's latest fix. A settled server message outranks the
+ * status card (the server copy is the truth surface — the old
+ * message-over-hint precedence, now without exceptions).
  *
  * Failure postures are inherited verbatim: the first-load shimmer and the
  * error + Retry block render NO interactive control (the holiday
- * pre-flight gate must be ABLE to fire before any check-in happens). A
- * settled server message outranks the status card (the server copy is the
- * truth surface — the old message-over-hint precedence).
+ * pre-flight gate must be ABLE to fire before any check-in happens).
  */
 import { AccessibilityInfo } from 'react-native';
 import { StyleSheet, Text, View } from 'react-native';
 import { CalendarX, Sun } from 'lucide-react-native';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, ConfirmDialog, Skeleton } from '../../../components/ui';
 import { colors, fontSize, spacing } from '../../../theme';
 import { useNow } from '../../../hooks';
@@ -25,16 +28,18 @@ import { formatOffsetInstantTime } from '../../../utils/offsetInstant';
 import {
   buildTodayTiles,
   deriveTodayButtonState,
-  freshDistanceM,
+  formatShiftClock,
   punchStatusCard,
+  shiftSpanMinutes,
   type PunchOffice,
 } from './attendanceTodayModel';
 import { PunchButton } from './PunchButton';
 import { PunchStatusCard } from './PunchStatusCard';
 import { PunchCard } from './PunchCard';
-import { HOLIDAY_DIALOG, LEAVE_DIALOG } from './checkInDialogs';
+import { HOLIDAY_DIALOG, LEAVE_DIALOG, PERMISSION_DIALOG, SERVICE_OFF_DIALOG } from './checkInDialogs';
 import { useCheckInOut } from './useCheckInOut';
 import { usePunchPrescreen } from './usePunchPrescreen';
+import { openDeviceLocationSettings } from '../../../services/location/deviceLocation';
 import type { AttendanceTodayRecord } from '../../../services/resources/attendanceMe';
 
 interface Props {
@@ -59,6 +64,15 @@ export function PunchSection({
 
   const { fix, recapture, adoptFix } = usePunchPrescreen({ enabled: true });
 
+  // The service-off popup (owner request 2026-11-10): open on a blocked
+  // tap, closed by any of its exits — the punch press never fires here,
+  // so this lives outside the hook's confirm latch. The permission popup
+  // (owner request 2026-11-10) is its sibling for the denied/preciseOff
+  // states: our DS dialog replaces the plain RN rationale popup that used
+  // to precede the OS sheet.
+  const [serviceOffAsk, setServiceOffAsk] = useState(false);
+  const [permissionAsk, setPermissionAsk] = useState(false);
+
   const onSettled = useCallback(() => {
     // The post-write pass refreshes the summary AND re-probes the fence —
     // the fresh record flips the ready posture, the fresh fix re-judges it.
@@ -73,9 +87,8 @@ export function PunchSection({
   });
 
   // The press flow's own capture is the freshest fix the device ever held
-  // (fresher than anything the cadence will get indoors) — adopt it so a
-  // server-rejected too-far press renders the LOCKED card immediately
-  // instead of the fallback while waiting for the next GPS win.
+  // (fresher than anything the probes will get indoors) — adopt it so the
+  // card speaks with the fix the server just judged, not an older probe.
   useEffect(() => {
     if (check.lastFix) adoptFix(check.lastFix);
   }, [check.lastFix, adoptFix]);
@@ -120,8 +133,8 @@ export function PunchSection({
   const formatTime = useCallback((iso: string) => formatOffsetInstantTime(iso), []);
 
   // The fence inputs: the anchored office from the summary (no pin ⇒ no
-  // fence), the prescreen's freshest fix, and the clock — the rate-limit
-  // countdown's 1 s tick and the 30 s cadence tick fold into one `now`.
+  // fence) and the prescreen's latest fix. The clock folds the rate-limit
+  // countdown's 1 s tick and the card caption's 30 s tick into one `now`.
   const cadence = useNow(30_000);
   const now = Math.max(check.now, cadence);
   const s = summary.state.summary;
@@ -147,17 +160,23 @@ export function PunchSection({
     dialogPending: check.dialogPending,
     rateLimitedUntil: check.rateLimitedUntil,
     now,
-    fix,
-    office,
   });
 
   const onPress = useCallback(() => {
+    if (buttonState.kind === 'serviceOff') {
+      // Owner request 2026-11-10: a service-off tap must not silently
+      // bounce to Settings — it asks first (the popup carries the WHY),
+      // and only its "Turn on location" leaves the app.
+      setServiceOffAsk(true);
+      return;
+    }
     if (
       buttonState.kind === 'permissionDenied' ||
-      buttonState.kind === 'preciseOff' ||
-      buttonState.kind === 'serviceOff'
+      buttonState.kind === 'preciseOff'
     ) {
-      check.openRemediation();
+      // Owner request 2026-11-10: ask in our own voice first — the OS
+      // sheet fires only from the dialog's confirm.
+      setPermissionAsk(true);
       return;
     }
     check.press(buttonState.kind === 'readyOut' ? 'check_out' : 'check_in');
@@ -167,59 +186,35 @@ export function PunchSection({
   // — the `todayRecord !== undefined` legacy gate applied only to
   // CHECK-IN interactivity, never to a completed day: on a pre-16-4
   // backend a mid-session check-out must still replace the button
-  // (review patch: legacy done-state dead end).
+  // (review patch: legacy done-state dead end). The schedule only feeds
+  // the WORKED chip (span → full/short, range → celebration caption) and
+  // the empty checkout tile's meridiem hint; lateness is the server's
+  // isLate/lateMinutes and is never recomputed here.
+  const schedule =
+    s?.startTime && s?.endTime
+      ? {
+          endText: formatShiftClock(s.endTime),
+          rangeText: [formatShiftClock(s.startTime), formatShiftClock(s.endTime)]
+            .filter(Boolean)
+            .join(' - ') || null,
+          spanMinutes: shiftSpanMinutes(s.startTime, s.endTime),
+        }
+      : null;
   const tilesModel = check.record
-    ? buildTodayTiles(check.record, formatTime)
+    ? buildTodayTiles(check.record, formatTime, schedule)
     : null;
   const done = buttonState.kind === 'done';
 
-  // The status card's time input (wall-clock rendering is the view's job):
-  // the check-in instant formatted.
-  const checkinTimeText = check.record ? formatTime(check.record.checkinAt) : null;
-
-  // The status card's anti-flap latch (mirrors the sticky-ready button):
-  // the last CONFIRMED in-fence distance is held here, and a stale fix
-  // re-renders the confirmed card instead of flapping to "Getting your
-  // location…" — the stream/30s re-probe stays silent in the background
-  // until it has news. FRESH SPEAKS: any fresh fix updates an in-fence
-  // claim or overturns it (even while rate-limit/dialog postures mask the
-  // lock — those outrank the geofence in the button state, so clearing is
-  // keyed on the fix, not the posture). The latch also dies at midnight —
-  // a confirmed verdict is about THAT day. Idempotent per render.
-  const latchRef = useRef<{ day: string; distanceM: number } | null>(null);
-  const freshDistance = freshDistanceM(fix, office, now);
-  const latchDay = new Date(now).toDateString();
-  const latch =
-    latchRef.current && latchRef.current.day === latchDay
-      ? latchRef.current.distanceM
-      : null;
-  if (
-    freshDistance != null &&
-    office?.radiusM != null &&
-    freshDistance <= office.radiusM
-  ) {
-    latchRef.current = { day: latchDay, distanceM: freshDistance };
-  } else if (freshDistance != null || buttonState.kind === 'done') {
-    latchRef.current = null;
-  }
-
   // Card-vs-message precedence: a settled server message outranks the card
-  // (the server copy is the authoritative explanation) — EXCEPT the locked
-  // postures: when the fence verdict is on screen, the approved card is the
-  // truth surface (it carries the same fact with the live distance) and the
-  // flat server line would only duplicate it worse.
-  const fenceLocked =
-    !done && factsKnown &&
-    (buttonState.kind === 'locked' || buttonState.kind === 'lockedOut');
+  // (the server copy is the authoritative explanation — no exceptions now
+  // that there is no lock card).
   const statusCard =
-    !done && factsKnown && (!check.message || fenceLocked)
+    !done && factsKnown && !check.message
       ? punchStatusCard({
           state: buttonState,
           fix,
           office,
           now,
-          checkinTimeText,
-          latchedDistanceM: latch,
         })
       : null;
 
@@ -250,20 +245,13 @@ export function PunchSection({
         </View>
       ) : (
         <>
-          {tilesModel ? <PunchCard tiles={tilesModel} /> : null}
-          {/* The done posture replaces the button ENTIRELY (never both
-              visible — the 16-4 AC; the tiles are the done render now). */}
+          {/* The punch circle leads (owner decision 2026-11-10); the
+              tiles card and the verdict card follow it. */}
           {!done ? (
             <>
               <PunchButton
                 state={buttonState}
                 enabled={factsKnown}
-                // Red face = the last press didn't take. The message — and
-                // with it the red — persists until the next press that
-                // actually SUBMITS (dialog-cancel and offline taps keep the
-                // last outcome on screen). The lock postures carry their
-                // own visuals, so this only shows on the ready rungs.
-                failed={check.message?.tone === 'error'}
                 onPress={onPress}
               />
               {statusCard ? (
@@ -273,10 +261,11 @@ export function PunchSection({
               ) : null}
             </>
           ) : null}
+          {tilesModel ? <PunchCard tiles={tilesModel} /> : null}
         </>
       )}
 
-      {check.message && !fenceLocked ? (
+      {check.message ? (
         <Text
           style={[
             styles.message,
@@ -313,6 +302,49 @@ export function PunchSection({
           }
           onConfirm={() => check.settleConfirm(true)}
           onCancel={() => check.settleConfirm(false)}
+        />
+      ) : null}
+
+      {/* The service-off popup (owner request 2026-11-10): the blocked
+          tap's moment of decision. "Turn on location" leaves the app for
+          the system Location screen — no punch fires from this dialog;
+          the foreground re-probe greets the return with a READY button
+          when the toggle flipped. No icon badge, and the title shares the
+          header row with the close X (owner feedback 2026-11-10). */}
+      {serviceOffAsk ? (
+        <ConfirmDialog
+          visible
+          titleInHeader
+          title={SERVICE_OFF_DIALOG.title}
+          message={SERVICE_OFF_DIALOG.message}
+          confirmLabel={SERVICE_OFF_DIALOG.confirmLabel}
+          cancelLabel={SERVICE_OFF_DIALOG.cancelLabel}
+          onConfirm={() => {
+            setServiceOffAsk(false);
+            void openDeviceLocationSettings();
+          }}
+          onCancel={() => setServiceOffAsk(false)}
+        />
+      ) : null}
+
+      {/* The permission popup (owner request 2026-11-10): the denied/
+          preciseOff tap's moment of decision, in the service-off popup's
+          exact shape (titleInHeader, no icon). Confirm → the OS permission
+          sheet (remediation without its plain rationale); any dismissal
+          returns to the app — the grey card keeps explaining underneath. */}
+      {permissionAsk ? (
+        <ConfirmDialog
+          visible
+          titleInHeader
+          title={PERMISSION_DIALOG.title}
+          message={PERMISSION_DIALOG.message}
+          confirmLabel={PERMISSION_DIALOG.confirmLabel}
+          cancelLabel={PERMISSION_DIALOG.cancelLabel}
+          onConfirm={() => {
+            setPermissionAsk(false);
+            void check.openRemediation();
+          }}
+          onCancel={() => setPermissionAsk(false)}
         />
       ) : null}
     </View>

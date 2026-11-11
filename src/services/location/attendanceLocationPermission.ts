@@ -112,21 +112,21 @@ export async function resolveAttendanceLocationState(): Promise<AttendanceLocati
  * in-app re-prompt — and service-off) → the app's own Settings page.
  * Returns the resolved state after any in-app prompt so the caller can
  * re-render immediately.
+ *
+ * The WHY is never told here: the request goes to the OS sheet WITHOUT a
+ * rationale object — PunchSection's own ConfirmDialog (PERMISSION_DIALOG,
+ * owner request 2026-11-10 replacing the plain RN rationale popup) has
+ * already asked and explained by the time this runs.
  */
 export async function remediateAttendanceLocation(
   state: AttendanceLocationState,
 ): Promise<AttendanceLocationState> {
   if (Platform.OS === 'android' && state === 'denied') {
     try {
+      // No rationale — it would render RN's plain-styled dialog (the one
+      // this flow retired) ahead of the OS sheet.
       const result = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-        {
-          title: 'Location Permission',
-          message:
-            'Allow Fenzit to access your precise location to verify your attendance check-in.',
-          buttonPositive: 'Allow',
-          buttonNegative: 'Cancel',
-        },
       );
       if (result === PermissionsAndroid.RESULTS.GRANTED) {
         return resolveAttendanceLocationState();
