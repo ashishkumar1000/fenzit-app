@@ -1,18 +1,29 @@
 /**
  * attendanceTodayModel.ts — the punch button's pure state machine
- * (Story 16-4, spec D4; 20-3 adds the geofence rungs + the status-card
- * model) and the exact copy table (spec §4).
+ * (Story 16-4, spec D4; 20-3 adds the status-card model) and the exact
+ * copy table (spec §4).
+ *
+ * 2026-11-10 simplification (owner decision): the client geofence LOCK is
+ * gone. The button is always ready once the day facts are known — the
+ * press does its own strict capture and the server gates every punch
+ * (too_far no longer counts toward the rate limit, so a blind press can
+ * never lock a legitimate employee out). The prescreen fix now only
+ * drives the status card's snapshot verdict: inside/outside + distance
+ * + a "checked N min ago" caption. No lease, no latch.
  *
  * One derivation function, first match wins:
- *   offline → permissionDenied → preciseOff → serviceOff → rateLimited →
- *   dialogPending → resolving → done → readyOut → readyIn
+ *   done → offline → permissionDenied → preciseOff → serviceOff →
+ *   rateLimited → dialogPending → resolving → readyOut → readyIn
  *
- * Priority rationale: offline blocks everything; the location states block
- * the tap legally; the rate limit's disabled-ness is time-bound;
- * dialogPending/resolving are the latches that make double-taps no-ops;
- * done replaces the button entirely (never both visible — AC).
+ * Priority rationale: done replaces the button entirely (never both
+ * visible — AC), so it outranks EVERY blocker: a finished day has no
+ * action left to block, and must never be asked to go online or fix
+ * location (2026-11-10 device pass: a checked-out employee with location
+ * off was shown the punch button beside the done tiles). Then offline
+ * blocks everything; the location states block the tap legally; the rate
+ * limit's disabled-ness is time-bound; dialogPending/resolving are the
+ * latches that make double-taps no-ops.
  */
-import { formatWorkedMinutes } from '../../../utils/offsetInstant';
 import { haversineMetres } from '../../../utils/distanceUtils';
 import type {
   AttendanceTodayFacts,
@@ -37,7 +48,8 @@ export interface PunchFixSample {
 
 /** The anchored office's geofence inputs from the summary. `radiusM` null
  *  (no office / radiusless column / field absent on the wire) = the client
- *  can never lock — fail-safe, the server stays authoritative anyway. */
+ *  has no fence to judge against — the card shows no verdict and the
+ *  server stays authoritative anyway. */
 export interface PunchOffice {
   latitude: number;
   longitude: number;
@@ -45,27 +57,28 @@ export interface PunchOffice {
   name: string | null;
 }
 
-/** A prescreen fix younger than this may ground a geofence posture; an
- *  older or missing one falls back to today's unlocked behaviour. */
-export const PUNCH_FIX_FRESH_MS = 120_000;
+/** Which punch a posture is about. Every blocked or busy posture names its
+ *  PENDING action: a block never changes what the employee is trying to do
+ *  — while checked in, a blocked or spinning button is a CHECK OUT, never
+ *  a "Check in" (the rule rateLimited already carried, generalized
+ *  2026-11-10 when the service-off popup surfaced a mid-shift button
+ *  labelled "Check in"). */
+export type PunchAction = 'in' | 'out';
 
 export type TodayButtonState =
-  | { kind: 'offline' }
-  | { kind: 'permissionDenied' }
-  | { kind: 'preciseOff' }
-  | { kind: 'serviceOff' }
-  | { kind: 'rateLimited'; remainingS: number; action: 'in' | 'out' }
-  | { kind: 'dialogPending' }
-  | { kind: 'resolving' }
+  | { kind: 'offline'; action: PunchAction }
+  | { kind: 'permissionDenied'; action: PunchAction }
+  | { kind: 'preciseOff'; action: PunchAction }
+  | { kind: 'serviceOff'; action: PunchAction }
+  | { kind: 'rateLimited'; remainingS: number; action: PunchAction }
+  | { kind: 'dialogPending'; action: PunchAction }
+  | { kind: 'resolving'; action: PunchAction }
   | { kind: 'done' }
-  /** The ready rungs are STICKY (product decision, 2026-10-24): a stale or
-   *  missing fix never dims them — once ready, the face stays coloured, and
-   *  staleness only quiets the status card. No distance rides these rungs:
-   *  the card computes its own, the lock carries its own. */
+  /** The ready rungs are UNCONDITIONAL once the day facts are known: the
+   *  prescreen's fence verdict never blocks the tap — the card speaks and
+   *  the server decides the press. */
   | { kind: 'readyOut' }
-  | { kind: 'readyIn' }
-  | { kind: 'locked'; distanceM: number }
-  | { kind: 'lockedOut'; distanceM: number };
+  | { kind: 'readyIn' };
 
 export interface TodayModelInput {
   permission: AttendanceLocationPermission;
@@ -79,54 +92,41 @@ export interface TodayModelInput {
   /** Epoch ms when the rate-limit block lifts; null when not blocked. */
   rateLimitedUntil: number | null;
   now: number;
-  /** The prescreen's freshest fix + the anchored office (geofence rungs).
-   *  Either absent ⇒ never locked. */
-  fix?: PunchFixSample | null;
-  office?: PunchOffice | null;
 }
 
-/**
- * The geofence prescreen: with a FRESH fix and a known radius, distance
- * beyond the radius locks the punch (locked/lockedOut, by record state);
- * every other combination — no fix, stale fix, no office, radiusless
- * office — falls through unlocked. A lock is a CLIENT prescreen only: the
- * press path never consults it, and the server still gates every punch.
- */
-function geofenceLock(
-  input: TodayModelInput,
-): { locked: true; distanceM: number } | { locked: false } {
-  const fix = input.fix;
-  const office = input.office;
-  if (!fix || !office || office.radiusM == null) return { locked: false };
-  // A backward clock step would make a capturedAt in the future read as
-  // forever-fresh — the fail-safe direction is unlocked, like any stale fix.
-  if (input.now < fix.capturedAt) return { locked: false };
-  if (input.now - fix.capturedAt > PUNCH_FIX_FRESH_MS) return { locked: false };
-  const distanceM = haversineMetres(fix, office);
-  return distanceM > office.radiusM
-    ? { locked: true, distanceM }
-    : { locked: false };
-}
-
-/** The straight-line distance to the office when the prescreen fix is
- *  fresh (status-card input); null when the fix is missing/stale or the
- *  office/radius is unknown — exactly the cases that may never lock. */
-export function freshDistanceM(
+/** The straight-line distance from the prescreen's latest fix to the
+ *  office — the status card's snapshot input. null when there is nothing
+ *  to judge (no fix / no office / radiusless office). No freshness cap:
+ *  the card carries the fix's age in its caption instead. */
+export function snapshotDistanceM(
   fix: PunchFixSample | null | undefined,
   office: PunchOffice | null | undefined,
-  now: number,
 ): number | null {
   if (!fix || !office || office.radiusM == null) return null;
-  if (now < fix.capturedAt) return null;
-  if (now - fix.capturedAt > PUNCH_FIX_FRESH_MS) return null;
   return haversineMetres(fix, office);
 }
 
+/** "Checked 4 min ago" for the card caption — null while the fix is
+ *  fresh enough (< 1 min) that the caption would just be noise. */
+export function formatFixAge(fix: PunchFixSample | null | undefined, now: number): string | null {
+  if (!fix) return null;
+  const ageS = Math.max(0, Math.round((now - fix.capturedAt) / 1000));
+  if (ageS < 60) return null;
+  if (ageS < 3600) {
+    const m = Math.floor(ageS / 60);
+    return `Checked ${m} min ago`;
+  }
+  const h = Math.floor(ageS / 3600);
+  return `Checked ${h} h ago`;
+}
+
 export function deriveTodayButtonState(input: TodayModelInput): TodayButtonState {
-  if (!input.online) return { kind: 'offline' };
-  if (input.permission === 'denied') return { kind: 'permissionDenied' };
-  if (input.permission === 'preciseOff') return { kind: 'preciseOff' };
-  if (input.permission === 'serviceOff') return { kind: 'serviceOff' };
+  if (input.record?.checkoutAt) return { kind: 'done' };
+  const action: PunchAction = input.record ? 'out' : 'in';
+  if (!input.online) return { kind: 'offline', action };
+  if (input.permission === 'denied') return { kind: 'permissionDenied', action };
+  if (input.permission === 'preciseOff') return { kind: 'preciseOff', action };
+  if (input.permission === 'serviceOff') return { kind: 'serviceOff', action };
   if (input.rateLimitedUntil !== null && input.rateLimitedUntil > input.now) {
     return {
       kind: 'rateLimited',
@@ -137,23 +137,11 @@ export function deriveTodayButtonState(input: TodayModelInput): TodayButtonState
         Math.ceil((input.rateLimitedUntil - input.now) / 1000),
         MAX_RATE_WINDOW_S,
       ),
-      // The pending action outlives the block: while checked in, the
-      // blocked button is a blocked CHECK OUT, never a "Check in".
-      action: input.record ? 'out' : 'in',
+      action,
     };
   }
-  if (input.dialogPending) return { kind: 'dialogPending' };
-  if (input.resolving) return { kind: 'resolving' };
-  if (input.record?.checkoutAt) return { kind: 'done' };
-  const geo = geofenceLock(input);
-  if (geo.locked) {
-    // Beyond the fence: with an open record the punch out is locked, with
-    // none the punch in is. The button renders non-interactive — the lock
-    // never reaches the press path (the server re-judges every press).
-    return input.record
-      ? { kind: 'lockedOut', distanceM: geo.distanceM }
-      : { kind: 'locked', distanceM: geo.distanceM };
-  }
+  if (input.dialogPending) return { kind: 'dialogPending', action };
+  if (input.resolving) return { kind: 'resolving', action };
   if (!input.factsKnown) {
     // Facts unknown (first load in flight or failed) — the button is not
     // interactive until the holiday gate COULD fire. Rendered as readyIn
@@ -220,50 +208,189 @@ export function messageForApiError(err: {
   }
 }
 
-/** The checked-in line above the Check out button
- *  ("Checked in 10:22 AM · Late by 22 min"). */
-/** The punch card's data (2026-10 tab redesign) — the two tile times, the
- *  total-logged pill and the late/early pills, from the merged record.
- *  Unlike the old done-card model this is built for EVERY record state
- *  (checked-in-only included: the checkout tile reads "—", no worked
- *  pill yet), so the mid-session card and the button coexist. */
+/** One stat chip in the punch card's chips row (2026-11-10 redesign):
+ *  an uppercase label, a big compact value and a small caption. */
+export interface TodayTileChip {
+  value: string;
+  caption: string | null;
+}
+
+/** The WORKED chip — a TodayTileChip plus the full-shift verdict. `full`
+ *  compares worked minutes against the shift span, mirroring how the
+ *  day's schedule defines a full shift. `shortfallMinutes` is the
+ *  quantified gap (span − worked) on a short day — the card tones the
+ *  chip amber and captions "Short by …"; null on a full day or when no
+ *  schedule is on the wire (the chip then stays neutral — it never
+ *  celebrates a day it cannot judge). */
+export interface WorkedTileChip extends TodayTileChip {
+  full: boolean;
+  shortfallMinutes?: number | null;
+}
+
+/** The per-punch verdict line under a tile's time (owner mockup
+ *  2026-11-10): the tile itself carries the punctuality truth, replacing
+ *  the LATE BY / EARLY BY chips that used to repeat it below the tiles.
+ *  Derived from the BE's own day flags, so it holds on legacy summaries
+ *  with no schedule on the wire too. */
+export type TodayTileVerdict =
+  | { kind: 'onTime' }
+  | { kind: 'pending' }
+  | { kind: 'late'; minutes: number }
+  | { kind: 'early'; minutes: number; major?: boolean };
+
+/** The verdict's copy ("On time" / "Late by 52 min" / "Early by 14 min").
+ *  `pending` renders as the grey Pending pill instead of text — null here.
+ *  Severity rides the early variant's `major`: leaving at or before the
+ *  shift MIDPOINT (early minutes ≥ half the span — the same half-day line
+ *  the backend's FR-7 midpoint draws) means half the shift or less was
+ *  worked, and the tile inks the verdict red; a smaller early leave stays
+ *  amber. Absent `major` (or no schedule on the wire to draw the line)
+ *  always renders the minor amber. */
+export function tileVerdictText(verdict: TodayTileVerdict): string | null {
+  switch (verdict.kind) {
+    case 'onTime':
+      return 'On time';
+    case 'late':
+      return `Late by ${formatMinutesCompact(verdict.minutes)}`;
+    case 'early':
+      return `Early by ${formatMinutesCompact(verdict.minutes)}`;
+    case 'pending':
+      return null;
+  }
+}
+
+/** The punch card's data — the two tile times with their per-punch
+ *  verdicts and the lone WORKED stat. Built for EVERY record state
+ *  (checked-in-only included: the checkout tile reads the dashed
+ *  placeholder and the Pending pill), so the mid-session card and the
+ *  button coexist. */
 export interface TodayTilesModel {
-  /** Tile times, "4:06 AM" — null renders the "—" placeholder. */
+  /** Tile times, "4:06 AM" — null renders the dashed placeholder. */
   checkinText: string | null;
   checkoutText: string | null;
-  /** The green pill's value; null renders no pill (minutes unknown). */
-  workedText: string | null;
-  /** The amber pill's value ("Late by 22 min" / "Early by 713 min"). */
-  lateText: string | null;
-  earlyText: string | null;
-  /** The early pill's caption — how long before the shift end
-   *  ("11 h 53 m before shift"); null = no caption. */
-  earlyBeforeShiftText: string | null;
+  /** Under-time verdicts. Check-in is never pending (the card only
+   *  renders once a record exists); check-out stays pending until the
+   *  punch lands. */
+  checkinVerdict: TodayTileVerdict;
+  checkoutVerdict: TodayTileVerdict;
+  /** The shift-end meridiem ("PM") shown beside the empty checkout
+   *  placeholder; null without schedule on the wire. */
+  checkoutHintMeridiem: string | null;
+  /** WORKED — the one chip under the divider; null until check-out lands
+   *  (minutes unknown). */
+  worked: WorkedTileChip | null;
+}
+
+/** The chips' compact minute format ("1 min" / "47 min" / "7h 13m" /
+ *  "8h 00m") — minutes padded to two digits past the hour, per the
+ *  mockups. */
+export function formatMinutesCompact(totalMinutes: number): string {
+  const m = Math.max(0, Math.round(totalMinutes));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const rest = m % 60;
+  return `${h}h ${String(rest).padStart(2, '0')}m`;
+}
+
+/** "09:30" (+ offset minutes) → "9:45 AM" — the shift clock the chips
+ *  caption ("Sched 9:45 AM"). Wall-clock only; null on a malformed input. */
+export function formatShiftClock(hhmm: string, addMinutes = 0): string | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+  if (!match) return null;
+  const total = Number(match[1]) * 60 + Number(match[2]) + addMinutes;
+  if (!Number.isFinite(total)) return null;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  const h24 = Math.floor(wrapped / 60);
+  const mm = wrapped % 60;
+  const meridiem = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(mm).padStart(2, '0')} ${meridiem}`;
+}
+
+/** The shift span in minutes ("09:00" → "17:00" = 480) — the full-shift
+ *  threshold the WORKED chip's `full` verdict compares against. null when
+ *  either bound is malformed or the span is not positive. */
+export function shiftSpanMinutes(startHhmm: string, endHhmm: string): number | null {
+  const parse = (hhmm: string): number | null => {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+    if (!match) return null;
+    const total = Number(match[1]) * 60 + Number(match[2]);
+    return Number.isFinite(total) ? total : null;
+  };
+  const start = parse(startHhmm);
+  const end = parse(endHhmm);
+  if (start === null || end === null || end <= start) return null;
+  return end - start;
+}
+
+/** The shift schedule preformatted by the caller (wall-clock rendering is
+ *  a view concern): the full-shift WORKED card captions the raw range and
+ *  compares against the span, and the end text seeds the empty checkout
+ *  tile's meridiem hint ("PM"). Lateness is NOT judged here — the server's
+ *  isLate/lateMinutes own it. */
+export interface TodayTilesSchedule {
+  endText: string | null;
+  /** "9:00 AM - 5:00 PM" — the raw shift range. */
+  rangeText: string | null;
+  /** end − start in minutes; the full-shift threshold. */
+  spanMinutes: number | null;
 }
 
 export function buildTodayTiles(
   record: AttendanceTodayRecord,
   formatTime: (iso: string) => string | null,
+  schedule?: TodayTilesSchedule | null,
 ): TodayTilesModel {
-  const lateText =
+  const spanMinutes = schedule?.spanMinutes ?? null;
+  const worked =
+    record.workedMinutes !== null && Number.isFinite(record.workedMinutes)
+      ? (() => {
+          const full = spanMinutes !== null && record.workedMinutes >= spanMinutes;
+          const shortfallMinutes =
+            spanMinutes !== null && !full
+              ? Math.max(0, spanMinutes - record.workedMinutes)
+              : null;
+          return {
+            value: formatMinutesCompact(record.workedMinutes),
+            caption:
+              full && schedule?.rangeText
+                ? `Full shift completed • Sched ${schedule.rangeText}`
+                : shortfallMinutes !== null
+                  ? `Short by ${formatMinutesCompact(shortfallMinutes)}`
+                  : 'Shift duration',
+            full,
+            shortfallMinutes,
+          };
+        })()
+      : null;
+  const checkinVerdict: TodayTileVerdict =
     record.isLate && record.lateMinutes !== null && record.lateMinutes > 0
-      ? `Checked in late by ${formatWorkedMinutes(record.lateMinutes)}`
-      : null;
-  const earlyText =
-    record.earlyCheckout && record.earlyCheckoutMinutes !== null
-      ? `Checked out early by ${formatWorkedMinutes(record.earlyCheckoutMinutes)}`
-      : null;
-  const beforeShift =
-    record.earlyCheckout && record.earlyCheckoutMinutes !== null
-      ? formatWorkedMinutes(record.earlyCheckoutMinutes)
-      : null;
+      ? { kind: 'late', minutes: record.lateMinutes }
+      : { kind: 'onTime' };
+  const halfSpanMinutes = spanMinutes !== null ? spanMinutes / 2 : null;
+  const checkoutVerdict: TodayTileVerdict = !record.checkoutAt
+    ? { kind: 'pending' }
+    : record.earlyCheckout &&
+        record.earlyCheckoutMinutes !== null &&
+        record.earlyCheckoutMinutes > 0
+      ? {
+          kind: 'early',
+          minutes: record.earlyCheckoutMinutes,
+          major:
+            halfSpanMinutes !== null &&
+            record.earlyCheckoutMinutes >= halfSpanMinutes,
+        }
+      : { kind: 'onTime' };
+  const endText = schedule?.endText ?? null;
+  const endSpace = endText ? endText.lastIndexOf(' ') : -1;
   return {
     checkinText: formatTime(record.checkinAt),
     checkoutText: record.checkoutAt ? formatTime(record.checkoutAt) : null,
-    workedText: formatWorkedMinutes(record.workedMinutes),
-    lateText,
-    earlyText,
-    earlyBeforeShiftText: beforeShift !== null ? `${beforeShift} before shift` : null,
+    checkinVerdict,
+    checkoutVerdict,
+    checkoutHintMeridiem:
+      endText && endSpace > 0 ? endText.slice(endSpace + 1) : null,
+    worked,
   };
 }
 
@@ -303,7 +430,17 @@ export function needsHolidayConfirm(
 // --- The punch status card (the approved mockup's four geofence states,
 // --- copy verbatim; every other posture carries its existing copy). ----
 
-export type PunchCardTone = 'done' | 'progress' | 'cancelled' | 'scheduled' | 'neutral';
+/** `blocker` shares the red family with `cancelled` but is a different
+ *  posture: attendance cannot be marked AT ALL (location services off).
+ *  The card inks its text red and carries the lost-pin motif; `cancelled`
+ *  stays the too-far verdict's tint with dark text and red accents. */
+export type PunchCardTone =
+  | 'done'
+  | 'progress'
+  | 'cancelled'
+  | 'scheduled'
+  | 'neutral'
+  | 'blocker';
 
 /** One body span. `strong` = bold in the card's own ink (names, times);
  *  `danger` = bold red (distances and radii — the mockup's accent). */
@@ -315,19 +452,18 @@ export interface PunchBodySegment {
 export interface PunchStatusCardModel {
   tone: PunchCardTone;
   title: string | null;
-  chip: string | null;
   segments: PunchBodySegment[];
   /** The flat reading a screen reader announces. */
   announce: string;
 }
 
-/** Metres with the mockup's comma grouping ("28 m" / "1,357 m"). Grouping
- *  is done by hand — a toLocaleString dependency on Hermes Intl config is
- *  one more environment axis than a display string earns. */
+/** Metres in the at-office card's plain words ("2 meters" / "1,357 meters").
+ *  Grouping is done by hand — a toLocaleString dependency on Hermes Intl
+ *  config is one more environment axis than a display string earns. */
 export function formatMetresGrouped(metres: number): string {
   const rounded = Math.max(0, Math.round(metres));
   const grouped = rounded.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${grouped} m`;
+  return `${grouped} meters`;
 }
 
 /** The too-far line's distance: metres under a kilometre ("990 m"), one-
@@ -345,7 +481,6 @@ const seg = (text: string, emphasis?: PunchBodySegment['emphasis']): PunchBodySe
 function card(
   tone: PunchCardTone,
   title: string | null,
-  chip: string | null,
   segments: PunchBodySegment[],
 ): PunchStatusCardModel {
   // The segments carry their own spacing (they render as contiguous Text
@@ -355,100 +490,94 @@ function card(
   return {
     tone,
     title,
-    chip,
     segments,
     announce: title ? `${title} ${body}` : body,
   };
 }
 
 /**
- * The status card under the punch button, per posture. The four geofence
- * states render the approved mockup copy verbatim; the blocked postures
- * carry their existing remediation copy in the same visual language; the
- * done posture renders NO card (the punch tiles are the done render).
- *
- * `checkinTimeText` is preformatted by the caller (wall-clock rendering is
- * a view concern).
+ * The status card under the punch button, per posture. The readyIn posture
+ * renders the prescreen's SNAPSHOT verdict (inside / outside the fence,
+ * from the latest fix — never a gate, the button stays tappable). The
+ * checked-in postures render NO card (owner decision 2026-11-10): the
+ * punch tiles already carry the check-in time and the button carries the
+ * action — a card would only repeat them. The blocked postures carry
+ * their remediation copy in the same visual language — service off reads
+ * as the RED blocker (owner request 2026-11-10: attendance cannot be
+ * verified at all, so the card must stop the employee before the tap);
+ * the done posture renders NO card (the punch tiles are the done render).
  */
 export function punchStatusCard(input: {
   state: TodayButtonState;
   fix: PunchFixSample | null | undefined;
   office: PunchOffice | null | undefined;
   now: number;
-  checkinTimeText: string | null;
-  /** The last CONFIRMED in-fence distance, held by the caller: when the fix
-   *  has gone stale, a ready card re-renders from this instead of flapping
-   *  to "Getting your location…" — the background re-probe stays silent
-   *  until it has news. Absent until the first in-fence verdict, so the
-   *  true first load still explains itself. */
-  latchedDistanceM?: number | null;
 }): PunchStatusCardModel | null {
   const { state, fix, office, now } = input;
-  const distance = freshDistanceM(fix, office, now);
+  const distance = snapshotDistanceM(fix, office);
   const officeName = office?.name ?? 'your office';
-  // A fresh fix speaks; past it, the last confirmed verdict stands.
-  const known = distance ?? input.latchedDistanceM ?? null;
+  const age = formatFixAge(fix, now);
+  const ageSeg = age ? [seg(` ${age}.`)] : [];
 
   switch (state.kind) {
     case 'readyIn': {
-      if (known == null || office?.radiusM == null) {
-        // No fix yet at all (or no fence to judge against): the punch stays
+      if (distance == null) {
+        // No fix yet (or no fence to judge against): the punch stays
         // available, the card explains what's missing — once, not always.
-        return card('neutral', 'Getting your location…', null, []);
+        return card('neutral', 'Getting your location…', []);
       }
-      return card('done', 'At your office', 'GEOFENCE MATCHED', [
-        seg('You are at '),
-        seg(officeName, 'strong'),
-        seg(' ('),
-        seg(formatMetresGrouped(known), 'danger'),
-        seg(' away). Location checked.'),
-      ]);
-    }
-    case 'readyOut': {
-      if (known == null) {
-        return card('neutral', 'Getting your location…', null, []);
+      if (distance > (office?.radiusM ?? 0)) {
+        return card('cancelled', `Too far from ${officeName}`, [
+          seg('You are '),
+          seg(formatGeofenceDistance(distance), 'danger'),
+          seg(' from '),
+          seg(officeName, 'strong'),
+          seg('. Go closer, then check in.'),
+          ...ageSeg,
+        ]);
       }
-      return card('progress', 'On shift · At your office', 'READY TO CHECK OUT', [
-        seg('Checked in at '),
-        seg(input.checkinTimeText ?? '—', 'strong'),
-        seg('. Tap Check out when your work is done.'),
-      ]);
-    }
-    case 'locked': {
-      return card('cancelled', `Too far from ${officeName}`, 'TOO FAR', [
-        seg('You are '),
-        seg(formatGeofenceDistance(state.distanceM), 'danger'),
-        seg(' from '),
+      // Owner's verbatim copy (2026-11-10, replacing "At your office /
+      // You are at … (2 m away). Location checked."): one plain sentence,
+      // and the freshness caption does not appear on this posture.
+      return card('done', "You're at the office", [
+        seg("You're at "),
         seg(officeName, 'strong'),
-        seg('. Go closer, then check in.'),
+        seg(', just '),
+        seg(formatMetresGrouped(distance), 'danger'),
+        seg(' away. Your location is verified.'),
       ]);
     }
-    case 'lockedOut': {
-      return card('scheduled', 'Too far to check out', 'TOO FAR', [
-        seg('You checked in at '),
-        seg(input.checkinTimeText ?? '—', 'strong'),
-        seg('. You are '),
-        seg(formatMetresGrouped(state.distanceM), 'danger'),
-        seg(' away. Move closer to check out.'),
-      ]);
-    }
+    case 'readyOut':
+      // The tiles own the checked-in truth; the button owns the action.
+      return null;
     case 'offline':
-      return card('neutral', null, null, [seg(offlineMessage)]);
+      return card('neutral', null, [seg(offlineMessage)]);
     case 'permissionDenied':
-      return card('neutral', null, null, [seg(captureFailureMessage('permission'))]);
+      return card('neutral', null, [seg(captureFailureMessage('permission'))]);
     case 'preciseOff':
-      return card('neutral', null, null, [
-        seg('Turn on precise location to check in'),
+      return card('neutral', null, [
+        seg(
+          `Turn on precise location to check ${state.action === 'out' ? 'out' : 'in'}`,
+        ),
       ]);
     case 'serviceOff':
-      return card('neutral', null, null, [seg(captureFailureMessage('unavailable'))]);
+      // RED, not a grey line (owner decision 2026-11-10: location off is
+      // a BLOCKER — attendance cannot be verified at all): the card says
+      // so plainly and hands over the fix, in the owner's own words (the
+      // same line the tap-time popup carries). No card is shown once the
+      // day is done.
+      return card('blocker', 'Location is off', [
+        seg(
+          'Turn on your location to verify your office presence and mark attendance.',
+        ),
+      ]);
     case 'rateLimited':
-      return card('neutral', null, null, [
+      return card('neutral', null, [
         seg('Too many attempts. '),
         seg(`Try again in ${formatCountdown(state.remainingS)}`, 'strong'),
       ]);
     case 'resolving':
-      return card('neutral', 'Getting your location…', null, []);
+      return card('neutral', 'Getting your location…', []);
     default:
       // dialogPending: a confirm dialog owns the moment — no card behind
       // it. done: the tiles are the done render.

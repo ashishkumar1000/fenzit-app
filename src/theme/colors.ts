@@ -235,37 +235,20 @@ export const colors = {
     },
   },
 
-  // Punch button (the Today-tab punch control) — radial-gradient pairs for
-  // the SVG-drawn circle. The DS's flat-color rule governs View backgrounds;
-  // the approved mockup draws this control in SVG, so the gradient lives
-  // there and nowhere else. Posture accents ride the status tokens above
-  // (pill/dot/ring inks below are the only punch-specific colours).
+  // Punch button (the Today-tab punch control) — ONE circle inking for
+  // every posture (owner decision 2026-11-10): the SVG-drawn gradient face
+  // and its dashed ring never change colour; state lives in the status
+  // pill, the sub-label and the status card. The DS's flat-color rule
+  // governs View backgrounds; the mockup draws this control in SVG, so
+  // the gradient lives here and nowhere else.
   punch: {
-    // Ready to check in — royal blue.
-    in: { top: palette.blue400, bottom: palette.blue700 },
-    // Shift active, ready to check out — amber-to-crimson.
-    out: { top: palette.amber400, bottom: palette.red500 },
-    // The last press was rejected — the failure face. Still interactive:
-    // the next tap returns to the ready colour.
-    fail: { top: palette.red400, bottom: palette.red600 },
-    // Every blocked/dimmed posture (locked, offline, rate-limited, …).
-    dim: { top: palette.gray300, bottom: palette.gray500 },
-    // Concentric dashed ring, per posture.
-    ringIn: palette.blue300,
-    ringOut: palette.amber400,
-    ringLockedIn: palette.red300,
-    ringLockedOut: palette.amber300,
-    ringFail: palette.red300,
-    // Top status pills (solid fills, white label).
+    // The circle face — brand blue.
+    face: { top: palette.blue400, bottom: palette.blue700 },
+    // The concentric dashed ring.
+    ring: palette.blue300,
+    // Top status pills (solid fills, white label) — the state signal.
     pillReady: palette.green500,
     pillShiftActive: palette.amber500,
-    pillLockedIn: palette.red500,
-    pillLockedOut: palette.amber600,
-    // The sub-label dots on the button face.
-    dotIn: palette.green300,
-    dotOut: palette.amber200,
-    dotLockedIn: palette.red300,
-    dotLockedOut: palette.amber300,
     // The fingerprint icon's darker well on the button face.
     fingerWell: 'rgba(17, 24, 39, 0.12)',
   },

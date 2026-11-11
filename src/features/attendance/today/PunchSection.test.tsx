@@ -10,9 +10,10 @@
  */
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
-import { AccessibilityInfo, Text } from 'react-native';
+import { AccessibilityInfo, Linking, Platform, Text } from 'react-native';
 import { PunchSection } from './PunchSection';
 import { PunchButton } from './PunchButton';
+import { ConfirmDialog } from '../../../components/ui';
 import { useCheckInOut } from './useCheckInOut';
 import { usePunchPrescreen } from './usePunchPrescreen';
 import type { AttendanceSummaryState } from '../me/useAttendanceSummary';
@@ -165,36 +166,62 @@ describe('the button states (one action at a time)', () => {
     expect(textContaining(view.root, 'Check out')).toHaveLength(0);
   });
 
-  it('the checked-in state renders the punch card + exactly one Check out button; the late pill carries the server minutes', () => {
+  it('the checked-in state renders the punch card + exactly one Check out button; the tile carries the late verdict', () => {
     const view = renderView(summaryState(), { record: openRecord });
-    // The redesigned layout (2026-10): tile times replace the old
-    // "Checked in 10:16 AM · Late by 61 min" line.
-    expect(textContaining(view.root, 'Checked in 10:16 AM')).toHaveLength(0);
-    expect(textContaining(view.root, 'Checked in late by 1 hr 1 min').length).toBeGreaterThan(0);
+    // The 2026-11-10 tiles: the check-in time with its verdict line — no
+    // old "Checked in …" sentence anywhere.
+    expect(textContaining(view.root, '10:16').length).toBeGreaterThan(0);
+    expect(textContaining(view.root, 'Late by 1h 01m').length).toBeGreaterThan(0);
+    expect(textContaining(view.root, 'Checked in late by 1 hr 1 min')).toHaveLength(0);
     expect(actionButtonsUp(view.root)).toHaveLength(1);
 
     // The mid-session card coexists with the button — the checkout tile
-    // reads the "—" placeholder (no checkout), never hides the card.
-    expect(textContaining(view.root, '—').length).toBeGreaterThan(0);
+    // reads the dashed placeholder + the Pending pill, never hides.
+    expect(textContaining(view.root, '- - : - -').length).toBeGreaterThan(0);
+    expect(textContaining(view.root, 'Pending').length).toBeGreaterThan(0);
   });
 
   it('the done state REMOVES the check-in/out button; the punch card remains (never both visible — AC)', () => {
     const view = renderView(summaryState(), { record });
     expect(actionButtonsUp(view.root)).toHaveLength(0);
-    // 10:16 → 18:05 = 469 whole minutes = 7 h 49 m (not the PRD's example string).
-    expect(textContaining(view.root, '7 hrs 49 min').length).toBeGreaterThan(0);
-    expect(textContaining(view.root, 'Checked in late by 1 hr 1 min').length).toBeGreaterThan(0);
+    // 10:16 → 18:05 = 469 whole minutes; the summary's 09:00-16:00 shift
+    // (420 min span) makes it a FULL shift → the celebration caption.
+    expect(textContaining(view.root, '7h 49m').length).toBeGreaterThan(0);
+    expect(
+      textContaining(view.root, 'Full shift completed • Sched 9:00 AM - 4:00 PM').length,
+    ).toBeGreaterThan(0);
+    expect(textContaining(view.root, 'Late by 1h 01m').length).toBeGreaterThan(0);
+    expect(textContaining(view.root, 'On time').length).toBeGreaterThan(0);
     // The old "Checked in" line is gone — the tile is the time now.
     expect(textContaining(view.root, 'Checked in 10:16 AM')).toHaveLength(0);
   });
 
   it.each([
-    ['denied', 'Turn on location to check in'],
-    ['preciseOff', 'Turn on precise location to check in'],
-    ['serviceOff', 'Turn on location to check in'],
-  ] as const)('permission state %s renders ITS OWN distinct label', (permission, label) => {
+    ['denied', 'Turn on location'],
+    ['preciseOff', 'Turn on precise location'],
+    ['serviceOff', 'Turn on location'],
+  ] as const)('permission state %s renders its (deliberately shared) short button label', (permission, label) => {
     const view = renderView(summaryState(), { permission });
     expect(textContaining(view.root, label).length).toBeGreaterThan(0);
+  });
+
+  it('the location postures differentiate on the CARD, not the button (owner decision 2026-11-10)', () => {
+    const denied = renderView(summaryState(), { permission: 'denied' });
+    expect(
+      textContaining(
+        denied.root,
+        'Attendance needs your location to check in and out. You can still view your records and apply for leave without it.',
+      ).length,
+    ).toBeGreaterThan(0);
+
+    const serviceOff = renderView(summaryState(), { permission: 'serviceOff' });
+    expect(textContaining(serviceOff.root, 'Location is off').length).toBeGreaterThan(0);
+    expect(
+      textContaining(
+        serviceOff.root,
+        'Turn on your location to verify your office presence and mark attendance.',
+      ).length,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -272,7 +299,7 @@ describe('the offline block and announcements', () => {
   });
 });
 
-describe('the geofence LOCKED display (the user-found gap: a rejected press must show it)', () => {
+describe('the fence verdict is ADVICE, never a gate (2026-11 simplification)', () => {
   const fencedSummary = () => {
     const state = summaryState();
     state.summary = {
@@ -283,8 +310,8 @@ describe('the geofence LOCKED display (the user-found gap: a rejected press must
     };
     return state;
   };
-  /** Fresh (16 s old) and ~97 km from the fixture office pin — beyond any
-   *  radius, so the prescreen must lock. */
+  /** Fresh (1 s old) and ~97 km from the fixture office pin — beyond any
+   *  radius, so the card's snapshot verdict is TOO FAR. */
   const farFix = { latitude: 12.1, longitude: 77.74, capturedAt: 999_000 };
 
   function prescreen(over: Record<string, unknown> = {}) {
@@ -296,26 +323,26 @@ describe('the geofence LOCKED display (the user-found gap: a rejected press must
     });
   }
 
-  it('a fresh beyond-radius fix renders the mockup LOCKED card verbatim (pill + card)', () => {
+  it('a beyond-radius fix renders the TOO FAR card AND the button STAYS ready (the server gates the press)', () => {
     prescreen();
     const view = renderView(fencedSummary(), {});
     expect(textContaining(view.root, 'Too far from Hero wala').length).toBeGreaterThan(0);
-    expect(textContaining(view.root, 'TOO FAR').length).toBeGreaterThan(0);
     expect(textContaining(view.root, 'Go closer, then check in.').length).toBeGreaterThan(0);
+    expect(textContaining(view.root, 'Tap to check in').length).toBeGreaterThan(0);
   });
 
-  it('a server-rejected press (message set) shows the CARD, not the flat server line', () => {
+  it('a settled server message outranks the card — no exceptions (the server copy is the truth surface)', () => {
     prescreen();
     const view = renderView(fencedSummary(), {
       message: { tone: 'error', text: 'You are 1355 m from Hero wala. Move within 150 m.' },
     });
-    expect(textContaining(view.root, 'Too far from Hero wala').length).toBeGreaterThan(0);
     expect(
       textContaining(view.root, 'You are 1355 m from Hero wala. Move within 150 m.'),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
+    expect(textContaining(view.root, 'Too far from Hero wala')).toHaveLength(0);
   });
 
-  it('non-locked postures keep the message-over-card precedence (the 16-4 rule)', () => {
+  it('non-fence postures keep the same message-over-card precedence (the 16-4 rule)', () => {
     prescreen({ fix: null });
     const view = renderView(fencedSummary(), {
       message: { tone: 'error', text: 'You are 1355 m from Hero wala. Move within 150 m.' },
@@ -326,7 +353,7 @@ describe('the geofence LOCKED display (the user-found gap: a rejected press must
     expect(textContaining(view.root, 'Too far from Hero wala')).toHaveLength(0);
   });
 
-  it('the press flow\'s own fix is adopted into the prescreen (the fence verdict survives a failed capture cycle)', () => {
+  it('the press flow\'s own fix is adopted into the prescreen (the card speaks with the fix the server judged)', () => {
     const adoptFix = jest.fn();
     prescreen({ adoptFix });
     const view = renderView(fencedSummary(), {
@@ -334,5 +361,93 @@ describe('the geofence LOCKED display (the user-found gap: a rejected press must
     });
     expect(adoptFix).toHaveBeenCalledWith({ latitude: 12.1, longitude: 77.74 });
     expect(textContaining(view.root, 'Too far from Hero wala').length).toBeGreaterThan(0);
+  });
+});
+
+describe('the blocked-tap popups — OUR dialog first, the OS only from its confirm (owner request 2026-11-10)', () => {
+  beforeEach(() => {
+    // The service-off confirm deep-links out (system settings); keep the
+    // intent from leaking past the component in tests. The RN jest mock's
+    // Linking carries no sendIntent — install one so the guarded helper's
+    // Android path runs and the test can assert the intent.
+    jest.spyOn(Linking, 'openSettings').mockImplementation(() => Promise.resolve() as never);
+    (Linking as unknown as { sendIntent: unknown }).sendIntent = jest.fn(() =>
+      Promise.resolve(),
+    );
+    // The deep link is the ANDROID rung — pin the platform for this describe.
+    (Platform as unknown as { OS: string }).OS = 'android';
+  });
+
+  /** The punch tap: PunchButton's onPress IS the section's handler. */
+  function tapPunch(view: ReactTestRenderer.ReactTestRenderer) {
+    const button = view.root.findAllByType(PunchButton)[0];
+    act(() => {
+      button.props.onPress();
+    });
+  }
+
+  function dialogsUp(view: ReactTestRenderer.ReactTestRenderer) {
+    return view.root.findAllByType(ConfirmDialog);
+  }
+
+  it('a denied tap opens the PERMISSION dialog (never the plain RN rationale); confirm fires remediation, cancel does not', () => {
+    const openRemediation = jest.fn();
+    const view = renderView(summaryState(), { permission: 'denied', openRemediation });
+    tapPunch(view);
+    const dialogs = dialogsUp(view);
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0].props.title).toBe('Location access is off');
+    expect(dialogs[0].props.message).toBe(
+      'Attendance needs your location to verify your office presence and mark attendance.',
+    );
+    expect(dialogs[0].props.confirmLabel).toBe('Allow location');
+    expect(dialogs[0].props.cancelLabel).toBe('Not now');
+    // No punch was pressed — the popup intercepted the tap.
+    const press = useCheckInOutMock().press;
+    expect(press).not.toHaveBeenCalled();
+
+    act(() => {
+      dialogs[0].props.onConfirm();
+    });
+    expect(openRemediation).toHaveBeenCalledTimes(1);
+    expect(dialogsUp(view)).toHaveLength(0);
+  });
+
+  it('the dialog\'s cancel is the safe exit — remediation never fires, the popup closes', () => {
+    const openRemediation = jest.fn();
+    const view = renderView(summaryState(), { permission: 'denied', openRemediation });
+    tapPunch(view);
+    act(() => {
+      dialogsUp(view)[0].props.onCancel();
+    });
+    expect(openRemediation).not.toHaveBeenCalled();
+    expect(dialogsUp(view)).toHaveLength(0);
+  });
+
+  it('a serviceOff tap opens the SERVICE_OFF dialog whose confirm deep-links to system location settings', () => {
+    const view = renderView(summaryState(), { permission: 'serviceOff' });
+    tapPunch(view);
+    const dialogs = dialogsUp(view);
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0].props.title).toBe('Location is off');
+    expect(dialogs[0].props.confirmLabel).toBe('Turn on location');
+    expect(dialogs[0].props.cancelLabel).toBe('Not now');
+    // The service-off confirm opens SYSTEM settings, not the permission flow.
+    const openRemediation = useCheckInOutMock().openRemediation;
+    act(() => {
+      dialogs[0].props.onConfirm();
+    });
+    expect(openRemediation).not.toHaveBeenCalled();
+    // …and the deep link REALLY fired (Android Location panel intent).
+    const sendIntent = (Linking as unknown as { sendIntent: jest.Mock }).sendIntent;
+    expect(sendIntent.mock.calls.some((call) => call[0] === 'android.settings.LOCATION_SOURCE_SETTINGS')).toBe(true);
+  });
+
+  it('a READY tap never opens a popup — it presses the punch (the popups are blocked-tap-only)', () => {
+    const press = jest.fn();
+    const view = renderView(summaryState(), { press });
+    tapPunch(view);
+    expect(dialogsUp(view)).toHaveLength(0);
+    expect(press).toHaveBeenCalledWith('check_in');
   });
 });

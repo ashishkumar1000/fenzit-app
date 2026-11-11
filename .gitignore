@@ -8,6 +8,12 @@
 .DS_Store
 *.pem
 
+# Impeccable: machine-local engine binary + local hooks/config (skill, agents,
+# PRODUCT.md, DESIGN.md, .impeccable/ stay tracked).
+.claude/skills/impeccable/scripts/bin/
+.claude/settings.local.json
+.impeccable/config.local.json
+
 # Xcode / iOS
 build/
 *.pbxuser

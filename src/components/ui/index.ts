@@ -26,6 +26,13 @@ export type { AvatarProps } from './Avatar';
 export { Input } from './Input';
 export type { InputProps } from './Input';
 
+export { FloatingLabel } from './FloatingLabel';
+export type { FloatingLabelProps } from './FloatingLabel';
+
+export { ContactCardIcon } from './ContactCardIcon';
+export { PickContactButton } from './PickContactButton';
+export type { PickContactButtonProps } from './PickContactButton';
+
 export { Select } from './Select';
 export type { SelectProps } from './Select';
 

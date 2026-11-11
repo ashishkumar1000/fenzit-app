@@ -36,10 +36,12 @@ import type {
 
 class TechnicianService extends ApiService<Technician, NewTechnicianInput> {
   /**
-   * POST `/auth/invite` — sends the SMS invite and returns only the new
-   * `invite_id`; the backend does NOT echo back name/phone/skills, so the
-   * caller (`useTechnicians.add`) builds the local record from what it
-   * already has plus this id.
+   * POST `/auth/invite` — creates the invite and returns `invite_id` plus
+   * `sms_status` (`sent` | `failed` | `not_configured` | `refused_cap`). The
+   * invite is saved even when the SMS is not sent: the caller reads
+   * `smsStatus` to show whether the text went out. The backend does NOT echo
+   * back name/phone/skills, so `useTechnicians.add` builds the local record
+   * from what it already has plus these fields.
    *
    * ⚠️ This is under `/auth`, not `{this.path}` (`/technicians`) — an
    * auth-namespaced action endpoint per the API reference, not a resource
@@ -47,10 +49,24 @@ class TechnicianService extends ApiService<Technician, NewTechnicianInput> {
    * instead of `${this.path}/invite`.
    */
   async invite(input: InviteTechnicianRequest): Promise<InviteTechnicianResponse> {
-    const res = await this.client.post<{ invite_id: string }>('/auth/invite', input);
-    return { inviteId: res.data.invite_id };
+    const res = await this.client.post<{ invite_id: string; sms_status?: string | null }>(
+      '/auth/invite',
+      input,
+    );
+    return { inviteId: res.data.invite_id, smsStatus: res.data.sms_status ?? null };
   }
 
+  /**
+   * POST `/auth/invite/:membershipUserId/resend-sms` — company admin only.
+   * Returns the new `sms_status`. Errors reject with `ApiError`; the branch
+   * is on `code` (the backend's `error_code`), never on `message`.
+   */
+  async resendInviteSms(membershipUserId: string): Promise<string | null> {
+    const res = await this.client.post<{ sms_status?: string | null }>(
+      `/auth/invite/${encodeURIComponent(membershipUserId)}/resend-sms`,
+    );
+    return res.data.sms_status ?? null;
+  }
 }
 
 /** Singleton client for the `technicians` resource — import this, not the class. */

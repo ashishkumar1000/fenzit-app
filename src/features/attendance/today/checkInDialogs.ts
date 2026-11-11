@@ -49,3 +49,35 @@ export const LEAVE_DIALOG = {
   confirmLabel: 'Check in',
   cancelLabel: "Don't check in",
 } as const;
+
+/**
+ * The service-off popup's copy (owner request 2026-11-10, copy verbatim
+ * from the owner): the popup is the tap-time moment of decision when the
+ * phone's location master switch is off. No icon, title on the header row
+ * beside the close X. The primary "Turn on location" opens the system
+ * Location screen (no punch fires from this dialog); "Not now" is the
+ * safe secondary — dismissing is always allowed, the warning card keeps
+ * explaining underneath.
+ */
+export const SERVICE_OFF_DIALOG = {
+  title: 'Location is off',
+  message: 'Turn on your location to verify your office presence and mark attendance.',
+  confirmLabel: 'Turn on location',
+  cancelLabel: 'Not now',
+} as const;
+
+/**
+ * The permission popup's copy (owner request 2026-11-10): the tap-time
+ * moment of decision when Android has not granted Fenzit location access
+ * at all (denied) or withheld precise (preciseOff) — one dialog whose
+ * copy covers both, in the service-off popup's shape (title beside the
+ * X, no icon). The primary "Allow location" fires the OS permission
+ * sheet — no punch ever fires from this dialog; "Not now" is the safe
+ * secondary, and the grey card keeps explaining underneath.
+ */
+export const PERMISSION_DIALOG = {
+  title: 'Location access is off',
+  message: 'Attendance needs your location to verify your office presence and mark attendance.',
+  confirmLabel: 'Allow location',
+  cancelLabel: 'Not now',
+} as const;

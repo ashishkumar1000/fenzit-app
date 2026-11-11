@@ -204,18 +204,20 @@ it.each([
   [
     'a caller without invite rights',
     { status: 403, code: 'FORBIDDEN', message: 'x' },
-    "You don't have permission to invite technicians.",
+    "You don't have permission to invite employees.",
   ],
 ])('shows the right copy for %s', async (_label, err, copy) => {
   const root = await submitRejectingWith(Object.assign(new Error('x'), err));
   expect(visibleText(root)).toContain(copy);
 });
 
-it('shows the server message for an unknown error, never a raw code', async () => {
+it('shows plain copy for an unknown error, never the raw message or code', async () => {
+  // Story 21-4 AC5: no screen shows error.message or a raw code.
   const root = await submitRejectingWith(
     Object.assign(new Error('Network request failed'), { code: 'SOMETHING_NEW' }),
   );
-  expect(visibleText(root)).toContain('Network request failed');
+  expect(visibleText(root)).toContain('Could not send the invite. Try again.');
+  expect(visibleText(root)).not.toContain('Network request failed');
   expect(visibleText(root)).not.toContain('SOMETHING_NEW');
 });
 
