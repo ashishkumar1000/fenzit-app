@@ -97,9 +97,17 @@ export async function captureAttendanceLocation(): Promise<AttendanceLocationFix
     // Only a TIMEOUT earns the strict fallback: permission and
     // services-off failures are deterministic — the retry cannot succeed,
     // and the remediation copy depends on the exact failure.
-    if (classifyFailure(err) !== 'timeout') {
-      console.error('[attendanceLocation] capture failed:', err);
-      throw classifyFailure(err);
+    const failure = classifyFailure(err);
+    if (failure !== 'timeout') {
+      // 'permission' and 'unavailable' are expected, user-fixable states
+      // the screen already explains (blocked-posture card + popup) — an
+      // error log for them only paints dev builds red on every
+      // services-off launch (owner report 2026-11-10). Only an
+      // unrecognized failure is worth the error log.
+      if (failure === 'unknown') {
+        console.error('[attendanceLocation] capture failed:', err);
+      }
+      throw failure;
     }
     try {
       fix = await getCurrentPosition({

@@ -6,7 +6,12 @@
  * test the requirement (the copy), not the transport — the hook and view
  * tests prove the dialog presents it.
  */
-import { HOLIDAY_DIALOG, LEAVE_DIALOG } from './checkInDialogs';
+import {
+  HOLIDAY_DIALOG,
+  LEAVE_DIALOG,
+  PERMISSION_DIALOG,
+  SERVICE_OFF_DIALOG,
+} from './checkInDialogs';
 
 describe('the holiday confirmation copy', () => {
   it('keeps the 16-4 title verbatim and a neutral body (no semantics asserted)', () => {
@@ -40,5 +45,37 @@ describe('the full-day-leave confirmation copy (17-8 D6)', () => {
   it("keeps the button vocabulary: 'Check in' forward, 'Don't check in' as the safe exit", () => {
     expect(LEAVE_DIALOG.confirmLabel).toBe('Check in');
     expect(LEAVE_DIALOG.cancelLabel).toBe("Don't check in");
+  });
+});
+describe('the service-off popup copy (owner request 2026-11-10, verbatim)', () => {
+  it('names the problem plainly and hands over the fix', () => {
+    expect(SERVICE_OFF_DIALOG.title).toBe('Location is off');
+    expect(SERVICE_OFF_DIALOG.message).toBe(
+      'Turn on your location to verify your office presence and mark attendance.',
+    );
+  });
+
+  it("keeps the button vocabulary: 'Turn on location' forward, 'Not now' as the safe exit", () => {
+    expect(SERVICE_OFF_DIALOG.confirmLabel).toBe('Turn on location');
+    expect(SERVICE_OFF_DIALOG.cancelLabel).toBe('Not now');
+  });
+});
+
+describe('the permission popup copy (owner request 2026-11-10, verbatim)', () => {
+  it('states the WHY in attendance terms — one dialog covering denied AND preciseOff', () => {
+    expect(PERMISSION_DIALOG.title).toBe('Location access is off');
+    expect(PERMISSION_DIALOG.message).toBe(
+      'Attendance needs your location to verify your office presence and mark attendance.',
+    );
+  });
+
+  it("keeps the button vocabulary: 'Allow location' forward, 'Not now' as the safe exit", () => {
+    expect(PERMISSION_DIALOG.confirmLabel).toBe('Allow location');
+    expect(PERMISSION_DIALOG.cancelLabel).toBe('Not now');
+  });
+
+  it('the two location popups never blur into each other (service-off names the master switch; permission names access)', () => {
+    expect(SERVICE_OFF_DIALOG.title).not.toBe(PERMISSION_DIALOG.title);
+    expect(SERVICE_OFF_DIALOG.message).not.toBe(PERMISSION_DIALOG.message);
   });
 });

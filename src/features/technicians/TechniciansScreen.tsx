@@ -98,7 +98,7 @@ export default function TechniciansScreen({ navigation, route }: Props) {
             style={styles.backButton}>
             <ArrowLeft size={24} color={colors.textStrong} strokeWidth={2} />
           </Pressable>
-          <Text style={styles.title}>Technicians</Text>
+          <Text style={styles.title}>Employees</Text>
         </View>
 
         {canWrite ? (

@@ -162,7 +162,29 @@ it("the badge shows the unread count, capped at 99+ (the shared bell's own vocab
 
 it('an empty day still renders the empty state (the bell changes nothing else)', async () => {
   const renderer = await mountScreen();
-  expect(renderer.root.findByType(EmptyState).props.title).toBe('No job assigned yet');
+  expect(renderer.root.findByType(EmptyState).props.title).toBe('No jobs assigned yet');
+});
+
+it('the empty-day VARIANT follows attendance access (owner call 2026-11-10): active → compact, off → big', async () => {
+  // Attendance ON: the compact one-row card — no dashed well, no EmptyState.
+  mockAccessSnapshot = {
+    status: 'ready',
+    access: { attendanceAccess: 'active' },
+  };
+  const compact = await mountScreen();
+  const compactText = renderedText(compact);
+  expect(compactText).toContain('No visits scheduled today');
+  expect(compactText).toContain('Refresh');
+  expect(() => compact.root.findByType(EmptyState)).toThrow();
+
+  // Attendance OFF: the big dashed-well card is the employee's whole day.
+  mockAccessSnapshot = {
+    status: 'ready',
+    access: { attendanceAccess: 'none' },
+  };
+  const big = await mountScreen();
+  expect(big.root.findByType(EmptyState).props.title).toBe('No jobs assigned yet');
+  expect(() => big.root.findByType(EmptyState)).not.toThrow();
 });
 
 // The urgency rail's caller-side wiring — the card and hook tests never

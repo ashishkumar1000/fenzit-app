@@ -14,17 +14,31 @@
  * show the error and stay open).
  */
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  StyleSheet,
+  Text,
+  View,
+  type TextInputInstance,
+} from 'react-native';
 import { Phone, User } from 'lucide-react-native';
-import { Button, Input, MultiSelect, Sheet } from '../../../components/ui';
+import { pickContact } from 'react-native-pick-contact';
+import { Button, Input, MultiSelect, PickContactButton, Sheet } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
 import type { ApiError } from '../../../services';
 import { loadSkills, useSkills } from '../../skills';
 import { DIAL_CODE, PHONE_LENGTH } from '../constants';
+import { toLocalMobile } from '../pickedPhone';
 import type { NewTechnicianInput } from '../types';
 
 /** API caps `skillIds` at 20 per invite — enforced client-side too so the multi-select can't collect a selection the backend will just reject. */
 const MAX_SKILLS = 20;
+
+const PHONE_HELPER = 'Type the number, or pick it from your contacts.';
+const NOT_MOBILE_COPY = "This number isn't a 10-digit mobile number. Type the number instead.";
+const PICK_FAILED_COPY = "Couldn't open your contacts. Type the number instead.";
+const FROM_CONTACTS_COPY = 'From your contacts. Change it if needed.';
+const SENDING_LOCK_COPY = "You can't change the number while the invite is sent.";
 
 type Props = {
   visible: boolean;
@@ -66,6 +80,14 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
   const inFlightRef = useRef(false);
   const [submitError, setSubmitError] = useState('');
 
+  // Phone-book picker state. `pickingRef` is the same-frame double-tap guard
+  // (as with `inFlightRef`), so two taps cannot open two pickers.
+  const [pickError, setPickError] = useState('');
+  const [nameFromPick, setNameFromPick] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const pickingRef = useRef(false);
+  const phoneRef = useRef<TextInputInstance>(null);
+
   // Shared skill store — the same rows the Skills screen manages. `autoLoad:
   // false` because this sheet stays mounted while hidden — without it,
   // rendering TechniciansScreen would fire the GET on the hook's first-mount
@@ -92,6 +114,8 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     setPhone('');
     setSkillIds([]);
     setSubmitError('');
+    setPickError('');
+    setNameFromPick(false);
   };
 
   const handleClose = () => {
@@ -117,12 +141,51 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
 
   const handleNameChange = (text: string) => {
     markEdited();
+    setNameFromPick(false);
     setName(text);
   };
 
   const handlePhoneChange = (text: string) => {
     markEdited();
+    setPickError('');
     setPhone(text.replace(/[^0-9]/g, '').slice(0, PHONE_LENGTH));
+  };
+
+  const announce = (message: string) => AccessibilityInfo.announceForAccessibility(message);
+
+  // Opens the phone's own contacts screen. The library asks for no permission
+  // and returns only the contact the owner taps. A cancel changes nothing. A
+  // number that is not a 10-digit mobile leaves the form as it was.
+  const handlePickContact = async () => {
+    if (pickingRef.current || submitting) return;
+    pickingRef.current = true;
+    setPicking(true);
+    setPickError('');
+    try {
+      const contact = await pickContact();
+      if (!contact) return;
+      const local = toLocalMobile(contact.phone);
+      if (local === null) {
+        setPickError(NOT_MOBILE_COPY);
+        announce(NOT_MOBILE_COPY);
+        return;
+      }
+      markEdited();
+      const pickedName = contact.name.trim();
+      if (pickedName) {
+        setName(pickedName);
+        setNameFromPick(true);
+      }
+      setPhone(local);
+      announce('Filled in from your contacts.');
+    } catch {
+      setPickError(PICK_FAILED_COPY);
+      announce(PICK_FAILED_COPY);
+    } finally {
+      pickingRef.current = false;
+      setPicking(false);
+      phoneRef.current?.focus();
+    }
   };
 
   const handleSkillsChange = (ids: string[]) => {
@@ -174,14 +237,21 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
       <View style={styles.form}>
         <Input
           label="Name"
+          floatingLabel
+          helper={nameFromPick ? FROM_CONTACTS_COPY : ''}
           value={name}
           onChangeText={handleNameChange}
           placeholder="e.g. Suresh Kumar"
           autoCapitalize="words"
           leadingIcon={<User size={18} color={colors.textMuted} strokeWidth={2} />}
+          clearable
         />
         <Input
+          ref={phoneRef}
           label="Phone number"
+          floatingLabel
+          helper={PHONE_HELPER}
+          error={pickError}
           value={phone}
           onChangeText={handlePhoneChange}
           placeholder="98765 43210"
@@ -193,7 +263,11 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
               <Text style={styles.dial}>{DIAL_CODE}</Text>
             </View>
           }
+          trailingAdornment={
+            <PickContactButton onPress={handlePickContact} disabled={submitting || picking} />
+          }
         />
+        {submitting ? <Text style={styles.lockCaption}>{SENDING_LOCK_COPY}</Text> : null}
         <MultiSelect
           label="Skills (optional)"
           value={skillIds}
@@ -233,6 +307,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textStrong,
     fontWeight: '700',
+  },
+  lockCaption: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   submitError: {
     ...typography.bodySm,

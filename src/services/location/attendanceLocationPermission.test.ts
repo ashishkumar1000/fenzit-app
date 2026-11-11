@@ -184,6 +184,10 @@ describe('remediateAttendanceLocation — the right flow per state', () => {
 
     await expect(remediateAttendanceLocation('denied')).resolves.toBe('granted');
     expect(requestSpy).toHaveBeenCalled();
+    // NO rationale object — the WHY is PunchSection's own ConfirmDialog
+    // (2026-11-10); a re-added rationale would render RN's plain dialog
+    // ahead of the OS sheet after our dialog already asked.
+    expect(requestSpy.mock.calls[0]).toHaveLength(1);
     expect(mockOpenSettings).not.toHaveBeenCalled();
   });
 

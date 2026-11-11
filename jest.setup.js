@@ -17,6 +17,8 @@ jest.mock('react-native-reanimated/src/css/native/proxy', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+// The contact picker is a native TurboModule (not linked under Jest). Default: the owner cancels.
+jest.mock('react-native-pick-contact', () => ({ pickContact: jest.fn().mockResolvedValue(null) }));
 
 // Reanimated 4's mock imports the real src, whose singleton constructor
 // (reanimatedModuleInstance.native.ts) resolves the ReanimatedModule turbo
