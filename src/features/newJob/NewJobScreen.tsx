@@ -624,7 +624,7 @@ export default function NewJobScreen({ navigation, route }: Props) {
             key={lastInvite.id}
             membershipUserId={membershipUserIdOf(lastInvite.id)}
             smsStatus={lastInvite.smsStatus ?? null}
-            isInvited={false}
+            isInvited
             canResend={canResendInvite}
           />
         ) : null}

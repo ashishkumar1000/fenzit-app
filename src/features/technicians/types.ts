@@ -25,6 +25,12 @@ export interface Technician {
   /** Phone number used for the SMS invite. Stored as the user typed it. */
   phone: string;
   status: TechnicianStatus;
+  /**
+   * True while the person has been invited but has not joined yet (membership
+   * status `invited`). Only an invited person can be resent an SMS. An offline
+   * person who has already joined has `isInvited` false.
+   */
+  isInvited?: boolean;
   /** ISO timestamp of when the invite was created. */
   invitedAt: string;
   /** Skill ids assigned at invite time (from `GET /skills`). */

@@ -54,14 +54,35 @@ export function filterTechnicians(
   technicians: ProfileTechnician[],
   query: string,
 ): ProfileTechnician[] {
+  if (!query.trim()) return technicians;
+  return technicians.filter(t =>
+    matchesTechnicianQuery(
+      { name: t.name, phoneNumber: t.phoneNumber, employeeCode: t.employeeCode },
+      query,
+    ),
+  );
+}
+
+/**
+ * The one match rule for a person against a search query. Exported so any
+ * screen that shows its own roster (the Team screen) uses the same rule.
+ */
+export function matchesTechnicianQuery(
+  fields: {
+    name: string | null | undefined;
+    phoneNumber: string | null | undefined;
+    employeeCode: string | null | undefined;
+  },
+  query: string,
+): boolean {
   const q = query.trim().toLowerCase();
-  if (!q) return technicians;
+  if (!q) return true;
   const digits = q.replace(/\D/g, '');
-  return technicians.filter(
-    t =>
-      safeName(t).toLowerCase().includes(q) ||
-      (digits.length > 0 &&
-        ((t.phoneNumber ?? '').includes(digits) ||
-          (t.employeeCode ?? '').toLowerCase().includes(digits))),
+  const name = typeof fields.name === 'string' ? fields.name : '';
+  return (
+    name.toLowerCase().includes(q) ||
+    (digits.length > 0 &&
+      ((fields.phoneNumber ?? '').includes(digits) ||
+        (fields.employeeCode ?? '').toLowerCase().includes(digits)))
   );
 }

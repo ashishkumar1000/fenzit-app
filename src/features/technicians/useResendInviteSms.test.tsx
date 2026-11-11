@@ -181,3 +181,33 @@ describe('useResendInviteSms', () => {
     expect(ref.current!.smsStatus).toBe('failed');
   });
 });
+
+describe('useResendInviteSms: saving the result', () => {
+  function renderWithCallback(onStatus: jest.Mock) {
+    const ref: { current: Hook | null } = { current: null };
+    function Harness() {
+      ref.current = useResendInviteSms(MEMBER_ID, 'failed', onStatus);
+      return null;
+    }
+    act(() => {
+      create(<Harness />);
+    });
+    return ref;
+  }
+
+  it('reports the new status to the caller after a successful resend', async () => {
+    resendMock.mockResolvedValue('sent');
+    const onStatus = jest.fn();
+    const ref = renderWithCallback(onStatus);
+    await tapResend(ref);
+    expect(onStatus).toHaveBeenCalledWith('sent');
+  });
+
+  it('does not report a status when the resend fails', async () => {
+    resendMock.mockRejectedValue(apiError('TIMEOUT'));
+    const onStatus = jest.fn();
+    const ref = renderWithCallback(onStatus);
+    await tapResend(ref);
+    expect(onStatus).not.toHaveBeenCalled();
+  });
+});

@@ -48,14 +48,17 @@ describe('TechnicianRow employee code', () => {
   it('shows the code as its own chip beside the phone number', () => {
     const strings = renderRow({ ...BASE, employeeCode: 'EMP-004' });
     expect(strings).toContain('EMP-004');
-    expect(strings).toContain('9111111111');
-    expect(strings.join('')).not.toContain('EMP-004 · 9111111111');
+    // Requirement (story 21-4, AC 9): the phone is masked on screen.
+    expect(strings).toContain('+91 ******1111');
+    expect(strings.join('')).not.toContain('9111111111');
+    expect(strings.join('')).not.toContain('EMP-004 · ');
     expect(strings).toContain('Ravi Kumar');
   });
 
   it('stays name + phone only when the code has not hydrated yet', () => {
     const strings = renderRow(BASE);
-    expect(strings.join('')).toContain('9111111111');
+    expect(strings.join('')).toContain('+91 ******1111');
+    expect(strings.join('')).not.toContain('9111111111');
     expect(strings.join('')).not.toContain('EMP-');
     expect(strings.join('')).not.toContain('undefined');
   });

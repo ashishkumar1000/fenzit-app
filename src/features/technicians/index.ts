@@ -2,7 +2,7 @@
  * Technicians feature — public surface.
  */
 export { default as TechniciansScreen } from './TechniciansScreen';
-export { useTechnicians } from './useTechnicians';
+export { useTechnicians, setTechnicianSmsStatus } from './useTechnicians';
 export { AddTechnicianSheet } from './components/AddTechnicianSheet';
 export { InviteSmsNotice } from './components/InviteSmsNotice';
 export { membershipUserIdOf } from './inviteSms';

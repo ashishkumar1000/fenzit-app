@@ -17,6 +17,8 @@ import type { InviteSmsStatus } from './types';
 export function useResendInviteSms(
   membershipUserId: string,
   initialStatus: InviteSmsStatus | null,
+  /** Called with the new status after a successful resend, so the caller can persist it. */
+  onStatus?: (status: InviteSmsStatus) => void,
 ) {
   const [smsStatus, setSmsStatus] = useState<InviteSmsStatus | null>(initialStatus);
   const [inFlight, setInFlight] = useState(false);
@@ -43,6 +45,7 @@ export function useResendInviteSms(
         return;
       }
       setSmsStatus(next);
+      onStatus?.(next);
     } catch (err) {
       const apiErr = err as ApiError;
       if (apiErr.code === 'INVITE_SMS_LIMIT_REACHED') {
@@ -64,7 +67,7 @@ export function useResendInviteSms(
       inFlightRef.current = false;
       setInFlight(false);
     }
-  }, [membershipUserId, capReached]);
+  }, [membershipUserId, capReached, onStatus]);
 
   return { smsStatus, inFlight, capReached, forbidden, gone, errorCopy, resend };
 }

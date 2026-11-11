@@ -31,7 +31,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, HardHat, Search, UserPlus } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, InlineError, Skeleton } from '../../components/ui';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radius, spacing, touch, typography } from '../../theme';
+import { matchesTechnicianQuery } from './format';
 import type { RootStackParamList } from '../../navigation/types';
 import { useTechnicians } from './useTechnicians';
 import { AddTechnicianSheet } from './components/AddTechnicianSheet';
@@ -64,12 +65,13 @@ export default function TechniciansScreen({ navigation, route }: Props) {
   const activeCount = technicians.filter(t => t.status === 'active').length;
   const offlineCount = technicians.length - activeCount;
   const needle = query.trim().toLowerCase();
+  // The same match rule as the New Job picker (format.ts), so both lists agree.
   const visibleTechnicians = needle
-    ? technicians.filter(
-        t =>
-          t.name.toLowerCase().includes(needle) ||
-          (t.employeeCode ?? '').toLowerCase().includes(needle) ||
-          t.phone.includes(needle),
+    ? technicians.filter(t =>
+        matchesTechnicianQuery(
+          { name: t.name, phoneNumber: t.phone, employeeCode: t.employeeCode },
+          query,
+        ),
       )
     : technicians;
   // The latch is a REF, not the spinner state — a same-tick double pull
@@ -255,9 +257,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: touch.min,
+    height: touch.min,
+    borderRadius: touch.min / 2,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceCard,
@@ -278,9 +280,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.s2,
-    minHeight: 44,
+    minHeight: touch.min,
     paddingHorizontal: spacing.s3,
-    borderRadius: 14,
+    borderRadius: radius.lg,
     backgroundColor: colors.surfaceCard,
     borderWidth: 1,
     borderColor: colors.borderSubtle,
@@ -316,9 +318,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: spacing.s2,
+    height: spacing.s2,
+    borderRadius: radius.xs,
   },
   noMatch: {
     ...typography.bodySm,

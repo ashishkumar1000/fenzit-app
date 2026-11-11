@@ -25,7 +25,7 @@ import type { ProfileTechnician } from '../../services';
 import { currentResetEpoch, registerReset } from '../../services/resetRegistry';
 import { DIAL_CODE } from './constants';
 import { parseInviteSmsStatus } from './inviteSms';
-import type { NewTechnicianInput, Technician } from './types';
+import type { InviteSmsStatus, NewTechnicianInput, Technician } from './types';
 
 const KEY = 'fenzit.technicians';
 /** Ids/phones of technicians removed locally while `remove` is still
@@ -115,6 +115,15 @@ export function clearTechnicians(): void {
 registerReset(clearTechnicians);
 
 /**
+ * Records a new invite SMS status for one row after a successful Resend, so the
+ * status line is not shown again (stale "SMS not sent") when the row remounts.
+ */
+export function setTechnicianSmsStatus(id: string, smsStatus: InviteSmsStatus): void {
+  if (!technicians.some(t => t.id === id)) return;
+  setTechnicians(technicians.map(t => (t.id === id ? { ...t, smsStatus } : t)));
+}
+
+/**
  * Maps a profile-roster row (`/users/me` → `technicians`, server-issued ids)
  * onto the local `Technician` shape. The backend's user status is
  * `invited` | `active` (see fenzit-be auth.service — invite creates
@@ -130,6 +139,7 @@ function toTechnician(row: ProfileTechnician): Technician {
     countryCode: row.countryCode,
     phone: row.phoneNumber,
     status: row.status === 'active' ? 'active' : 'offline',
+    isInvited: row.status === 'invited',
     invitedAt: row.createdAt,
     skillIds: row.skillIds,
     avatarUrl: row.avatarUrl ?? null,
@@ -215,6 +225,7 @@ export function useTechnicians() {
       countryCode: DIAL_CODE,
       phone: input.phone.trim(),
       status: 'offline', // invited; flips to 'active' once they install the app
+      isInvited: true,
       invitedAt: new Date().toISOString(),
       skillIds: input.skillIds,
       // Unknown or missing `sms_status` → null, so no status line shows.

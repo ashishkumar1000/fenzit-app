@@ -27,10 +27,18 @@ type Props = {
   isInvited: boolean;
   /** Company admin only. */
   canResend: boolean;
+  /** Called after a successful Resend with the new status (the row persists it). */
+  onStatus?: (status: InviteSmsStatus) => void;
 };
 
-export function InviteSmsNotice({ membershipUserId, smsStatus, isInvited, canResend }: Props) {
-  const r = useResendInviteSms(membershipUserId, smsStatus);
+export function InviteSmsNotice({
+  membershipUserId,
+  smsStatus,
+  isInvited,
+  canResend,
+  onStatus,
+}: Props) {
+  const r = useResendInviteSms(membershipUserId, smsStatus, onStatus);
 
   const lineCopy = r.capReached ? INVITE_SMS_CAP_COPY : inviteSmsStatusLine(r.smsStatus);
   // refused_cap from the invite: the reason replaces the button.

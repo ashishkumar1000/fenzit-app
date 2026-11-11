@@ -174,6 +174,7 @@ it('replaces the store with the roster, mapped onto the local shape and persiste
       countryCode: '+91',
       phone: '9876500000',
       status: 'active', // backend `active` maps straight through
+      isInvited: false, // only backend `invited` rows can be resent an SMS
       invitedAt: '2026-09-18T09:00:00Z',
       skillIds: ['skill-1'],
       avatarUrl: 'https://signed.example/suresh.jpg',
@@ -184,6 +185,7 @@ it('replaces the store with the roster, mapped onto the local shape and persiste
       countryCode: '+91',
       phone: '9876511111',
       status: 'offline', // backend `invited` renders as offline
+      isInvited: true, // ...but is still invited, so it can be resent
       invitedAt: '2026-09-19T09:00:00Z',
       skillIds: ['skill-2'],
       avatarUrl: null,
