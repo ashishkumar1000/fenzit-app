@@ -37,7 +37,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import NetInfo from '@react-native-community/netinfo';
 import { Button, Eyebrow, InlineError } from '../../components/ui';
-import { PushEnableCard } from '../push/PushEnableCard';
+import { PushEnableCard, PUSH_CARD_CLEARANCE } from '../push/PushEnableCard';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
 import { firstName, useMyProfile } from '../profile';
@@ -57,6 +57,7 @@ import { loadToday, useTechnicianJobs } from './useTechnicianJobs';
 import type { TechnicianRootStackParamList } from '../../navigation/types';
 
 export default function TodayScreen() {
+  const [pushCardShown, setPushCardShown] = useState(false);
   const { profile } = useMyProfile();
   const { today, isLoadingToday, errorToday, hasLoadedToday, refreshToday } =
     useTechnicianJobs();
@@ -174,9 +175,6 @@ export default function TodayScreen() {
               <InlineError message={errorToday} onDismiss={() => setErrorDismissed(true)} />
             </View>
           ) : null}
-          {/* UX spec: the one-time notifications-off card on the
-              technician's home surface. */}
-          <PushEnableCard />
           <SectionList
           sections={sections}
           keyExtractor={item => item.id}
@@ -214,6 +212,7 @@ export default function TodayScreen() {
           contentContainerStyle={[
             styles.listContent,
             sections.length === 0 && styles.listContentEmpty,
+            pushCardShown && { paddingBottom: PUSH_CARD_CLEARANCE },
           ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           showsVerticalScrollIndicator={false}
@@ -239,6 +238,7 @@ export default function TodayScreen() {
         />
         </>
       )}
+      <PushEnableCard onVisibleChange={setPushCardShown} />
     </SafeAreaView>
   );
 }

@@ -5,9 +5,9 @@
  * (a permanently-denied answer — Android "don't ask again" — opens the
  * app's Settings page, since the OS won't re-prompt). iOS camera is the one
  * state JS cannot read, so that row keeps the honest ask-at-first-use path:
- * the request fires at the first photo step. Notifications are NOT asked
- * here: the push permission card asks in context (Home, Today, Jobs and the
- * inbox), when the person can see what a notification will tell them.
+ * the request fires at the first photo step. Notifications are asked here
+ * too (third row); the Home, Today, Jobs and inbox cards still re-ask later
+ * if the person says no.
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -32,7 +32,11 @@ import { Check, Info } from 'lucide-react-native';
 import { Button } from '../../components/ui';
 import { colors, palette, radius, shadow, spacing, typography, fontSize, weight, leading } from '../../theme';
 import type { UserRole } from '../../services';
-import { CameraArt, LocationArt, ShieldArt } from './components/artwork';
+import { BellArt, CameraArt, LocationArt, ShieldArt } from './components/artwork';
+import {
+  notificationPermissionState,
+  requestNotificationPermission,
+} from '../push/notificationPermission';
 
 type Props = {
   role: UserRole | null;
@@ -45,7 +49,7 @@ type Props = {
 
 type Row = {
   key: string;
-  perm: 'location' | 'camera';
+  perm: PermKey;
   art: ReactNode;
   title: string;
   badge: string;
@@ -57,7 +61,7 @@ type Row = {
  *  (iOS camera) — the row keeps the ask-at-first-use path. */
 type PermState = 'checking' | 'granted' | 'denied' | 'unknown';
 
-type PermKey = 'location' | 'camera';
+type PermKey = 'location' | 'camera' | 'notifications';
 
 export default function PermissionsPrimerScreen({ role, notice, onContinue }: Props) {
   const isStaff = role === 'employee';
@@ -66,6 +70,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
   const [perms, setPerms] = useState<Record<PermKey, PermState>>(() => ({
     location: 'checking',
     camera: Platform.OS === 'ios' ? 'unknown' : 'checking',
+    notifications: 'checking',
   }));
 
   const probe = async () => {
@@ -84,6 +89,8 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
         const status = (await checkPermission()) as string;
         setPerms(p => ({ ...p, location: status === 'granted' ? 'granted' : 'denied' }));
       }
+      const notifications = await notificationPermissionState();
+      setPerms(p => ({ ...p, notifications }));
     } catch (err) {
       // Fail to 'denied' — the row then offers Allow, and tapping it runs
       // the real request (the attendance probe's fail-open rule).
@@ -111,6 +118,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
     try {
       if (perms.location === 'denied') await allow('location');
       if (perms.camera === 'denied') await allow('camera');
+      if (perms.notifications === 'denied') await allow('notifications');
     } finally {
       setAsking(false);
     }
@@ -139,7 +147,7 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
           const status = (await requestPermission()) as string;
           if (status !== 'granted') await Linking.openSettings();
         }
-      } else {
+      } else if (perm === 'camera') {
         if (Platform.OS === 'android') {
           const result = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.CAMERA,
@@ -154,6 +162,11 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
             await Linking.openSettings();
           }
         }
+      } else {
+        // Notifications: the OS prompt on Android 13+; 'never_ask' means the
+        // OS will not prompt again, so Settings is the way back.
+        const result = await requestNotificationPermission();
+        if (result === 'never_ask') await Linking.openSettings();
       }
     } catch (err) {
       console.error('[PermissionsPrimer] request failed:', err);
@@ -170,8 +183,8 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
       badge: 'REQUIRED',
       badgeFg: colors.primary,
       body: isStaff
-        ? 'Only when you check in or complete a job step \u2014 never in the background. It helps the app find the exact job address.'
-        : 'Checks the team in at the office or site \u2014 taken only at check-in and job steps, never in the background.',
+        ? 'Only at check-in and job steps, never in the background.'
+        : 'At check-in and job steps only, never in the background.',
     },
     {
       key: 'camera',
@@ -181,8 +194,19 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
       badge: 'FOR PROOF',
       badgeFg: colors.status.done.fg,
       body: isStaff
-        ? 'Snap photo proof when a job step asks for it.'
+        ? 'Photo proof when a job step asks for it.'
         : 'Photo proof that the work is done.',
+    },
+    {
+      key: 'notifications',
+      perm: 'notifications',
+      art: <BellArt />,
+      title: 'Notifications',
+      badge: 'ALERTS',
+      badgeFg: colors.primary,
+      body: isStaff
+        ? 'Job and attendance alerts, even when app is closed.'
+        : 'New job and leave alerts, even when app is closed.',
     },
   ];
 
@@ -199,20 +223,22 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.body}>
-        <Animated.View style={[styles.badgeWrap, headerStyle]}>
-          <ShieldArt size={76} />
-        </Animated.View>
+        <View style={styles.headerRow}>
+          <Animated.View style={[styles.badgeWrap, headerStyle]}>
+            <ShieldArt size={52} />
+          </Animated.View>
+          <Text style={styles.title}>
+            {isStaff ? 'Permissions that protect you' : 'Permissions that protect your team'}
+          </Text>
+        </View>
         {notice ? (
           <View style={styles.notice}>
             <Info size={16} color={colors.primary} strokeWidth={2} />
             <Text style={styles.noticeText}>{notice}</Text>
           </View>
         ) : null}
-        <Text style={styles.title}>
-          {isStaff ? 'Permissions that protect you' : 'Permissions that protect your team'}
-        </Text>
         <Text style={styles.subtitle}>
-          {'We ask for three things now \u2014 so we never stop you during a job.'}
+          {'We ask only for what the job needs, so we never stop you mid-job.'}
         </Text>
 
         {rows.map((row, i) => (
@@ -317,9 +343,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.s6,
     paddingTop: spacing.s8,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s3,
+    marginBottom: spacing.s3,
+  },
   badgeWrap: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.s5,
+    alignSelf: 'center',
   },
   notice: {
     flexDirection: 'row',
@@ -341,7 +372,7 @@ const styles = StyleSheet.create({
     ...typography.heading,
     fontSize: 26,
     color: colors.textStrong,
-    marginBottom: spacing.s2,
+    flex: 1,
   },
   subtitle: {
     fontSize: fontSize.base,

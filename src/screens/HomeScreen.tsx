@@ -21,7 +21,7 @@ import { EmptyState, InlineError, InlineNotice, Skeleton } from '../components/u
 import { Tile } from '../components/Tile';
 import { colors, spacing, typography } from '../theme';
 import { greetingForNow } from '../utils';
-import { PushEnableCard } from '../features/push/PushEnableCard';
+import { PushEnableCard, PUSH_CARD_CLEARANCE } from '../features/push/PushEnableCard';
 import { firstName, loadMyProfile, useMyProfile } from '../features/profile';
 import {
   QuickActions,
@@ -41,6 +41,7 @@ type Props = CompositeScreenProps<
 >;
 
 export default function HomeScreen({ navigation }: Props) {
+  const [pushCardShown, setPushCardShown] = useState(false);
   // Everything on this screen comes from `GET /users/me` — name, company,
   // technician count and job counts — shared with More via the same store, so
   // switching tabs doesn't refetch. Nothing is hardcoded, which is why a
@@ -271,10 +272,9 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
 
         <ScrollView
-          contentContainerStyle={styles.newUserContent}
+          contentContainerStyle={[styles.newUserContent, pushCardShown && { paddingBottom: PUSH_CARD_CLEARANCE }]}
           refreshControl={refreshControl}>
           {errorBanner}
-          <PushEnableCard />
           {quickActions}
           {attendanceTile}
 
@@ -294,6 +294,7 @@ export default function HomeScreen({ navigation }: Props) {
             <NoJobsCard hasTechnicians={hasTechnicians} canWrite={canWrite} />
           </View>
         </ScrollView>
+        <PushEnableCard onVisibleChange={setPushCardShown} />
       </SafeAreaView>
     );
   }
@@ -311,10 +312,9 @@ export default function HomeScreen({ navigation }: Props) {
       />
       <ScrollView
         style={styles.screen}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, pushCardShown && { paddingBottom: PUSH_CARD_CLEARANCE }]}
         refreshControl={refreshControl}>
         {errorBanner}
-        <PushEnableCard />
         {quickActions}
         {attendanceTile}
 
@@ -328,6 +328,7 @@ export default function HomeScreen({ navigation }: Props) {
           onPressStrip={() => handleTilePress('overdue')}
         />
       </ScrollView>
+      <PushEnableCard onVisibleChange={setPushCardShown} />
     </>
   );
 }

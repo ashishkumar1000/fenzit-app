@@ -1,38 +1,35 @@
 /**
- * PushPermissionCard — the inbox's inline permission card (Firebase plan
- * task: NotificationsScreen shows it "while notifications are off",
- * the existing-installs context ask; new installs get the primer row).
+ * PushPermissionCard — the inbox's inline permission card. It matches the
+ * Home card's banner (PushEnableCard): one row with the icon and text, the
+ * sound-wave backdrop, and the buttons on the right.
  *
  * Rendered by NotificationsScreen ABOVE the list while the OS permission
  * is not granted. Two actions:
- *   - Allow: fires the OS prompt in context. Android's permanently-denied
- *     answer ('never_ask') routes to app Settings directly (the OS will
- *     not re-prompt).
- *   - "Open settings": always available — the manual way back (iOS has no
- *     never-ask signal at all; Android's never-ask users may prefer it).
+ *   - Allow: fires the OS prompt in context. Any outcome that cannot prompt
+ *     (Android "don't ask again", older Android, iOS already-denied) hands
+ *     off to the app's Settings, so Allow is also the way to Settings.
+
+ * The card shows every time this page opens while notifications are off.
  *
- * Denial keeps today's in-app-only behaviour: the card is the only thing
- * that changes. The probe re-runs on every screen focus, so returning from
- * Settings collapses the card the moment the permission is granted.
+ * The probe re-runs on every screen focus, so returning from Settings hides
+ * the card the moment the permission is granted.
  */
 import { useCallback, useState } from 'react';
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Bell, Settings2 } from 'lucide-react-native';
+import { BellRing } from 'lucide-react-native';
 import { Button } from '../../components/ui';
-import { colors, radius, spacing, typography, weight } from '../../theme';
+import { colors, radius, shadow, spacing, typography, weight } from '../../theme';
+import PushCardBackdrop from './PushCardBackdrop';
 import {
   notificationPermissionState,
   requestNotificationPermission,
 } from './notificationPermission';
 
-// Copy constants (UX pass pending — Sally's spec will revise the wording):
-// the inbox card's push-facing strings live here, named, in one place.
+// Copy: the inbox card's push-facing strings, named, in one place.
 const CARD_TITLE = 'Notifications are off';
-const CARD_BODY =
-  'Turn them on to hear about job assignments, leave decisions and reports — even when the app is closed.';
+const CARD_BODY = 'Job and leave alerts, even when the app is closed.';
 const ALLOW_LABEL = 'Allow';
-const OPEN_SETTINGS_LABEL = 'Open settings';
 
 export function PushPermissionCard() {
   // 'checking' renders nothing — no flash of a card that's about to hide.
@@ -40,13 +37,12 @@ export function PushPermissionCard() {
   const [asking, setAsking] = useState(false);
 
   // Focus (not mount): returning from Settings refreshes the state the
-  // card renders from. The focus effect returns the cleanup pair the hook
-  // contract expects.
+  // card renders from, and a new visit shows the card again.
   useFocusEffect(
     useCallback(() => {
       let active = true;
       void notificationPermissionState().then(granted => {
-        if (active) setState(granted ? 'granted' : 'off');
+        if (active) setState(granted === 'granted' ? 'granted' : 'off');
       });
       return () => {
         active = false;
@@ -58,49 +54,41 @@ export function PushPermissionCard() {
     setAsking(true);
     try {
       const result = await requestNotificationPermission();
-      // UX spec: any can't-prompt outcome (older Android, don't-ask-again,
-      // iOS already-denied) hands off straight to the app's Settings; the
-      // focus probe below collapses the card the moment it is granted.
-      if (result !== 'granted') {
+      // Blocked for good: the OS will not prompt again, so Settings is the way back.
+      if (result === 'never_ask') {
         await Linking.openSettings();
       }
       const granted = await notificationPermissionState();
-      setState(granted ? 'granted' : 'off');
+      setState(granted === 'granted' ? 'granted' : 'off');
     } finally {
       setAsking(false);
     }
-  };
-
-  const handleOpenSettings = () => {
-    void Linking.openSettings();
   };
 
   if (state !== 'off') return null;
 
   return (
     <View style={styles.card}>
+      <PushCardBackdrop side="start" />
+      <PushCardBackdrop side="center" />
+      <PushCardBackdrop side="end" />
       <View style={styles.iconWrap}>
-        <Bell size={18} color={colors.primary} strokeWidth={2} />
+        <BellRing size={18} color={colors.primary} strokeWidth={2} />
       </View>
       <View style={styles.textWrap}>
-        <Text style={styles.title}>{CARD_TITLE}</Text>
-        <Text style={styles.body}>{CARD_BODY}</Text>
+        <Text style={styles.title} numberOfLines={1} accessibilityRole="header">{CARD_TITLE}</Text>
+        <Text style={styles.body} numberOfLines={1}>{CARD_BODY}</Text>
+      </View>
+      <View style={styles.actions}>
         <Button
-          variant="ghost"
-          size="sm"
-          onPress={handleOpenSettings}
-          leadingIcon={<Settings2 size={14} color={colors.textMuted} strokeWidth={2} />}>
-          {OPEN_SETTINGS_LABEL}
+          variant="primary"
+          size="md"
+          disabled={asking}
+          accessibilityLabel="Allow Notifications"
+          onPress={() => void handleAllow()}>
+          {asking ? 'Please wait…' : ALLOW_LABEL}
         </Button>
       </View>
-      <Button
-        variant="primary"
-        size="sm"
-        disabled={asking}
-        accessibilityLabel="Allow Notifications"
-        onPress={() => void handleAllow()}>
-        {asking ? 'Please wait…' : ALLOW_LABEL}
-      </Button>
     </View>
   );
 }
@@ -108,21 +96,26 @@ export function PushPermissionCard() {
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.s3,
-    margin: spacing.s4,
+    marginHorizontal: spacing.s4,
     marginTop: spacing.s3,
-    padding: spacing.s4,
+    paddingVertical: spacing.s2,
+    paddingHorizontal: spacing.s4,
     borderRadius: radius.lg,
-    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.borderDefault,
+    backgroundColor: colors.surfaceCard,
+    overflow: 'hidden',
+    ...shadow.xs,
   },
   iconWrap: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceCard,
+    backgroundColor: colors.primarySoft,
   },
   textWrap: {
     flex: 1,
@@ -136,5 +129,10 @@ const styles = StyleSheet.create({
   body: {
     ...typography.caption,
     color: colors.textMuted,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s2,
   },
 });

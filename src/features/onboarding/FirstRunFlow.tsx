@@ -8,7 +8,7 @@
  * (The old slide-pager tour is gone — these screens carry its content.)
  */
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
