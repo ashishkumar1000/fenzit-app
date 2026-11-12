@@ -20,7 +20,7 @@ concurrency:
 jobs:
   android-release-build:
     name: Release APKs + AAB
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       # fetch-depth: 0 — verify:store scans store-v* tags, which a shallow
@@ -229,7 +229,7 @@ jobs:
   play-publish:
     name: Publish to Play Store (production)
     needs: android-release-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:
       name: play-production

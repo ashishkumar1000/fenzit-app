@@ -2,4 +2,4 @@
 # (CI clones exactly this commit — see .github/workflows/android-release.yml).
 # Bump it deliberately after intentional backend changes:
 #   git ls-remote https://github.com/ashishkumar1000/fenzit-be main | cut -f1 > .fenzit-be-ref
-14012ab0703c4eb5f470e8b688dd7d8f2ac1018d
+4564e6b88fce32730a44d78a35c6b625f056651d
