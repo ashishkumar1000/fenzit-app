@@ -1,0 +1,4 @@
+Turn on notifications: a card at the bottom of Home, Today and Jobs asks you to allow alerts. Tap Later to hide it until you open the app again.
+Notifications page: a card reminds you to turn alerts on while they are off.
+First-run permissions: you can allow notifications along with Location and Camera.
+Job, attendance and leave alerts now arrive when the app is closed.
