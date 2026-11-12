@@ -171,6 +171,33 @@ export function CameraArt({ size = 44 }: ArtProps) {
   );
 }
 
+/** Permissions row: a bell with faint sound-wave arcs on both sides. */
+export function BellArt({ size = 44 }: ArtProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <Path
+        d="M24 8c-6.6 0-11 4.9-11 11.4V29l-3 4h28l-3-4V19.4C35 12.9 30.6 8 24 8z"
+        fill={BLUE}
+      />
+      <Circle cx={24} cy={38} r={3} fill={BLUE_DK} />
+      <Path
+        d="M8 17a16.2 16.2 0 000 14"
+        stroke={BLUE_SOFT}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeDasharray="3 5"
+      />
+      <Path
+        d="M40 17a16.2 16.2 0 010 14"
+        stroke={BLUE_SOFT}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeDasharray="3 5"
+      />
+    </Svg>
+  );
+}
+
 /** Role pick — owner: a shopfront with awning and a pennant flag. */
 export function OwnerArt({ size = 44 }: ArtProps) {
   return (

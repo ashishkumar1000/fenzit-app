@@ -109,6 +109,10 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
       return result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ? 'never_ask' : 'denied';
     }
     if (Platform.OS === 'ios') {
+      // iOS shows its prompt once. A status already DENIED means no prompt
+      // can appear again, so the caller must route to Settings.
+      const before = await hasPermission(getMessaging());
+      if (before === AuthorizationStatus.DENIED) return 'never_ask';
       const status = await requestPermission(getMessaging());
       return isAuthorizedStatus(status) ? 'granted' : 'denied';
     }

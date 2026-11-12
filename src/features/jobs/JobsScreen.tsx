@@ -38,7 +38,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, IconButton, InlineError, SegmentedControl } from '../../components/ui';
-import { PushEnableCard } from '../push/PushEnableCard';
+import { PushEnableCard, PUSH_CARD_CLEARANCE } from '../push/PushEnableCard';
 import { useCanWrite } from '../auth';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
@@ -135,6 +135,7 @@ type Props = CompositeScreenProps<
 >;
 
 export default function JobsScreen({ navigation, route }: Props) {
+  const [pushCardShown, setPushCardShown] = useState(false);
   const {
     jobs,
     filter,
@@ -252,9 +253,12 @@ export default function JobsScreen({ navigation, route }: Props) {
     navigation.navigate('Notifications');
   };
 
-  const handleOpenJob = (job: ApiJob) => {
-    navigation.navigate('JobDetail', { jobId: job.id });
-  };
+  const handleOpenJob = useCallback(
+    (job: ApiJob) => {
+      navigation.navigate('JobDetail', { jobId: job.id });
+    },
+    [navigation],
+  );
 
   const renderJob = useCallback(
     ({ item }: { item: ApiJob }) => (
@@ -271,7 +275,7 @@ export default function JobsScreen({ navigation, route }: Props) {
         onPress={handleOpenJob}
       />
     ),
-    [customerNames, technicianNames, technicianAvatarUrls, scope, now],
+    [customerNames, technicianNames, technicianAvatarUrls, scope, now, handleOpenJob],
   );
 
   return (
@@ -359,11 +363,6 @@ export default function JobsScreen({ navigation, route }: Props) {
               <InlineError message={error ?? ''} onDismiss={() => setErrorDismissed(true)} />
             </View>
           ) : null}
-          {/* UX spec: the one-time notifications-off card on the admin's
-              home surfaces (whichever is visited first; suppressed after
-              dismissal/denial). */}
-          <PushEnableCard />
-
           <FlatList
             data={jobs}
             keyExtractor={item => item.id}
@@ -383,6 +382,7 @@ export default function JobsScreen({ navigation, route }: Props) {
             contentContainerStyle={[
               styles.listContent,
               isEmpty && styles.listContentEmpty,
+              pushCardShown && { paddingBottom: PUSH_CARD_CLEARANCE },
             ]}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             refreshControl={
@@ -425,6 +425,7 @@ export default function JobsScreen({ navigation, route }: Props) {
           />
         </>
       )}
+      <PushEnableCard onVisibleChange={setPushCardShown} />
     </SafeAreaView>
   );
 }
