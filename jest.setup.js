@@ -265,38 +265,3 @@ Animated.loop = (animation, config) =>
     iterations:
       config?.iterations && config.iterations > 0 ? config.iterations : 1,
   });
-
-// react-native-vision-camera loads Nitro native modules at import time, which
-// do not exist under Jest. Screens only need the module's shape; the camera
-// itself is never rendered in unit tests.
-jest.mock('react-native-vision-camera', () => ({
-  Camera: () => null,
-  CommonResolutions: { HD_4_3: { width: 768, height: 1024 } },
-  useCameraDevice: () => undefined,
-  useCameraPermission: () => ({
-    hasPermission: false,
-    requestPermission: () => Promise.resolve(false),
-    canRequestPermission: false,
-  }),
-  usePhotoOutput: () => ({
-    capturePhotoToFile: () => Promise.resolve({ filePath: '' }),
-  }),
-  usePreviewOutput: () => ({}),
-}));
-
-// The image cropper is native (an Android/iOS activity), so tests stub it.
-jest.mock('react-native-image-crop-picker', () => ({
-  openCropper: jest.fn(() => Promise.reject(Object.assign(new Error('cancelled'), { code: 'E_PICKER_CANCELLED' }))),
-}));
-
-// The face detector wraps the camera's native outputs, so it is stubbed the
-// same way: no detection, status 'idle'.
-jest.mock('@noma4i/vision-camera-face-detector', () => ({
-  useFaceDetector: () => ({
-    camera: { ref: { current: null }, outputs: [] },
-    status: 'idle',
-    result: { faces: [], isInsideGuide: false, status: 'idle' },
-    available: false,
-    ready: false,
-  }),
-}));

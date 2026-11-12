@@ -71,8 +71,8 @@ export function validateAsset(asset: { mimeType: string; fileSize: number }): st
 /** Optional picker settings. `maxDimension` bounds the longest edge in pixels. */
 export type PickOptions = {
   maxDimension?: number;
-  /** When set, "Take photo" calls this instead of the system camera (the
-   *  caller shows its own camera, e.g. one with a face guide). */
+  /** When set, "Take photo" calls this instead of the default system camera
+   *  path (e.g. the avatar flow opens the front camera). */
   onTakePhoto?: () => void;
 };
 
@@ -108,10 +108,14 @@ export function showPhotoSourceAlert(
   ]);
 }
 
-/** Camera path: Android's runtime permission first, then launchCamera. */
-async function takePhoto(
+/**
+ * Camera path: Android's runtime permission first, then launchCamera.
+ * `cameraType` is passed only when given, so the default call is unchanged.
+ */
+export async function takePhoto(
   onPicked: (outcome: PickOutcome) => void,
   maxDimension: number,
+  cameraType?: 'front' | 'back',
 ): Promise<void> {
   try {
     if (Platform.OS === 'android') {
@@ -133,6 +137,7 @@ async function takePhoto(
         maxWidth: maxDimension,
         maxHeight: maxDimension,
         saveToPhotos: false,
+        ...(cameraType ? { cameraType } : {}),
       },
       undefined,
     );

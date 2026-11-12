@@ -7,11 +7,12 @@
  *   - Once the person is active, Resend is hidden.
  *   - A cap stop (refused_cap) or a disabled SMS (not_configured) hides the
  *     button and shows the reason instead.
- *   - The phone shows masked; the full number is never on screen.
+ *   - The phone shows in full with its dial code (the owner asked for the
+ *     full number on the row; this replaces the earlier masking rule).
  */
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
-import { TechnicianRow, maskPhoneForDisplay } from './TechnicianRow';
+import { TechnicianRow, formatPhoneForDisplay } from './TechnicianRow';
 import type { InviteSmsStatus, Technician } from '../types';
 import { INVITE_SMS_CAP_COPY } from '../inviteSms';
 
@@ -100,28 +101,28 @@ describe('employee card: who sees Resend', () => {
   });
 });
 
-describe('employee card: phone is masked', () => {
-  it('shows only the dial code and the last four digits', () => {
+describe('employee card: phone is shown in full', () => {
+  it('shows the dial code and the whole number, with no masking', () => {
     const text = visibleText(render(INVITED, false));
-    expect(text).toContain('+91 ******1111');
-    expect(text).not.toContain('9111111111');
+    expect(text).toContain('+91 9111111111');
+    expect(text).not.toContain('*');
   });
 });
 
-describe('maskPhoneForDisplay', () => {
+describe('formatPhoneForDisplay', () => {
   it.each([
-    ['9876543210', '+91 ******3210'],
-    ['98765 43210', '+91 ******3210'],
-    ['0987654321', '+91 ******4321'],
-  ])('masks %s to %s', (phone, expected) => {
-    expect(maskPhoneForDisplay(phone, '+91')).toBe(expected);
+    ['9876543210', '+91 9876543210'],
+    ['98765 43210', '+91 9876543210'],
+    ['0987654321', '+91 0987654321'],
+  ])('shows %s as %s, digits only', (phone, expected) => {
+    expect(formatPhoneForDisplay(phone, '+91')).toBe(expected);
   });
 
-  it('a short number is never longer than the digits it has', () => {
-    expect(maskPhoneForDisplay('123', '+91')).toBe('+91 123');
+  it('a short number is shown as the digits it has', () => {
+    expect(formatPhoneForDisplay('123', '+91')).toBe('+91 123');
   });
 
-  it('a 4-digit number is shown in full, with no stars', () => {
-    expect(maskPhoneForDisplay('1234', '+91')).toBe('+91 1234');
+  it('a 4-digit number is shown in full', () => {
+    expect(formatPhoneForDisplay('1234', '+91')).toBe('+91 1234');
   });
 });
