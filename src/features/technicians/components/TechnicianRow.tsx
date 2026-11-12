@@ -1,11 +1,11 @@
 /**
- * TechnicianRow — a single technician in the list: avatar, name, masked phone
+ * TechnicianRow — a single technician in the list: avatar, name, full phone
  * and a status badge (Active / Offline), with a call button. Composes Card +
  * Avatar + Badge. The employee code (EMP-004) is its own chip when known —
  * freshly invited rows hydrate it later, so it renders fail-hidden.
  *
- * The phone is shown masked (AC 9 of story 21-4). The call button still dials
- * the full number.
+ * The phone is shown in full, with the dial code. The call button dials the
+ * same number.
  */
 import { Linking, StyleSheet, Text, View } from 'react-native';
 import { Phone } from 'lucide-react-native';
@@ -30,11 +30,10 @@ function dialNumber(phone: string): string {
   return digits.length === 10 ? `+91${digits}` : digits;
 }
 
-/** `+91 ******3210` — the dial code and all but the last four digits hidden. */
-export function maskPhoneForDisplay(phone: string, countryCode: string = DIAL_CODE): string {
+/** `+91 9876543210` — the dial code, then the digits of the number. */
+export function formatPhoneForDisplay(phone: string, countryCode: string = DIAL_CODE): string {
   const digits = phone.replace(/\D/g, '');
-  const stars = '*'.repeat(Math.max(0, digits.length - 4));
-  return `${countryCode} ${stars}${digits.slice(-4)}`;
+  return `${countryCode} ${digits}`;
 }
 
 export function TechnicianRow({ technician, onPress, canResend = false }: Props) {
@@ -60,7 +59,7 @@ export function TechnicianRow({ technician, onPress, canResend = false }: Props)
               <Badge status="neutral">{technician.employeeCode}</Badge>
             ) : null}
             <Text style={styles.phone} numberOfLines={1}>
-              {maskPhoneForDisplay(technician.phone, technician.countryCode ?? DIAL_CODE)}
+              {formatPhoneForDisplay(technician.phone, technician.countryCode || DIAL_CODE)}
             </Text>
             <Badge status={isActive ? 'done' : 'neutral'} dot>
               {isActive ? 'Active' : 'Offline'}
@@ -72,6 +71,7 @@ export function TechnicianRow({ technician, onPress, canResend = false }: Props)
           label={`Call ${technician.name}`}
           variant="ghost"
           size="md"
+          style={styles.callButton}
           onPress={() => void Linking.openURL(`tel:${dialNumber(technician.phone)}`)}>
           <Phone size={18} color={colors.primary} strokeWidth={2} />
         </IconButton>
@@ -100,6 +100,10 @@ const styles = StyleSheet.create({
   },
   actionArea: {
     marginTop: spacing.s2,
+  },
+  // Lifts the call icon a little above the row's vertical centre.
+  callButton: {
+    marginBottom: spacing.s3,
   },
   info: {
     flex: 1,

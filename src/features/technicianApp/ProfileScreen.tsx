@@ -34,7 +34,6 @@ import { useAuth } from '../auth';
 import { EditNameSheet, formatPhone, formatRole, useMyProfile } from '../profile';
 import { DeleteAccountConfirm } from '../more/components/DeleteAccountConfirm';
 import { useAvatarUpload } from '../editProfile/useAvatarUpload';
-import { SelfieCamera } from '../editProfile/components/SelfieCamera';
 
 export default function ProfileScreen() {
   const { reset } = useAuth();
@@ -203,11 +202,6 @@ export default function ProfileScreen() {
           </Card>
         </Card>
       </View>
-      <SelfieCamera
-        visible={photo.cameraOpen}
-        onClose={photo.closeCamera}
-        onCaptured={photo.onCaptured}
-      />
     </SafeAreaView>
   );
 }
