@@ -15,8 +15,9 @@
  * — muted caption text under the label, no chip/badge around it. Hidden at
  * zero: a fresh account has nothing to count yet.
  *
- * The tiles share one `minHeight` sized for the count line, so the row stays
- * level whether the counts are showing or not.
+ * The tiles share one `minHeight` (see `tile` below). A label that wraps to
+ * two lines makes its tile taller than the others; the row stays level on
+ * the one-line case, which is the common one.
  *
  * Note the `View` wrapper around each Card: an interactive Card renders its
  * own `Animated.View` on the outside (for the press-scale), so `flex: 1` on
@@ -50,10 +51,15 @@ export type QuickActionsProps = {
 const ICON_SIZE = 26;
 const ICON_STROKE = 1.75;
 /**
- * Labels shrink rather than truncate. "Add employee" is the longest and the
- * row splits into thirds, so on a 320px-wide device each tile only has ~64px
- * of inner width — not enough for 14px semibold. Scaling down to 85% (≈12px)
- * covers that; anything wider keeps the full size.
+ * Tile labels may wrap to two lines and are never shrunk or truncated to one.
+ * The row splits into thirds, so "Add employee" at 14px semibold can be wider
+ * than a tile's inner width on some phones. Auto-shrink was not reliable on
+ * Android for these labels, so the label wraps instead.
+ */
+const LABEL_LINES = 2;
+/**
+ * Count lines are short captions and still shrink rather than truncate, as
+ * before the label change. Floor is 85% of the caption size.
  */
 const MIN_FONT_SCALE = 0.85;
 
@@ -88,9 +94,7 @@ export function QuickActions({
           />
           <Text
             style={[styles.label, styles.primaryLabel]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={MIN_FONT_SCALE}>
+            numberOfLines={LABEL_LINES}>
             New job
           </Text>
         </Card>
@@ -108,11 +112,7 @@ export function QuickActions({
             size={ICON_SIZE}
             strokeWidth={ICON_STROKE}
           />
-          <Text
-            style={styles.label}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={MIN_FONT_SCALE}>
+          <Text style={styles.label} numberOfLines={LABEL_LINES}>
             Add customer
           </Text>
           {customerCount > 0 ? (
@@ -144,9 +144,7 @@ export function QuickActions({
           />
           <Text
             style={[styles.label, !canCreateJob && styles.primaryLabel]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={MIN_FONT_SCALE}>
+            numberOfLines={LABEL_LINES}>
             Add employee
           </Text>
           {technicianCount > 0 ? (
@@ -173,11 +171,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tile: {
-    // Padding is `sm` (12), not `md`: at `md` a 380px screen leaves too little
-    // inner width per tile, which clips "Add employee".
-    // Shared by all three tiles and sized for the count line (icon 26 + gap 8
-    // + label ~18 + gap 8 + caption ~16 + padding 24 ≈ 100, plus 4px headroom
-    // so the row stays level whether the counts are showing or not.
+    // Padding is `sm` (12), not `md`: `md` leaves too little inner width per
+    // tile for the labels.
+    // Shared by all three tiles. Sized for a one-line label plus the count
+    // line (icon 26 + gap 8 + label ~18 + gap 8 + caption ~16 + padding 24
+    // ≈ 100, plus 4px headroom). A two-line label grows its own tile.
     minHeight: 104,
     alignItems: 'center',
     justifyContent: 'center',
@@ -195,6 +193,11 @@ const styles = StyleSheet.create({
   label: {
     ...typography.labelStrong,
     color: colors.textStrong,
+    textAlign: 'center',
+    // Stretch to the tile's inner width so a long label wraps inside the
+    // tile. Under the tile's `alignItems: 'center'` the label would size to
+    // its own text and the second line gets no room.
+    alignSelf: 'stretch',
   },
   primaryLabel: {
     color: colors.onPrimary,
