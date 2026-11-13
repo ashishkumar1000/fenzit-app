@@ -15,6 +15,11 @@ export const radius = {
   xl: 20, // sheets, modals
   '2xl': 28,
   pill: 5, // badges, chips, avatars
+  // A full capsule: the "stadium" the Pending pill and avatar rings draw.
+  // Distinct from `pill` — that one rounds a CHIP's corners; a stadium
+  // hugs its content end to end. Any future capsule (pills, stadium
+  // badges, rounded progress rails) uses this instead of a hard-coded 999.
+  stadium: 999,
 } as const;
 
 // Shadow color is the cool-gray brand ink (#111827 = palette.gray900).

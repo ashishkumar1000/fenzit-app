@@ -34,7 +34,7 @@ export function TodayEmptySchedule({ onRefresh, compact = false }: Props) {
       <View style={styles.compactCard}>
         <View style={styles.compactHeader}>
           <View style={styles.headerDot} />
-          <Text style={styles.title} maxFontSizeMultiplier={1.4}>
+          <Text style={styles.title} maxFontSizeMultiplier={1.4} accessibilityRole="header">
             {"Today's Schedule & Tasks"}
           </Text>
         </View>
@@ -71,7 +71,9 @@ export function TodayEmptySchedule({ onRefresh, compact = false }: Props) {
   }
   return (
     <View style={styles.card}>
-      <Text style={[styles.title, styles.bigTitleGap]}>{"Today's Schedule & Tasks"}</Text>
+      <Text style={[styles.title, styles.bigTitleGap]} accessibilityRole="header">
+        {"Today's Schedule & Tasks"}
+      </Text>
       <View style={styles.well}>
         <EmptyState
           icon={<TodayScheduleArt size={40} />}
@@ -112,8 +114,11 @@ const styles = StyleSheet.create({
     padding: spacing.s3,
   },
   title: {
-    ...typography.title,
-    fontSize: 17,
+    // The empty card's heading carries the same rank as the populated
+    // day's "Today's Schedule & Tasks" (`heading`) — the hard-coded 17
+    // made it a third, smaller rank that existed on no other screen
+    // (Sally hierarchy pass, 2026-11-13).
+    ...typography.heading,
     color: colors.textStrong,
   },
   // The big variant's gap between the title and the dashed well (the
@@ -189,8 +194,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   compactTitle: {
-    ...typography.title,
-    fontSize: 16,
+    // One-row card: the `bodyStrong` role (16 semibold) instead of a
+    // hard-coded fontSize patch on `title` (Sally hierarchy pass).
+    ...typography.bodyStrong,
     color: colors.textStrong,
   },
   compactSubtitle: {

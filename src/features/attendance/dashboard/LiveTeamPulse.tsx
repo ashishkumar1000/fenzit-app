@@ -43,11 +43,15 @@ function chipLabel(row: DashboardEmployeeStat): string {
   return CHIP_LABELS[row.status];
 }
 
-/** The ISO instant as the owner reads it on their phone. */
+/** The ISO instant as the owner reads it on their phone — uppercased
+ *  meridiem (the app-wide convention; the device locale's casing would
+ *  otherwise flip per phone — review 2026-11-13). */
 function formatTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return d
+    .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    .replace(/(am|pm)/gi, m => m.toUpperCase());
 }
 
 /** 170 -> "2h 50m"; 65 -> "1h 5m". */

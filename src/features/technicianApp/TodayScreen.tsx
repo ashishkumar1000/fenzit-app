@@ -205,8 +205,12 @@ export default function TodayScreen() {
                   />
                 </View>
               ) : null}
+              {/* The schedule title navigates by heading for screen-reader
+                  users (the Eyebrow sections already do). */}
               {sections.length > 0 ? (
-                <Text style={styles.scheduleTitle}>{"Today's Schedule & Tasks"}</Text>
+                <Text style={styles.scheduleTitle} accessibilityRole="header">
+                  {"Today's Schedule & Tasks"}
+                </Text>
               ) : null}
             </>
           }
@@ -250,9 +254,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfacePage,
   },
   // The eyebrow treatment itself (type, tracking, caps, muted) lives in the
-  // DS `Eyebrow` — this only positions it inside the list.
+  // DS `Eyebrow` — this only positions it inside the list. Composed rhythm
+  // (Sally 2026-11-13): the inter-card separator (s3) also renders before
+  // each section eyebrow, so a section opens on s3 + s4 of air, then hands
+  // off tight (s2) to hug its own rows.
   sectionHeaderSpacing: {
-    paddingVertical: spacing.s2,
+    paddingTop: spacing.s4,
+    paddingBottom: spacing.s2,
   },
   // The punch zone's breathing room under the fixed header. No horizontal
   // padding of its own — it rides the list's 16dp gutter like the job cards
@@ -265,11 +273,19 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.s3,
   },
   scheduleTitle: {
-    ...typography.bodyStrong,
-    fontSize: fontSize.lg,
+    // The section heading carries the SAME rank as the card titles it
+    // governs (`heading`, 22 — JobCard's title token): at 18 the section
+    // label read SMALLER than its own rows — the inverted hierarchy Sally
+    // flagged (2026-11-13). Section labels and card titles are peers;
+    // screen-level structure comes from placement and the eyebrow sections
+    // under it.
+    ...typography.heading,
     color: colors.textStrong,
-    paddingTop: spacing.s2,
-    paddingBottom: spacing.s2,
+    // Rhythm (composed): the punch zone hands off (its paddingBottom s3),
+    // the title takes s4 of air, then hands the rows a s3 gap — the same
+    // gap the card separator uses, so the list reads as one rhythm.
+    paddingTop: spacing.s4,
+    paddingBottom: spacing.s3,
   },
   listContent: {
     padding: spacing.s4,

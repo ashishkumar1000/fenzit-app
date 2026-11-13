@@ -19,11 +19,15 @@ type Props = {
   pendingStep?: string | null;
 };
 
-/** "2:14 PM" — the done-row caption format (spec §9). Unparseable input → raw. */
+/** "2:14 PM" — the done-row caption format (spec §9), uppercased with the
+ *  app-wide meridiem convention (Sally casing pass, 2026-11-13 — en-IN
+ *  prints "pm"; every other time render says "PM"). Unparseable → raw. */
 function timeLabel(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  return date
+    .toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+    .replace(/(am|pm)/gi, m => m.toUpperCase());
 }
 
 export function WorkflowStepper({ steps, onAdvance, pendingStep }: Props) {

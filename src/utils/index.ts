@@ -10,6 +10,7 @@ export {
   addIstDays,
   daysOverdue,
   formatIstDateLabel,
+  formatIstDateTimeLabel,
   isSameIstDay,
   istDayStartMs,
   istTodayDate,

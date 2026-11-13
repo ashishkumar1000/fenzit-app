@@ -24,7 +24,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { ArrowRight, Check } from 'lucide-react-native';
 import { Card } from '../../../components/ui';
-import { colors, fontSize, radius, shadow, spacing, typography } from '../../../theme';
+import { colors, fontSize, radius, shadow, spacing, typography, weight } from '../../../theme';
 import type {
   TodayTileVerdict,
   TodayTilesModel,
@@ -224,17 +224,20 @@ const styles = StyleSheet.create({
   },
   tileTime: {
     fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontWeight: weight.bold,
     color: colors.textStrong,
+    // Tabular digits: the two tiles' colons line up, and the time never
+    // reflows when a digit changes width (Sally 2026-11-13).
+    fontVariant: ['tabular-nums'],
   },
   tileTimeEmpty: {
     color: colors.textDisabled,
-    fontWeight: '600',
+    fontWeight: weight.semibold,
     letterSpacing: 2,
   },
   tileMeridiem: {
     fontSize: fontSize.sm,
-    fontWeight: '600',
+    fontWeight: weight.semibold,
     color: colors.textMuted,
     // Nested inside the placeholder it would inherit the dashes' tracking.
     letterSpacing: 0,
@@ -255,9 +258,10 @@ const styles = StyleSheet.create({
     color: colors.status.cancelled.fg,
   },
   pendingPill: {
-    // Stadium radius: the pill hugs a 14pt label, so a token radius would
-    // read as a rounded box — the mockup draws a full capsule.
-    borderRadius: 999,
+    // Full capsule via the new `stadium` token — the theme had no stadium
+    // radius, which is WHY the hard-coded 999 existed (Sally hard-code
+    // pass, 2026-11-13: extend tokens, never re-state magic numbers).
+    borderRadius: radius.stadium,
     backgroundColor: colors.status.neutral.bg,
     paddingHorizontal: spacing.s3,
     paddingVertical: spacing.s1,
@@ -305,20 +309,27 @@ const styles = StyleSheet.create({
   },
   chipValueBig: {
     fontSize: fontSize['2xl'],
-    fontWeight: '700',
+    fontWeight: weight.bold,
     color: colors.textStrong,
+    // Durations ("6h 31m") read best with fixed-width digits too.
+    fontVariant: ['tabular-nums'],
   },
   checkBadge: {
+    // 36 = the smallest comfortable ✓ target beside a 28pt value; no size
+    // token exists at this scale — the number is the spec, the comment is
+    // the intent (Sally hard-code pass: size literals get documented, not
+    // silently kept). Half the width — a full circle (Sally review catch:
+    // radius.pill is 5, a chip corner, not a disc).
     width: 36,
     height: 36,
-    borderRadius: radius.pill,
+    borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chipCaption: {
     fontSize: fontSize.xs,
-    fontWeight: '500',
+    fontWeight: weight.medium,
     opacity: 0.85,
   },
 });

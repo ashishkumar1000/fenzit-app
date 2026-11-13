@@ -122,7 +122,9 @@ eyebrow names the group (e.g. "Date & time" over Date/Time).
 bar, 64px bottom nav. Lists are single-column stacks of cards with ~10px gaps.
 
 **Shape.** Soft, friendly rounding — inputs/buttons `radius.md` (10), cards
-`radius.lg` (14), sheets/modals `radius.xl` (20), badges & avatars `radius.pill`.
+`radius.lg` (14), sheets/modals `radius.xl` (20), badges & avatars `radius.pill`
+(a chip corner, 5 — not a capsule). Full capsules (pills, stadium badges,
+rounded progress rails) use `radius.stadium` (999) — never a hard-coded 999.
 Nothing is sharp-cornered.
 
 **Elevation.** Light, cool-gray shadows (`shadow.xs|sm|md|lg`), never harsh

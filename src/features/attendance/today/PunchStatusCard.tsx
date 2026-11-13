@@ -9,7 +9,7 @@
  * presentational; the copy lives in the model's frozen table.
  */
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, fontSize, radius, spacing } from '../../../theme';
+import { colors, fontSize, radius, spacing, weight } from '../../../theme';
 import type {
   PunchCardTone,
   PunchStatusCardModel,
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: fontSize.base,
-    fontWeight: '800',
+    fontWeight: weight.extra,
     color: colors.textStrong,
   },
   bodyText: {
@@ -120,11 +120,11 @@ const styles = StyleSheet.create({
     color: colors.textBody,
   },
   strong: {
-    fontWeight: '700',
+    fontWeight: weight.bold,
     color: colors.textStrong,
   },
   danger: {
-    fontWeight: '700',
+    fontWeight: weight.bold,
     color: colors.status.cancelled.solid,
   },
 });

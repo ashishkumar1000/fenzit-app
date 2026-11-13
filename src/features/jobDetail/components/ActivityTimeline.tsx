@@ -139,12 +139,11 @@ function locationCaptionFor(
 
 /** "12 Aug, 2:14 PM" — the timeline's timestamp format (AC 3), in IST
  *  wall-clock (NOT the device's timezone — a toLocaleString here would
- *  disagree with the row's own IST labels; review 2026-11-13). The
- *  meridiem is uppercased to match the app's other time renders.
- *  Unparseable input → raw. */
+ *  disagree with the row's own IST labels; review 2026-11-13). Casing is
+ *  the formatter's contract (uppercased app-wide) — no local mask here, so
+ *  one layer owns the rule. Unparseable input → raw. */
 function timestampLabel(iso: string): string {
-  const label = formatIstDateTimeLabel(iso);
-  return label ? label.replace(/(am|pm)$/, m => m.toUpperCase()) : iso;
+  return formatIstDateTimeLabel(iso) ?? iso;
 }
 
 export function ActivityTimeline({ entries, workflowTemplate, jobSite }: Props) {

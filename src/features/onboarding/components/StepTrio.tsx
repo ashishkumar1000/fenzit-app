@@ -6,6 +6,7 @@
  * driven by ONE shared progress value. Blue does the decoration; green
  * appears only on the Done seal.
  */
+import { colors, palette, radius, spacing, weight } from '../../../theme';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
@@ -15,7 +16,6 @@ import Animated, {
   useAnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated';
-import { colors, palette, spacing, weight } from '../../../theme';
 
 const ART = 76;
 const BLUE = palette.blue600;
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    borderRadius: 999,
+    borderRadius: radius.stadium,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   liveDot: {
     width: 5,
     height: 5,
-    borderRadius: 999,
+    borderRadius: radius.stadium,
     backgroundColor: palette.blue500,
   },
   connector: {

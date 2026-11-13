@@ -236,6 +236,9 @@ const styles = StyleSheet.create({
     ...typography.bodySm,
     color: colors.textMuted,
     flex: 1,
+    // The time row carries a clock range — fixed-width digits keep the
+    // colons steady and the range from reflowing as times change.
+    fontVariant: ['tabular-nums'],
   },
   jobNumber: {
     ...typography.caption,

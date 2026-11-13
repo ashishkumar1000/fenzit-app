@@ -26,7 +26,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, fontSize, typography } from '../../../theme';
+import { colors, fontSize, radius, typography, weight } from '../../../theme';
 import type { TodayButtonState } from './attendanceTodayModel';
 import {
   formatCountdown,
@@ -277,13 +277,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     height: 26,
-    borderRadius: 13,
+    // Full capsule via the token (13 was its half-height re-statement).
+    borderRadius: radius.stadium,
     paddingHorizontal: 12,
     zIndex: 2,
   },
   pillLabel: {
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: fontSize['2xs'],
+    fontWeight: weight.extra,
     letterSpacing: 0.8,
     color: colors.surfaceCard,
   },
@@ -308,14 +309,17 @@ const styles = StyleSheet.create({
   actionLabel: {
     ...typography.title,
     fontSize: 21,
-    fontWeight: '800',
+    fontWeight: weight.extra,
     letterSpacing: 1.2,
     color: colors.surfaceCard,
   },
   subLabel: {
     fontSize: fontSize.xs,
-    fontWeight: '600',
+    fontWeight: weight.semibold,
     color: colors.surfaceCard,
     textAlign: 'center',
+    // The countdown ("Try again in 0:59") re-renders every second —
+    // fixed-width digits stop it from jittering.
+    fontVariant: ['tabular-nums'],
   },
 });

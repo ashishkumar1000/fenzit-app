@@ -6,6 +6,7 @@
  * progress value drives the whole entrance top-to-bottom, so no element can
  * get stuck invisible. No background decoration.
  */
+import { colors, palette, radius, spacing, fontSize, weight } from '../../theme';
 import { useEffect } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,7 +20,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Button } from '../../components/ui';
-import { colors, palette, spacing, fontSize, weight } from '../../theme';
 import { StepTrio } from './components/StepTrio';
 
 type Props = {
@@ -157,14 +157,14 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: spacing.s2,
     backgroundColor: palette.blue50,
-    borderRadius: 999,
+    borderRadius: radius.stadium,
     paddingHorizontal: 12,
     paddingVertical: 5,
   },
   eyebrowDot: {
     width: 6,
     height: 6,
-    borderRadius: 999,
+    borderRadius: radius.stadium,
     backgroundColor: palette.blue600,
   },
   eyebrowText: {

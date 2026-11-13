@@ -42,6 +42,7 @@
  * server-side. A `draft` param (the previous capture) seeds the form when
  * the employee reopens it to change the details.
  */
+import { colors, spacing, touch, typography, radius } from '../../theme';
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -69,7 +70,6 @@ import {
 } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, ConfirmDialog, InlineError, Input } from '../../components/ui';
-import { colors, spacing, touch, typography } from '../../theme';
 import { customerService } from '../../services';
 import type { ApiError } from '../../services';
 import {
@@ -846,7 +846,7 @@ const styles = StyleSheet.create({
     gap: spacing.s1,
     paddingHorizontal: spacing.s3,
     paddingVertical: spacing.s1 + 2,
-    borderRadius: 999,
+    borderRadius: radius.stadium,
     borderWidth: 1,
     borderColor: colors.borderDefault,
     backgroundColor: colors.surfaceCard,

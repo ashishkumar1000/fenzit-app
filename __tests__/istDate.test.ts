@@ -7,7 +7,14 @@
  * day boundary used to prove that two jobs 30 minutes apart can be a whole
  * day apart in overdue terms.
  */
-import { addIstDays, daysOverdue, formatIstDateLabel, isSameIstDay, istDayStartMs } from '../src/utils';
+import {
+  addIstDays,
+  daysOverdue,
+  formatIstDateLabel,
+  formatIstDateTimeLabel,
+  isSameIstDay,
+  istDayStartMs,
+} from '../src/utils';
 
 const NOW = '2026-09-04T04:00:00Z'; // 09:30 IST, Fri 4 Sep 2026
 const IST_MIDNIGHT = '2026-09-03T18:30:00Z'; // 00:00 IST on 4 Sep
@@ -117,5 +124,31 @@ describe('addIstDays', () => {
     // unchanged makes the API call fail with a visible error state instead.
     expect(addIstDays('not-a-date', 5)).toBe('not-a-date');
     expect(addIstDays('', 5)).toBe('');
+  });
+});
+
+describe('formatIstDateTimeLabel', () => {
+  it('renders the IST wall clock regardless of the device timezone', () => {
+    // 2026-11-13T14:30Z is 20:00 IST — the whole point of the +5:30 shift:
+    // a UTC-machine render must read 8:00 PM on the 13th, not 2:30 PM.
+    expect(formatIstDateTimeLabel('2026-11-13T14:30:00Z')).toBe('13 Nov, 8:00 PM');
+  });
+
+  it('UPPERCASES the meridiem — the app-wide convention (case-sensitive pin)', () => {
+    expect(formatIstDateTimeLabel('2026-11-13T14:30:00Z')).toMatch(/8:00 PM/);
+    expect(formatIstDateTimeLabel('2026-11-13T14:30:00Z')).not.toMatch(/pm/);
+  });
+
+  it('renders UTC midnight as 5:30 AM on the shifted day (the +5:30 proof)', () => {
+    expect(formatIstDateTimeLabel('2026-11-14T00:00:00Z')).toBe('14 Nov, 5:30 AM');
+  });
+
+  it('reads midnight IST as 12:xx AM (hour-12 rollover, not hour 0)', () => {
+    // 2026-11-13T18:35:00Z = midnight +5m IST.
+    expect(formatIstDateTimeLabel('2026-11-13T18:35:00Z')).toBe('14 Nov, 12:05 AM');
+  });
+
+  it('returns null on unparseable input (the caller renders nothing, never "NaN")', () => {
+    expect(formatIstDateTimeLabel('not-a-date')).toBeNull();
   });
 });

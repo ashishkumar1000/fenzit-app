@@ -45,7 +45,17 @@ export function statusToBadge(s: JobStatusApi): JobBadgeStatus {
  * no end.
  */
 export function formatTimeLabel(startIso: string, endIso: string | null): string {
-  const fmt = (d: Date) => d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  // en-IN prints the meridiem lowercase ("3:30 pm"); the app's other time
+  // renders say "AM"/"PM" (punch tiles, attendance history, activity
+  // timeline, stepper, dashboard pulse) — a job row under the punch card
+  // read "3:30 pm" while the punch above it said "4:06 AM" (Sally's casing
+  // split, 2026-11-13). Uppercase is the one convention. No \b anchors:
+  // "3:30pm" has no word boundary between digit and letter, and the match
+  // runs over the formatter's digits/colons output only.
+  const fmt = (d: Date) =>
+    d
+      .toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+      .replace(/(am|pm)/gi, m => m.toUpperCase());
   const start = new Date(startIso);
   return endIso ? `${fmt(start)} – ${fmt(new Date(endIso))}` : fmt(start);
 }

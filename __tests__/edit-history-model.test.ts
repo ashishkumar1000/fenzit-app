@@ -11,9 +11,10 @@
  * a fabricated row on malformed input fails here.
  *
  * The timestamp format is pinned on a fixed UTC anchor (2026-11-13 14:30Z,
- * 8:00 pm IST) — `13 Nov, 7:00 pm`, the rendering verified on device (no
- * year: history rows are recent; noting here that a same-day-in-a-past-year
- * row would also render without its year, accepted at review).
+ * 8:00 pm IST) — `13 Nov, 7:00 PM` — uppercased with Sally's casing
+ * unification (the device-verified render was "7:00 pm" before that call).
+ * No year: history rows are recent; a same-day-in-a-past-year row would
+ * also render without its year, accepted at review.
  */
 import { editChangeRows, type EditChangeRow } from '../src/features/jobDetail/editHistoryModel';
 import type { ActivityLogEntry } from '../src/services/resources/jobs';
@@ -50,8 +51,8 @@ describe('editChangeRows — job_edited with changes', () => {
     expect(rows).toEqual([
       {
         field: 'Start time',
-        before: '13 Nov, 7:00 pm',
-        after: '13 Nov, 8:30 pm',
+        before: '13 Nov, 7:00 PM',
+        after: '13 Nov, 8:30 PM',
         isIdField: false,
       },
     ]);
@@ -149,8 +150,8 @@ describe('editChangeRows — job_edited with changes', () => {
     expect(rows).toEqual([
       {
         field: 'End time',
-        before: '13 Nov, 7:00 pm',
-        after: '13 Nov, 8:30 pm',
+        before: '13 Nov, 7:00 PM',
+        after: '13 Nov, 8:30 PM',
         isIdField: false,
       },
     ]);
@@ -170,11 +171,11 @@ describe('editChangeRows — job_edited with changes', () => {
     });
   });
 
-  it('renders the IST wall clock, never the device timezone (UTC midnight is 5:30 am in Bengaluru)', () => {
+  it('renders the IST wall clock, never the device timezone (UTC midnight is 5:30 AM in Bengaluru)', () => {
     // The old toLocaleString('en-IN') rendered the DEVICE's zone: on a UTC
     // test machine 2026-11-14T00:00Z printed "14 Nov, 12:00 am" — wrong by
     // 5½ hours against every other IST label on these screens. The
-    // formatter shifts +5:30 first, so a UTC midnight instant reads 5:30 am
+    // formatter shifts +5:30 first, so a UTC midnight instant reads 5:30 AM
     // IST on the 14th — the proof that no locale machinery is involved.
     const rows = editChangeRows(
       entry({
@@ -185,8 +186,8 @@ describe('editChangeRows — job_edited with changes', () => {
     );
     expect(rows[0]).toEqual({
       field: 'Start time',
-      before: '14 Nov, 5:30 am',
-      after: '14 Nov, 5:30 am',
+      before: '14 Nov, 5:30 AM',
+      after: '14 Nov, 5:30 AM',
       isIdField: false,
     });
   });

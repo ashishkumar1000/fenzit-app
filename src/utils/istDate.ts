@@ -114,13 +114,16 @@ export function formatIstDateLabel(iso: string, nowIso: string = defaultNowIso()
 }
 
 /**
- * An ISO instant → "13 Nov, 7:00 pm" in IST wall-clock — the edit-history
+ * An ISO instant → "13 Nov, 7:00 PM" in IST wall-clock — the edit-history
  * and activity-timeline format. Read from the UTC fields of the +5:30
  * shifted timestamp, so the label is the IST wall clock regardless of the
  * device's timezone: a plain `toLocaleString` renders the DEVICE's zone,
  * which would disagree with every other IST label on these screens (code
- * review 2026-11-13). Unparseable input → null; callers render nothing or
- * the raw value rather than a wrong time.
+ * review 2026-11-13). The meridiem is uppercased (Sally's casing unification,
+ * 2026-11-13 — the punch tiles and attendance history say "AM"/"PM"; the
+ * timeline already uppercased this label, so one convention app-wide).
+ * Unparseable input → null; callers render nothing or the raw value rather
+ * than a wrong time.
  */
 export function formatIstDateTimeLabel(iso: string): string | null {
   const ms = Date.parse(iso);
@@ -131,6 +134,6 @@ export function formatIstDateTimeLabel(iso: string): string | null {
   const h24 = shifted.getUTCHours();
   const minute = String(shifted.getUTCMinutes()).padStart(2, '0');
   const hour12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  const meridiem = h24 < 12 ? 'am' : 'pm';
+  const meridiem = h24 < 12 ? 'AM' : 'PM';
   return `${day} ${month}, ${hour12}:${minute} ${meridiem}`;
 }
