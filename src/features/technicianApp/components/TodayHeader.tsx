@@ -5,6 +5,9 @@
  * and the notifications bell on a card chip. The dot is REAL state, not
  * decoration — green when NetInfo reports a connection, gray when not,
  * hidden until the first read so it never lies on launch.
+ *
+ * Epic 22 — the create-job entry moved to the Jobs tab's "Add job" button
+ * (one entry point), so the header carries only the bell.
  */
 import { StyleSheet, Text, View } from 'react-native';
 import { Bell } from 'lucide-react-native';
@@ -23,7 +26,13 @@ type Props = {
   avatarUrl?: string | null;
 };
 
-export function TodayHeader({ name, avatarUrl, online, unreadCount, onPressBell }: Props) {
+export function TodayHeader({
+  name,
+  avatarUrl,
+  online,
+  unreadCount,
+  onPressBell,
+}: Props) {
   return (
     <View style={styles.header}>
       <View style={styles.avatarWrap}>

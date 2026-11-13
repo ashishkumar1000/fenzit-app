@@ -4,6 +4,6 @@
  * owner-side screen for managing their team).
  */
 export { default as TodayScreen } from './TodayScreen';
-export { default as HistoryScreen } from './HistoryScreen';
+export { default as TechJobsScreen } from './TechJobsScreen';
 export { default as ProfileScreen } from './ProfileScreen';
 export { default as TechJobDetailScreen } from './TechJobDetailScreen';

@@ -56,13 +56,26 @@ import { buildCustomerPick, sameCentre } from './buildCustomerPick';
 import { usePickerLocate } from './usePickerLocate';
 import { pickerAddressLabel, stripPlusCode } from './pickerAddressLabel';
 import { useReverseAddress } from './useReverseAddress';
-import type { RootStackParamList } from '../../../navigation/types';
+import type {
+  RootStackParamList,
+  TechnicianRootStackParamList,
+} from '../../../navigation/types';
 
 /** Bengaluru centre — the India-bounded default when there is no initial
  *  pin and no silent current-location fix. */
 const DEFAULT_REGION: LatLng = { latitude: 12.9716, longitude: 77.5946 };
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MapPinPicker'>;
+/**
+ * Dual-registered (Epic 22): the owner stack since 15-4 — and the
+ * technician stack now, so the technician-stack AddCustomer's location box
+ * can open it (customer mode only; the office mode's `popTo('OfficeForm')`
+ * target never exists on the technician stack). The intersection keeps ONE
+ * component compilable against both lists (the SelectSkills precedent).
+ */
+type Props = NativeStackScreenProps<
+  RootStackParamList & TechnicianRootStackParamList,
+  'MapPinPicker'
+>;
 
 export default function MapPinPickerScreen({ navigation, route }: Props) {
   // Typed against the route's own params (no ad-hoc re-declaration of the
@@ -70,7 +83,9 @@ export default function MapPinPickerScreen({ navigation, route }: Props) {
   // only to keep the original flow behavior-safe if the params object is
   // ever absent.
   const { initialLatitude, initialLongitude, radiusM: initialRadiusM, mode = 'office' } =
-    (route.params ?? {}) as NonNullable<RootStackParamList['MapPinPicker']>;
+    (route.params ?? {}) as NonNullable<
+      (RootStackParamList & TechnicianRootStackParamList)['MapPinPicker']
+    >;
   const isCustomer = mode === 'customer';
   const mapRef = useRef<MapView | null>(null);
 

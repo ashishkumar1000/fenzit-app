@@ -63,6 +63,12 @@ export interface JobCounts {
   overdue: number;
   completed: number;
   cancelled: number;
+  /**
+   * Jobs of mine waiting for the owner's approval (Epic 22). Added after
+   * the fields above — a cached/older profile payload may omit it, so
+   * readers fall back to 0 (`?? 0`).
+   */
+  pending?: number;
 }
 
 /**
@@ -241,6 +247,16 @@ export interface MyProfile {
   customers: Paginated<unknown>;
   jobs: Paginated<ProfileJob>;
   jobCounts: JobCounts;
+  /**
+   * Epic 22 — the employee's own job-creation switches (memberships row).
+   * Issued on employee profiles only; optional so an older backend fails
+   * hidden. The New Job action shows only when `canCreateJobs === true`
+   * (absent or false → hidden); `jobApprovalRequired` only tells the
+   * creator whether their next submission lands pending or scheduled —
+   * the POST /jobs endpoint re-checks both server-side.
+   */
+  canCreateJobs?: boolean;
+  jobApprovalRequired?: boolean;
 }
 
 /**

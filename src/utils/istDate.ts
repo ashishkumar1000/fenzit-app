@@ -65,6 +65,21 @@ export function istDayStartMs(nowIso: string = defaultNowIso()): number {
 }
 
 /**
+ * The IST calendar date `days` away from `date` (negative = earlier),
+ * `YYYY-MM-DD` in → `YYYY-MM-DD` out. Pure calendar arithmetic on the date
+ * STRING (UTC days), so it never touches the device clock — the report
+ * windows (Epic 22) build `from` = `to` − (N−1) with it.
+ */
+export function addIstDays(date: string, days: number): string {
+  const ms = Date.parse(`${date}T00:00:00Z`) + days * MS_PER_DAY;
+  // Malformed input propagates unchanged rather than crashing: callers pass
+  // the result straight to the API, so a bad date fails there as a visible
+  // error state — a thrown RangeError here would take the whole screen down.
+  if (Number.isNaN(ms)) return date;
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
  * Whole days the IST day of `iso` falls before the IST day of `now` —
  * 0 means "today" (not overdue, even if earlier today), 1 means "yesterday"
  * (→ "1 day overdue"), negative means future (also 0 here; the Overdue scope
@@ -96,4 +111,26 @@ export function formatIstDateLabel(iso: string, nowIso: string = defaultNowIso()
   return year === new Date(Date.parse(nowIso) + IST_OFFSET_MS).getUTCFullYear()
     ? label
     : `${label} ${year}`;
+}
+
+/**
+ * An ISO instant → "13 Nov, 7:00 pm" in IST wall-clock — the edit-history
+ * and activity-timeline format. Read from the UTC fields of the +5:30
+ * shifted timestamp, so the label is the IST wall clock regardless of the
+ * device's timezone: a plain `toLocaleString` renders the DEVICE's zone,
+ * which would disagree with every other IST label on these screens (code
+ * review 2026-11-13). Unparseable input → null; callers render nothing or
+ * the raw value rather than a wrong time.
+ */
+export function formatIstDateTimeLabel(iso: string): string | null {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return null;
+  const shifted = new Date(ms + IST_OFFSET_MS);
+  const day = shifted.getUTCDate();
+  const month = MONTHS[shifted.getUTCMonth()];
+  const h24 = shifted.getUTCHours();
+  const minute = String(shifted.getUTCMinutes()).padStart(2, '0');
+  const hour12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const meridiem = h24 < 12 ? 'am' : 'pm';
+  return `${day} ${month}, ${hour12}:${minute} ${meridiem}`;
 }

@@ -7,6 +7,7 @@
 // "our own abort, not a real error" detection: isAbort
 
 export {
+  addIstDays,
   daysOverdue,
   formatIstDateLabel,
   isSameIstDay,

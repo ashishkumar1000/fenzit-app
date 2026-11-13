@@ -21,10 +21,24 @@ import type {
   UpdateCustomerRequest,
 } from '../../services';
 import { currentResetEpoch } from '../../services/resetRegistry';
-import type { AddCustomerReturnRouteName, RootStackParamList } from '../../navigation/types';
+import type {
+  AddCustomerReturnRouteName,
+  RootStackParamList,
+  TechnicianRootStackParamList,
+} from '../../navigation/types';
 import { loadCustomers, upsertCustomer } from './useCustomers';
 
-type Navigation = NativeStackNavigationProp<RootStackParamList, 'AddCustomer'>;
+/**
+ * The screen's nav type — the dual-registration intersection (Epic 22: the
+ * screen is registered on the owner AND the technician stack). The hook
+ * never lands on the technician stack (its POST/PATCH paths need
+ * `customer.write`), but the screen passes its one nav object in, so the
+ * type must accept both registrations.
+ */
+type Navigation = NativeStackNavigationProp<
+  RootStackParamList & TechnicianRootStackParamList,
+  'AddCustomer'
+>;
 
 /**
  * Turns a failed `POST /customers` into copy the screen can show directly.

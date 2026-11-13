@@ -21,8 +21,9 @@
  * alone doesn't. Pressing the already-active segment is a no-op (no
  * redundant `onChange`).
  */
+import { Fragment } from 'react';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, radius, shadow, spacing, touch, weight } from '../../theme';
 
 export type SegmentOption<V extends string> = {
@@ -38,16 +39,36 @@ type Props<V extends string> = {
   options: ReadonlyArray<SegmentOption<V>>;
   value: V;
   onChange: (next: V) => void;
+  /**
+   * How segments get their width. `equal` (default) — the M3 look: every
+   * segment shares the track equally. `content` — each segment wraps its
+   * label (the track scrolls horizontally if the labels overflow, e.g. five
+   * long scopes on a small phone); use it when equal slots would truncate
+   * the labels. The visual language (sunken track, raised active pill) is
+   * the same either way.
+   */
+  sizing?: 'equal' | 'content';
 };
 
-export function SegmentedControl<V extends string>({ options, value, onChange }: Props<V>) {
-  return (
+export function SegmentedControl<V extends string>({
+  options,
+  value,
+  onChange,
+  sizing = 'equal',
+}: Props<V>) {
+  const track = (
     <View style={styles.track}>
-      {options.map(option => {
+      {options.map((option, index) => {
         const active = option.value === value;
+        // iOS-style hairline divider between adjacent inactive segments —
+        // inactive segments have no pill of their own, so the divider is
+        // what makes the boundary readable. Neither side of an active
+        // segment needs one (the raised card already separates it).
+        const prevActive = index > 0 && options[index - 1].value === value;
         return (
-          <Pressable
-            key={option.value}
+          <Fragment key={option.value}>
+            {index > 0 && !active && !prevActive ? <View style={styles.divider} /> : null}
+            <Pressable
             accessibilityRole="button"
             accessibilityState={{ selected: active }}
             // No-op on the already-active segment: a view switch control
@@ -58,6 +79,7 @@ export function SegmentedControl<V extends string>({ options, value, onChange }:
             }}
             style={({ pressed }) => [
               styles.segment,
+              sizing === 'equal' ? styles.segmentEqual : styles.segmentContent,
               active ? styles.segmentActive : null,
               pressed ? styles.segmentPressed : null,
             ]}>
@@ -75,9 +97,22 @@ export function SegmentedControl<V extends string>({ options, value, onChange }:
               )}
             </View>
           </Pressable>
+          </Fragment>
         );
       })}
     </View>
+  );
+  if (sizing === 'equal') return track;
+  // Content mode: a horizontally scrollable track so an overflowing label
+  // set degrades to a swipe, never to truncation. No scroll indicator — the
+  // cut-off pill edge at the viewport border already signals scrollability.
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.contentTrackScroll}>
+      {track}
+    </ScrollView>
   );
 }
 
@@ -87,16 +122,46 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceSunken,
     borderRadius: radius.md,
     padding: spacing.s1,
-    gap: spacing.s1,
+    gap: spacing.s2,
   },
   segment: {
     // touch.min per segment: each one is an independent tap target and the DS
     // floor for those is 44px (the track is therefore 44 + 2 × s1 = 52 tall).
-    flex: 1,
     height: touch.min,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
+    // Reserved edge space: inactive segments have no pill of their own, so
+    // when labels run long the centring slack can shrink to zero and
+    // neighbouring words read as one sentence. The padding guarantees every
+    // label keeps air on both sides; a label that still can't fit ellipsises
+    // (numberOfLines={1}) rather than colliding.
+    paddingHorizontal: spacing.s3,
+  },
+  // Equal mode — the M3 look: every segment shares the track equally.
+  segmentEqual: {
+    flex: 1,
+    // Narrower edge padding than content mode: equal mode always has few,
+    // short labels, and the room goes to keeping them whole (four scopes
+    // with a badge truncate at the content-mode padding).
+    paddingHorizontal: spacing.s2,
+  },
+  // Content mode — each segment wraps its label (minimum width so a very
+  // short label still holds a comfortable tap target); the track scrolls.
+  segmentContent: {
+    minWidth: 64,
+  },
+  contentTrackScroll: {
+    // The ScrollView's content container grows with the track; the track
+    // itself must not stretch to the viewport (or 'content' would behave
+    // exactly like 'equal' on wide-enough screens).
+    alignSelf: 'flex-start',
+  },
+  divider: {
+    width: 1,
+    alignSelf: 'center',
+    height: spacing.s5,
+    backgroundColor: colors.borderDefault,
   },
   segmentActive: {
     backgroundColor: colors.surfaceCard,

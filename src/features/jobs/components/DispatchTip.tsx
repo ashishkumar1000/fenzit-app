@@ -6,7 +6,7 @@
  * (`profile.jobCounts.overdue`) is passed in by the screen.
  */
 import { StyleSheet, Text, View } from 'react-native';
-import { Lightbulb } from 'lucide-react-native';
+import { LightbulbIcon } from '../icons';
 import { colors, radius, spacing, typography } from '../../../theme';
 
 type Props = {
@@ -18,7 +18,7 @@ export function DispatchTip({ overdueCount }: Props) {
   return (
     <View style={styles.root}>
       <View style={styles.iconTile}>
-        <Lightbulb size={16} color={colors.primary} strokeWidth={2} />
+        <LightbulbIcon size={16} color={colors.primary} strokeWidth={2} />
       </View>
       <Text style={styles.text}>
         <Text style={styles.lead}>Tip: </Text>

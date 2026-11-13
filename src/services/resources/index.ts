@@ -122,8 +122,10 @@ export type {
   JobPriority,
   JobScope,
   JobServiceType,
+  NewCustomerPayload,
   JobStatusApi,
   ListJobsQuery,
+  PendingDecision,
   UpdateJobEditFields,
   UpdateJobRequest,
   WorkflowTemplate,
@@ -141,6 +143,23 @@ export type {
   ReportRequestStatus,
   ReportStatusResponse,
 } from './reports';
+export { approvalQueueService } from './approvalQueue';
+export type { ApprovalQueueItem } from './approvalQueue';
+export { membersService } from './members';
+export type {
+  CompanyMember,
+  MemberJobSettings,
+  MemberJobSettingsResponse,
+  MemberRole,
+} from './members';
+export { jobReportService } from './jobReports';
+export type {
+  EmployeeReportOutcomes,
+  EmployeeReportRejection,
+  EmployeeReportResponse,
+  OwnerReportHeadline,
+  OwnerReportSummary,
+} from './jobReports';
 export { deviceTokenService } from './deviceTokens';
 export type { DeviceTokenPlatform, RegisterDeviceTokenBody } from './deviceTokens';
 export { authApi } from './authApi';

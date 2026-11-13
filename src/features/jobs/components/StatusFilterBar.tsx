@@ -28,17 +28,21 @@ const JOB_FILTERS: { value: JobFilter; label: string }[] = [
   { value: 'in_progress', label: 'In progress' },
   { value: 'completed', label: 'Done' },
   { value: 'cancelled', label: 'Cancelled' },
+  // Epic 22 — the History bar's Rejected chip. Never shown under Today
+  // (callers pass TODAY_FILTERS there; the day scope excludes rejected).
+  { value: 'rejected', label: 'Rejected' },
 ];
 
 type Props = {
   value: JobFilter;
   onChange: (next: JobFilter) => void;
   /**
-   * Which chips to show, in `JOB_FILTERS` order. Defaults to all five —
-   * the Today-scope baseline. Scopes where the server pre-narrows status
-   * (History) pass a subset (`all` → no status param → both finished
-   * statuses; Upcoming/Overdue hide the row entirely — chips there would
-   * lie about a status set the caller can't change).
+   * Which chips to show, in `JOB_FILTERS` order. Today passes
+   * `TODAY_FILTERS` (the five day-scope chips); History passes
+   * `HISTORY_FILTERS` (finished + rejected). Defaults to all six when
+   * omitted — legacy callers. Upcoming/Overdue/Pending hide the row
+   * entirely — chips there would lie about a status set the caller can't
+   * change.
    */
   filters?: JobFilter[];
 };

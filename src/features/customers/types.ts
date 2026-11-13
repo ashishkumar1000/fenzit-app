@@ -52,6 +52,33 @@ export type PickedAddress = {
 };
 
 /**
+ * The raw form state `AddCustomerScreen` collects, returned to `TechNewJob`
+ * (Epic 22) WITHOUT saving — an employee JWT lacks `customer.write`, so the
+ * customer is not POSTed from the phone; its fields ride `POST /jobs`'s
+ * `newCustomer` payload and the find-or-create happens server-side. It is
+ * exactly the add-mode state of the form (trimmed, errors excluded), which
+ * also makes it a complete seed: TechNewJob passes a captured draft back in
+ * when the employee reopens the form to change it.
+ *
+ * `snapshot` carries the located map pick (`null` = manual entry only — the
+ * same rule the create payload obeys) and `previewLine` is what the screen's
+ * resolved-address box showed.
+ */
+export type NewCustomerDraft = {
+  name: string;
+  /** Digits only, no dial code. */
+  phone: string;
+  city: string;
+  /** The Pincode field's value (`area` on the wire). */
+  area: string;
+  /** The Street, Landmark or Locality field — the free-text `address`. */
+  street: string;
+  addressDetails: string;
+  snapshot: PickedAddressSnapshot | null;
+  previewLine: string;
+};
+
+/**
  * What the "Add customer" sheet collects. Name and phone are required; the
  * rest are optional, so they arrive as trimmed strings that may be empty —
  * the caller decides whether to omit them from the API payload.

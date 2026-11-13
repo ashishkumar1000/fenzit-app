@@ -9,7 +9,10 @@ type Props = {
 };
 
 export function JobActionsSection({ jobStatus, onEdit, onCancel }: Props) {
-  if (jobStatus !== 'scheduled') {
+  // Epic 22 (CAP-5): a pending employee job takes owner edits too — the
+  // owner may fix any field before approving. Cancel stays available (the
+  // backend cancels a pending job and tells the creator).
+  if (jobStatus !== 'scheduled' && jobStatus !== 'pending_approval') {
     return null;
   }
 

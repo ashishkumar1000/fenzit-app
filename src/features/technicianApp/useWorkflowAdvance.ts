@@ -25,6 +25,7 @@ import { jobService, type ApiError, type JobDetail } from '../../services';
 import { logEvent } from '../../services/telemetry';
 import { generateIdempotencyKey } from '../../utils/idempotency';
 import { apiJobOf, upsertTechnicianJob } from './useTechnicianJobs';
+import { upsertJob } from '../jobs/useJobs';
 import { classifyAdvanceError, JOB_LOCKED_MESSAGE } from './workflowActionBarModel';
 
 type Params = {
@@ -108,6 +109,10 @@ export function useWorkflowAdvance({
         // the new step's timestamp arrives with the resync below.
         setDetail(d => (d ? { ...d, ...job } : d));
         upsertTechnicianJob(job);
+        // Both stores hold this row: the shared Jobs tab must not keep the
+        // pre-advance status until its next load (the detail screen's own
+        // refetch path pushes to both — review 2026-11-13).
+        upsertJob(job);
         void load(false);
       } catch (caught) {
         const err = caught as ApiError;
@@ -132,7 +137,10 @@ export function useWorkflowAdvance({
             const row = detailRef.current
               ? { ...apiJobOf(detailRef.current), currentStep }
               : null;
-            if (row) upsertTechnicianJob(row);
+            if (row) {
+              upsertTechnicianJob(row);
+              upsertJob(row); // same two-store rule as the success path
+            }
             void load(false);
             break;
           }

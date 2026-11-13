@@ -11,8 +11,10 @@ import { colors, spacing, typography } from '../../../theme';
 import { Badge } from '../../../components/ui';
 import type { ActivityLogEntry, WorkflowTemplate } from '../../../services';
 import { formatDistance, haversineMetres } from '../../../utils';
+import { formatIstDateTimeLabel } from '../../../utils/istDate';
 import { eventStatusKey, resolveEventLabel } from '../eventLabels';
 import { parseStepLocation } from '../locationMetadata';
+import { editChangeRows } from '../editHistoryModel';
 
 type Props = {
   /** Oldest-first, exactly as the API returns them. */
@@ -135,20 +137,14 @@ function locationCaptionFor(
   return { kind: 'chip', text: formatDistance(metres), flagged: location.flagged };
 }
 
-/** "12 Aug, 2:14 PM" — the timeline's timestamp format (AC 3); the
- *  meridiem is uppercased to match the app's other time renders (en-IN
- *  prints it lowercase). Unparseable input → raw. */
+/** "12 Aug, 2:14 PM" — the timeline's timestamp format (AC 3), in IST
+ *  wall-clock (NOT the device's timezone — a toLocaleString here would
+ *  disagree with the row's own IST labels; review 2026-11-13). The
+ *  meridiem is uppercased to match the app's other time renders.
+ *  Unparseable input → raw. */
 function timestampLabel(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date
-    .toLocaleString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-    .replace(/\b(am|pm)\b/g, (meridiem) => meridiem.toUpperCase());
+  const label = formatIstDateTimeLabel(iso);
+  return label ? label.replace(/(am|pm)$/, m => m.toUpperCase()) : iso;
 }
 
 export function ActivityTimeline({ entries, workflowTemplate, jobSite }: Props) {
@@ -166,6 +162,16 @@ export function ActivityTimeline({ entries, workflowTemplate, jobSite }: Props) 
               {/* Unknown event types render their raw value (never crash). */}
               <Text style={styles.label}>{resolveEventLabel(entry.eventType, workflowTemplate)}</Text>
               <Text style={styles.timestamp}>{timestampLabel(entry.createdAt)}</Text>
+              {/* CAP-6 — an owner edit's per-field before → after lines
+                  (editHistoryModel.ts). An old save without the metadata
+                  renders the label alone, exactly as before. */}
+              {editChangeRows(entry).map(row => (
+                <Text key={row.field} style={styles.editRow}>
+                  {row.isIdField
+                    ? `${row.field} changed`
+                    : `${row.field}: ${row.before ?? '—'} → ${row.after ?? '—'}`}
+                </Text>
+              ))}
               {(() => {
                 const caption = locationCaptionFor(entry, jobSite);
                 if (!caption) return null;
@@ -262,6 +268,13 @@ const styles = StyleSheet.create({
   // distance is provenance metadata, not a headline. Captured fixes render
   // as a chip row (blue pill + pin); flagged fixes get a muted hint beside it.
   caption: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  // CAP-6 — one per-field "Start time: 2:30 pm → 3:00 pm" line under an
+  // owner-edit row; the caption family's tone, the row's own line height.
+  editRow: {
     ...typography.caption,
     color: colors.textMuted,
     marginTop: 2,

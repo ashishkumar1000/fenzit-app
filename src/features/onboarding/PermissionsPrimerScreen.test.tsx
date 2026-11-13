@@ -129,6 +129,76 @@ describe('the live rows', () => {
   });
 });
 
+describe('the probe failure (fail-open rule)', () => {
+  // The OS probe can die (a driver-level crash, an unexpected OS answer).
+  // The rule: fail to 'denied' — every row keeps its Allow pill, the screen
+  // does not crash, and Continue STILL runs the real asks. Before the
+  // 2026-11-13 fix the notifications state stayed 'checking' forever, the
+  // row rendered muted-granted, and Continue silently skipped the ask.
+  it('a failed probe leaves every row offerable — including Notifications', async () => {
+    fineCheckSpy.mockRejectedValue(new Error('probe exploded'));
+    const { r } = await render();
+
+    expect(allowPill(r, 'Location')).toHaveLength(1);
+    expect(allowPill(r, 'Camera')).toHaveLength(1);
+    expect(allowPill(r, 'Notifications')).toHaveLength(1);
+  });
+
+  it('Continue still asks after a failed probe — notifications included', async () => {
+    fineCheckSpy.mockRejectedValue(new Error('probe exploded'));
+    const { r, onContinue } = await render();
+
+    await act(async () => {
+      continueBtn(r).props.onPress();
+      // Flush the sequential asks.
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+
+    // The notifications prompt fired (Android 13+ POST_NOTIFICATIONS).
+    expect(
+      requestSpy.mock.calls.some(
+        call => call[0] === PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+      ),
+    ).toBe(true);
+    // A denial never blocks the way.
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed RE-probe keeps what is already granted — camera and notifications never re-offer', async () => {
+    // First probe: location denied (its Allow pill shows), camera and
+    // notifications granted (no pills). The Allow tap re-probes — and THAT
+    // probe dies. The catch must not demote the granted rows to 'denied':
+    // a re-ask of a granted permission is a lie the row would wear.
+    fineCheckSpy.mockImplementation(
+      async (perm: string) => perm !== PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    );
+    const { r } = await render();
+    expect(allowPill(r, 'Location')).toHaveLength(1);
+    expect(allowPill(r, 'Camera')).toHaveLength(0);
+    expect(allowPill(r, 'Notifications')).toHaveLength(0);
+
+    fineCheckSpy.mockRejectedValue(new Error('probe exploded'));
+    await act(async () => {
+      allowPill(r, 'Location')[0].props.onPress();
+    });
+    // Camera and notifications stay granted; only the location row,
+    // which was never granted, keeps offering.
+    expect(allowPill(r, 'Location')).toHaveLength(1);
+    expect(allowPill(r, 'Camera')).toHaveLength(0);
+    expect(allowPill(r, 'Notifications')).toHaveLength(0);
+  });
+
+  it('a failed probe keeps the iOS camera blind spot unknown — no fake Allow pill', async () => {
+    // iOS camera is the JS-cannot-read state ('unknown'); demoting it to
+    // 'denied' in the catch would render an Allow pill whose iOS request
+    // is a no-op — the honest ask-at-first-use path must survive.
+    useOs('ios');
+    mockCheckPermission.mockRejectedValue(new Error('nitro exploded'));
+    const { r } = await render();
+    expect(allowPill(r, 'Camera')).toHaveLength(0);
+  });
+});
+
 describe('Continue asks one by one', () => {
   it('location first, camera only after location settles — and a denial never blocks', async () => {
     fineCheckSpy.mockResolvedValue(false);

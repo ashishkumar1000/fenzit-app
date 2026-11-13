@@ -7,7 +7,7 @@
  * day boundary used to prove that two jobs 30 minutes apart can be a whole
  * day apart in overdue terms.
  */
-import { daysOverdue, formatIstDateLabel, isSameIstDay, istDayStartMs } from '../src/utils';
+import { addIstDays, daysOverdue, formatIstDateLabel, isSameIstDay, istDayStartMs } from '../src/utils';
 
 const NOW = '2026-09-04T04:00:00Z'; // 09:30 IST, Fri 4 Sep 2026
 const IST_MIDNIGHT = '2026-09-03T18:30:00Z'; // 00:00 IST on 4 Sep
@@ -71,5 +71,51 @@ describe('formatIstDateLabel', () => {
     // 2026-09-04T19:30:00Z is 4 Sep UTC but 01:00 IST 5 Sep → "5 Sep".
     expect(formatIstDateLabel('2026-09-04T17:00:00Z', NOW)).toBe('4 Sep');
     expect(formatIstDateLabel('2026-09-04T19:30:00Z', NOW)).toBe('5 Sep');
+  });
+});
+
+describe('addIstDays', () => {
+  // The report windows (Epic 22) build `from` = `to` − (N−1) with this, so a
+  // wrong day count silently widens or narrows every summary on the app.
+  // Pure string math on UTC calendar days — no clock, no timezone.
+
+  it('steps single days across a month boundary', () => {
+    expect(addIstDays('2026-09-30', 1)).toBe('2026-10-01');
+    expect(addIstDays('2026-10-01', -1)).toBe('2026-09-30');
+  });
+
+  it('spans a 30-day window across the month edge (from = to − 29)', () => {
+    expect(addIstDays('2026-09-04', -29)).toBe('2026-08-06');
+    // And back, proving the pair is a true 30-day window inclusive.
+    expect(addIstDays('2026-08-06', 29)).toBe('2026-09-04');
+  });
+
+  it('spans a 7-day window', () => {
+    expect(addIstDays('2026-09-04', -6)).toBe('2026-08-29');
+  });
+
+  it('crosses the year boundary including the leap-year February 2028', () => {
+    expect(addIstDays('2026-01-01', -1)).toBe('2025-12-31');
+    expect(addIstDays('2025-12-20', 30)).toBe('2026-01-19');
+    // 2028 is a leap year: Feb has 29 days.
+    expect(addIstDays('2028-02-28', 1)).toBe('2028-02-29');
+    expect(addIstDays('2028-02-28', 2)).toBe('2028-03-01');
+    // 2027 is not: Feb has 28 days.
+    expect(addIstDays('2027-02-28', 1)).toBe('2027-03-01');
+  });
+
+  it('is its own inverse for zero and mirrored days', () => {
+    expect(addIstDays('2026-09-04', 0)).toBe('2026-09-04');
+    expect(addIstDays(addIstDays('2026-09-04', 17), -17)).toBe('2026-09-04');
+  });
+
+  it('propagates malformed input unchanged — the API call fails visibly, never a crash', () => {
+    // Adversarial: the util is pure and unguarded by design (callers pass
+    // server dates). A malformed date must not silently produce a
+    // valid-looking neighbouring date, and must not throw (a RangeError from
+    // toISOString on NaN would crash the report screen). Returning the input
+    // unchanged makes the API call fail with a visible error state instead.
+    expect(addIstDays('not-a-date', 5)).toBe('not-a-date');
+    expect(addIstDays('', 5)).toBe('');
   });
 });

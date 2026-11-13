@@ -47,6 +47,11 @@ export function actionBarAction(
 ): ActionBarAction {
   if (job.status === 'cancelled') return { kind: 'none' };
   if (job.status === 'completed') return { kind: 'completed' };
+  // Epic 22 — a pending job is not assigned work yet (the owner hasn't
+  // approved it) and a rejected one never will be: neither may be advanced.
+  if (job.status === 'pending_approval' || job.status === 'rejected') {
+    return { kind: 'none' };
+  }
 
   const next = buildStepper(job, log).find(step => step.state === 'next');
   // A non-terminal job always has exactly one actionable step — an absent

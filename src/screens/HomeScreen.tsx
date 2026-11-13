@@ -14,6 +14,7 @@ import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../navigation/types';
+import type { JobCounts } from '../services';
 import type { JobScope } from '../services';
 import HomeHeader from '../components/HomeHeader';
 import NotificationBell from '../components/NotificationBell';
@@ -29,7 +30,9 @@ import {
   NoJobsCard,
   LeaveReviewBanner,
   TodaysJobsSection,
+  EmployeeJobsStrip,
   hasAnyJobCount,
+  useOwnerJobSummary,
   useTodayPulse,
 } from '../features/home';
 import { useNotifications } from '../features/notifications';
@@ -39,6 +42,15 @@ type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Home'>,
   NativeStackScreenProps<RootStackParamList>
 >;
+
+/** Zero counts — the established-account probe's shape on a loading profile. */
+const EMPTY_COUNTS: JobCounts = {
+  today: 0,
+  upcoming: 0,
+  overdue: 0,
+  completed: 0,
+  cancelled: 0,
+};
 
 export default function HomeScreen({ navigation }: Props) {
   const [pushCardShown, setPushCardShown] = useState(false);
@@ -62,6 +74,15 @@ export default function HomeScreen({ navigation }: Props) {
   // review banner is admin-only (a viewer cannot read leave requests).
   const canWrite = useCanWrite();
   const isAdmin = isAdminRole(useSessionRole());
+  // Epic 22 — the employee-created-jobs summary strip: fetched only for an
+  // established ADMIN account. `isAdmin` gates the owner-only endpoint (a
+  // viewer's GET /job-reports/owner is a doomed 403 on every focus);
+  // `hasAnyJobCount` includes `pending`, so a tenant whose only jobs await
+  // approval is established too (review 2026-11-13).
+  const isEstablished =
+    isAdmin && hasTechnicians && hasAnyJobCount(profile?.jobCounts ?? EMPTY_COUNTS);
+  const { summary, isLoading: summaryLoading, error: summaryError, refresh: refreshJobSummary } =
+    useOwnerJobSummary(isEstablished);
 
   // Every tab focus asks for fresh counts so the tiles are never a snapshot
   // from login. The store's 15s throttle makes rapid tab switching cheap:
@@ -71,7 +92,8 @@ export default function HomeScreen({ navigation }: Props) {
     useCallback(() => {
       void loadMyProfile();
       void loadUnreadCount();
-    }, [loadUnreadCount]),
+      refreshJobSummary();
+    }, [loadUnreadCount, refreshJobSummary]),
   );
 
   const handleRefresh = useCallback(async () => {
@@ -83,10 +105,15 @@ export default function HomeScreen({ navigation }: Props) {
       // 15s focus throttle — a stale badge next to a fresh dashboard would
       // contradict itself.
       await loadUnreadCount({ force: true });
+      // Epic 22 — the summary strip rides the same pull (its window is
+      // point-in-time; a stale "waiting" count next to fresh tiles would
+      // contradict itself). Awaited so the spinner covers the strip's
+      // refresh too, not just the tiles'.
+      await refreshJobSummary();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refresh, loadUnreadCount]);
+  }, [refresh, loadUnreadCount, refreshJobSummary]);
 
   const handleNewJob = useCallback(() => {
     navigation.navigate('NewJob');
@@ -144,6 +171,11 @@ export default function HomeScreen({ navigation }: Props) {
     },
     [navigation],
   );
+
+  /** The approval queue's deep link — the Jobs tab's Pending segment. */
+  const handlePressPending = useCallback(() => {
+    navigation.navigate('Jobs', { scope: 'pending' });
+  }, [navigation]);
 
   /**
    * Shown when a *refresh* failed but we still have a profile to render — the
@@ -317,6 +349,22 @@ export default function HomeScreen({ navigation }: Props) {
         {errorBanner}
         {quickActions}
         {attendanceTile}
+
+        {/* Epic 22 — the owner dashboard's mobile summary: the headline
+            counts + pending for the last 30 IST days (GET /job-reports/
+            owner; the full dashboard is web-only). Renders for an
+            established admin account — loading as a skeleton, failure as a
+            retry row, so "feature absent" is never confused with "not
+            loaded" (review 2026-11-13). */}
+        {isEstablished ? (
+          <EmployeeJobsStrip
+            summary={summary}
+            isLoading={summaryLoading}
+            error={summaryError}
+            onRetry={refreshJobSummary}
+            onPressPending={handlePressPending}
+          />
+        ) : null}
 
         <TodaysJobsSection
           jobs={profile.jobs.data}

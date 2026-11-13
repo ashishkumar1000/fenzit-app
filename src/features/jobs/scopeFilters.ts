@@ -15,12 +15,41 @@
  */
 import type { JobFilter, JobScope } from './types';
 
+/**
+ * The chips Today can still show — the five day-scope statuses. Passed
+ * explicitly (Epic 22) so the bar's `rejected` chip never appears under a
+ * scope that excludes rejected rows: a chip that can only ever return an
+ * empty list is indistinguishable from a genuinely empty scope.
+ */
+export const TODAY_FILTERS: JobFilter[] = [
+  'all',
+  'scheduled',
+  'in_progress',
+  'completed',
+  'cancelled',
+];
+
 /** The chips History can still show (its server statuses, plus `all`). */
-export const HISTORY_FILTERS: JobFilter[] = ['all', 'completed', 'cancelled'];
+export const HISTORY_FILTERS: JobFilter[] = [
+  'all',
+  'completed',
+  'cancelled',
+  // Epic 22 — a rejected job stays in the creator's history for good
+  // (CAP-7), so the bar can isolate it.
+  'rejected',
+];
 
 /** The chip to load when switching to `next`, given the chip on screen. */
 export function filterForScope(current: JobFilter, next: JobScope): JobFilter {
-  if (next === 'today') return current;
+  // Epic 22 — `pending_approval` is never a valid chip under a day window
+  // (the server excludes pending from every scope but `all`), so a walk
+  // through the Pending segment must not carry it into Today. `rejected`
+  // is the same: today excludes it (CAP-4).
+  if (next === 'today') {
+    return current === 'pending_approval' || current === 'rejected'
+      ? 'all'
+      : current;
+  }
   if (next === 'history' && HISTORY_FILTERS.includes(current)) return current;
   return 'all';
 }

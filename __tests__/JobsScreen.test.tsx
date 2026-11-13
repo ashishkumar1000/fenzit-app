@@ -66,12 +66,44 @@ jest.mock('../src/features/customers', () => ({
     hasLoaded: true,
   }),
 }));
+// The Pending segment's body is the approval queue — its store has its own
+// suite (use-approval-queue), so this file stubs it and asserts the SCREEN's
+// wiring: pending selected ↔ PendingQueue rendered instead of the jobs tree.
+const emptyQueue = (): Record<string, unknown> => ({
+  items: [],
+  nextCursor: null,
+  hasMore: false,
+  isLoading: false,
+  isLoadingMore: false,
+  error: null,
+  hasLoaded: true,
+  lastLoadedAt: 0,
+  employeeId: null,
+  olderThanHours: null,
+  refresh: jest.fn().mockResolvedValue(undefined),
+  loadMore: jest.fn(),
+});
+let mockQueue: Record<string, unknown> = emptyQueue();
+jest.mock('../src/features/jobs/useApprovalQueue', () => ({
+  useApprovalQueue: () => mockQueue,
+  loadApprovalQueue: jest.fn().mockResolvedValue(undefined),
+  setQueueFilter: jest.fn().mockResolvedValue(undefined),
+  clearApprovalQueue: jest.fn(),
+  removeApprovalQueueItem: jest.fn(),
+}));
+// The queue's filter sheet renders the real TechnicianPicker, whose roster
+// rows read full employee records this suite's profile stub doesn't carry —
+// the picker has its own suite; stub it here.
+jest.mock('../src/components/TechnicianPicker', () => ({
+  TechnicianPicker: () => null,
+}));
 
 import JobsScreen from '../src/features/jobs/JobsScreen';
 import { JobCard } from '../src/features/jobs/components/JobCard';
 import { clearJobs, loadJobs } from '../src/features/jobs/useJobs';
 import { loadMyProfile } from '../src/features/profile';
 import { Button, Card, InlineError, SegmentedControl } from '../src/components/ui';
+import { PendingQueue } from '../src/features/jobs/components/PendingQueue';
 import { StatusFilterBar } from '../src/features/jobs/components/StatusFilterBar';
 import { jobService } from '../src/services';
 import type { ApiJob, Paginated } from '../src/services';
@@ -167,7 +199,7 @@ async function mountScreen(): Promise<ReactTestRenderer.ReactTestRenderer> {
 
 /** Mount with one-shot route params (e.g. Home's tile deep link, AC #10). */
 async function mountScreenWithParams(
-  params: { scope: 'today' | 'upcoming' | 'overdue' | 'history' },
+  params: { scope: 'today' | 'upcoming' | 'overdue' | 'history' | 'pending' },
 ): Promise<ReactTestRenderer.ReactTestRenderer> {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   await ReactTestRenderer.act(async () => {
@@ -188,6 +220,8 @@ afterEach(async () => {
   clearJobs();
   jest.clearAllMocks();
   mockUnreadCount = null;
+  mockCanWrite = true;
+  mockQueue = emptyQueue();
   mockProfile = {
     technicians: [{ id: 'tech-1', name: 'Anil' }],
     jobCounts: { today: 0, upcoming: 0, overdue: 0, completed: 0, cancelled: 0 },
@@ -331,12 +365,13 @@ it('consumes a one-shot scope param: loads that scope and clears the param (AC #
   expect(navigation.setParams).toHaveBeenCalledWith({ scope: undefined });
 });
 
-it('renders the four timeline scopes, in order, on the segmented control', async () => {
+it('renders the timeline scopes plus the Pending queue, in order, on the segmented control', async () => {
   list.mockResolvedValue(page([], null));
   const renderer = await mountScreen();
 
   // Pins SCOPES content: a dropped or mislabelled scope fails here even
-  // though it would compile fine.
+  // though it would compile fine. Epic 22 adds Pending — the approval
+  // queue's own segment (GET /approval-queue, not a GET /jobs scope).
   const control = renderer.root.findByType(SegmentedControl);
   const options = control.props.options as Array<{ value: string; label: string; badge?: number }>;
   expect(options.map(o => ({ value: o.value, label: o.label }))).toEqual([
@@ -344,8 +379,57 @@ it('renders the four timeline scopes, in order, on the segmented control', async
     { value: 'upcoming', label: 'Upcoming' },
     { value: 'overdue', label: 'Overdue' },
     { value: 'history', label: 'History' },
+    { value: 'pending', label: 'Pending' },
   ]);
   expect(control.props.value).toBe('today');
+});
+
+describe('the Pending segment (Epic 22)', () => {
+  const queueOptions = (r: ReactTestRenderer.ReactTestRenderer) =>
+    r.root.findByType(SegmentedControl).props.options as Array<{ value: string }>;
+
+  it('pressing Pending swaps the jobs tree for the approval queue — and no GET /jobs scope fires', async () => {
+    // The queue reads GET /approval-queue, never a `GET /jobs?scope=pending`
+    // the server has never offered — a fall-through would silently render
+    // the wrong rows.
+    list.mockResolvedValue(page([], null));
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByType(SegmentedControl).props.onChange('pending');
+    });
+    expect(renderer.root.findByType(PendingQueue)).toBeTruthy();
+    // The segment state is screen-local: the control shows NO active
+    // timeline scope while the queue is up.
+    expect(renderer.root.findByType(SegmentedControl).props.value).toBe('pending');
+
+    // And leaving Pending returns to the jobs tree.
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByType(SegmentedControl).props.onChange('today');
+    });
+    expect(renderer.root.findAllByType(PendingQueue)).toHaveLength(0);
+  });
+
+  it('the Home deep link (scope: pending param) opens the queue and clears the param', async () => {
+    list.mockResolvedValue(page([], null));
+    const renderer = await mountScreenWithParams({ scope: 'pending' });
+    expect(renderer.root.findByType(PendingQueue)).toBeTruthy();
+    expect(navigation.setParams).toHaveBeenCalledWith({ scope: undefined });
+  });
+
+  it('a viewer sees no Pending segment at all — the queue endpoint is owner-only', async () => {
+    // A viewer who opened the queue would land in a permanent 403
+    // InlineError; the segment simply doesn't exist for them.
+    mockCanWrite = false;
+    list.mockResolvedValue(page([], null));
+    const renderer = await mountScreen();
+    expect(queueOptions(renderer).map(o => o.value)).not.toContain('pending');
+
+    // A viewer deep-linked with `pending` (a stale link) is ignored, not
+    // crashed into a queue.
+    const linked = await mountScreenWithParams({ scope: 'pending' });
+    expect(linked.root.findAllByType(PendingQueue)).toHaveLength(0);
+  });
 });
 
 it('pressing a scope segment loads that scope and shows its empty state', async () => {
@@ -429,7 +513,7 @@ it('History narrows the chip row to its three chips', async () => {
 
   expect(list).toHaveBeenLastCalledWith({ scope: 'history' }); // all kept → no status param
   const bar = renderer.root.findByType(StatusFilterBar);
-  expect(bar.props.filters).toEqual(['all', 'completed', 'cancelled']);
+  expect(bar.props.filters).toEqual(['all', 'completed', 'cancelled', 'rejected']);
   expect(bar.props.value).toBe('all');
 });
 
@@ -449,7 +533,7 @@ it('keeps the Done chip across a Today → History switch, on screen and on the 
   expect(list).toHaveBeenLastCalledWith({ scope: 'history', status: ['completed'] });
   // ...and in the narrowed chip row.
   const bar = renderer.root.findByType(StatusFilterBar);
-  expect(bar.props.filters).toEqual(['all', 'completed', 'cancelled']);
+  expect(bar.props.filters).toEqual(['all', 'completed', 'cancelled', 'rejected']);
   expect(bar.props.value).toBe('completed');
   expect(renderedText(renderer)).toContain('No history yet');
 });

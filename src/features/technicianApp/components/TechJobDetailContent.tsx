@@ -123,16 +123,20 @@ export function TechJobDetailContent({
       {/* 1. Progress — the stepper is the story of the job; "X of N" counts
           finished steps against the rows the job's effective chain actually
           has (a signature-less job drops that row), collapsing to "Done"
-          when complete. */}
-      <Card padding="md" style={styles.cardGap}>
-        <View style={styles.progressRow}>
-          <Text style={styles.progressLabel}>Progress</Text>
-          <Text style={styles.progressCount}>
-            {detail.status === 'completed' ? 'Done' : `${doneCount} of ${steps.length}`}
-          </Text>
-        </View>
-        <WorkflowStepper steps={steps} onAdvance={onAdvance} pendingStep={pendingStep} />
-      </Card>
+          when complete. Epic 22 — a pending/rejected job never entered the
+          workflow (the owner hasn't approved it), so the chain is hidden
+          until approval rather than drawn empty. */}
+      {detail.status !== 'pending_approval' && detail.status !== 'rejected' ? (
+        <Card padding="md" style={styles.cardGap}>
+          <View style={styles.progressRow}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <Text style={styles.progressCount}>
+              {detail.status === 'completed' ? 'Done' : `${doneCount} of ${steps.length}`}
+            </Text>
+          </View>
+          <WorkflowStepper steps={steps} onAdvance={onAdvance} pendingStep={pendingStep} />
+        </Card>
+      ) : null}
 
       {/* 2. Customer — identity row only (no tap-to-dial here; the owner
           detail screen owns the call affordance). The address row (when

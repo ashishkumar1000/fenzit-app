@@ -1,22 +1,26 @@
 /**
- * useTechnicianJobs — the technician side's source of truth for their own
+ * useTechnicianJobs — the technician side's source of truth for their TODAY
  * jobs, from `GET /jobs` (the server scopes technician-role calls to the
  * caller: the `technicianId` param is silently ignored, so never send it).
  *
  * Same API-backed shared-store pattern as `useJobs`: one module-level state
- * object, any number of subscribers via `useSyncExternalStore`. Two tabs, two
- * queries — Today (default window) and History (`scope=history`, statuses
- * pinned to `completed` + `cancelled`, cursor-paginated) — each with its own
- * loading/error/throttle state.
+ * object, any number of subscribers via `useSyncExternalStore`, one query —
+ * Today (the default day window, cursor-paginated by the server).
+ *
+ * Epic 22 — the former History tab is now the Jobs tab and rides the SHARED
+ * `useJobs` store (features/jobs) with the owner's screen components, so the
+ * two roles' job lists can never drift. This store is Today-only.
  *
  * Not MMKV-persisted: same reasoning as `useJobs`, the list is server truth.
  *
- * The screens own the fetch schedule (each tab's `useFocusEffect` calls
- * `loadToday`/`loadHistory`); this module only holds state and loaders.
+ * The screen owns the fetch schedule (the tab's `useFocusEffect` calls
+ * `loadToday`); this module only holds state and the loader.
  *
- * The Epic 4 seam lives in `setHydrators`. Both hydration paths return
+ * The Epic 4 seam lives in `setHydrators`. The hydration path returns
  * `Promise<Paginated<ApiJob>>`; the offline sync store will fake the envelope
- * so screens never change. Screens import the hook only — never `jobService`.
+ * so screens never change. (The shared `useJobs` store calls `jobService`
+ * directly — when Epic 4 lands it defines the offline path for both stores.)
+ * Screens import the hook only — never `jobService`.
  */
 import { useCallback, useSyncExternalStore } from 'react';
 import { jobService } from '../../services';
@@ -26,46 +30,24 @@ import { FOCUS_REFRESH_TTL_MS } from '../../constants';
 
 export interface TechnicianJobsState {
   today: ApiJob[];
-  history: ApiJob[];
-  historyCursor: string | null;
-  historyHasMore: boolean;
   /** True while the first Today load is in flight (nothing to show yet). */
   isLoadingToday: boolean;
-  /** True while the first History load is in flight. */
-  isLoadingHistory: boolean;
-  /** True while a next History page is being fetched (footer spinner). */
-  isLoadingMore: boolean;
   errorToday: string | null;
-  errorHistory: string | null;
   /** False until a load has completed, so "empty" can't be confused with "not fetched". */
   hasLoadedToday: boolean;
-  hasLoadedHistory: boolean;
-  /**
-   * Last SUCCESSFUL load per tab. Two timestamps, not one: Today and History
-   * are different queries — a Today load landing must not throttle away a
-   * History tab focus (and vice versa).
-   */
+  /** Last SUCCESSFUL Today load — the focus throttle window. */
   lastLoadedAtToday: number | null;
-  lastLoadedAtHistory: number | null;
 }
 
 const INITIAL: TechnicianJobsState = {
   today: [],
-  history: [],
-  historyCursor: null,
-  historyHasMore: false,
   isLoadingToday: true,
-  isLoadingHistory: true,
-  isLoadingMore: false,
   errorToday: null,
-  errorHistory: null,
   hasLoadedToday: false,
-  hasLoadedHistory: false,
   lastLoadedAtToday: null,
-  lastLoadedAtHistory: null,
 };
 
-// --- Shared store: two queries, any number of subscribers --------------------
+// --- Shared store: one query, any number of subscribers ----------------------
 const subscribers = new Set<() => void>();
 let state: TechnicianJobsState = INITIAL;
 
@@ -102,26 +84,22 @@ let dataGen = 0;
 
 // --- Epic 4 hydration seam ----------------------------------------------------
 /**
- * One hydrator per tab; both return the same envelope so Epic 4 can re-point
- * them at the sync store (faking `Paginated`) without touching screens.
- * Today deliberately sends no params; History pins the scope + statuses
- * itself — without `scope: 'history'` the server's default `today` scope
- * day-filters `scheduled_start` and past jobs can never render.
+ * The hydrator returns the same envelope so Epic 4 can re-point it at the
+ * sync store (faking `Paginated`) without touching screens. Today
+ * deliberately sends no params — the server's default scope IS the day
+ * window.
  */
 type Hydrator = (cursor?: string) => Promise<Paginated<ApiJob>>;
 
 let hydrateToday: Hydrator = () => jobService.list({});
-let hydrateHistory: Hydrator = cursor =>
-  jobService.list({ scope: 'history', status: ['completed', 'cancelled'], cursor });
 
-/** Swaps both hydration paths. Epic 4 only — nothing else should call this. */
-export function setHydrators(today: Hydrator, history: Hydrator): void {
+/** Swaps the hydration path. Epic 4 only — nothing else should call this. */
+export function setHydrators(today: Hydrator): void {
   hydrateToday = today;
-  hydrateHistory = history;
 }
 
 /**
- * Throttle check per tab. The `elapsed >= 0` guard keeps a device clock
+ * Throttle check. The `elapsed >= 0` guard keeps a device clock
  * stepped backwards (NTP/DST/manual correction) from reading as "fresh" and
  * silently blocking refetches — same guard `useCustomers` keeps.
  */
@@ -177,95 +155,6 @@ export function loadToday(opts: { force?: boolean } = {}): Promise<void> {
   return todayInFlight;
 }
 
-// --- History -------------------------------------------------------------------
-let historyInFlight: Promise<void> | null = null;
-let historyInFlightKind: 'load' | 'more' = 'load';
-
-/**
- * Loads History page 1. Same throttle/queue/keep-rows semantics as
- * `loadToday`; same-query page-1 callers share the request already running.
- * Pages through `loadMoreHistory` — a plain `loadHistory()` call always
- * restarts at page 1.
- */
-export function loadHistory(opts: { force?: boolean } = {}): Promise<void> {
-  if (historyInFlight) {
-    // Share only a same-kind page-1 request; queue behind anything else
-    // (a page-2 fetch, or a forced refresh) so it is never swallowed.
-    if (historyInFlightKind === 'load' && !opts.force) {
-      return historyInFlight;
-    }
-    return historyInFlight.then(() => loadHistory(opts));
-  }
-  if (!opts.force && isThrottled(state.lastLoadedAtHistory) && state.hasLoadedHistory) {
-    return Promise.resolve();
-  }
-  setState({ isLoadingHistory: !state.hasLoadedHistory, errorHistory: null });
-  historyInFlightKind = 'load';
-  const gen = resetGen;
-  const dataGenAtStart = dataGen;
-  historyInFlight = hydrateHistory()
-    .then(page => {
-      if (gen !== resetGen || dataGen !== dataGenAtStart) return;
-      setState({
-        history: page.data,
-        historyCursor: page.nextCursor,
-        historyHasMore: page.hasMore,
-        hasLoadedHistory: true,
-        isLoadingHistory: false,
-        errorHistory: null,
-        lastLoadedAtHistory: Date.now(),
-      });
-    })
-    .catch((error: ApiError) => {
-      if (gen !== resetGen) return;
-      console.warn('[useTechnicianJobs] GET /jobs (history) failed →', error);
-      setState({ isLoadingHistory: false, errorHistory: error.message });
-    })
-    .finally(() => {
-      historyInFlight = null;
-    });
-  return historyInFlight;
-}
-
-/**
- * Fetches the next History page with the stored cursor and appends it,
- * guarding against double-taps, missing cursors and rows that moved between
- * pages (no duplicate ids in `history`).
- */
-export function loadMoreHistory(): Promise<void> {
-  if (historyInFlight || state.isLoadingMore || !state.historyHasMore || !state.historyCursor) {
-    return Promise.resolve();
-  }
-  const cursor = state.historyCursor;
-  setState({ isLoadingMore: true });
-  historyInFlightKind = 'more';
-  const gen = resetGen;
-  const dataGenAtStart = dataGen;
-  historyInFlight = hydrateHistory(cursor)
-    .then(page => {
-      if (gen !== resetGen || dataGen !== dataGenAtStart) return;
-      const existingIds = new Set(state.history.map(j => j.id));
-      const appended = page.data.filter(j => !existingIds.has(j.id));
-      setState({
-        history: [...state.history, ...appended],
-        historyCursor: page.nextCursor,
-        historyHasMore: page.hasMore,
-        isLoadingMore: false,
-        errorHistory: null,
-        lastLoadedAtHistory: Date.now(),
-      });
-    })
-    .catch((error: ApiError) => {
-      if (gen !== resetGen) return;
-      console.warn('[useTechnicianJobs] GET /jobs (history page 2+) failed →', error);
-      setState({ isLoadingMore: false, errorHistory: error.message });
-    })
-    .finally(() => {
-      historyInFlight = null;
-    });
-  return historyInFlight;
-}
-
 // --- Row updates -----------------------------------------------------------------
 /**
  * The list-store row for a freshly fetched job detail — the ApiJob fields
@@ -287,11 +176,12 @@ export function apiJobOf(detail: JobDetail): ApiJob {
 }
 
 /**
- * Replaces one row in whichever array currently holds its id — for a caller
- * that just mutated the job and already holds the full row (Epic 3's
- * workflow actions). Deliberately does NOT move a row between arrays: a job
- * that just completed stays in `today` until the next History load picks it
- * up server-side — hand-rebalancing would guess at server sort order.
+ * Replaces one row in Today — for a caller that just mutated the job and
+ * already holds the full row (Epic 3's workflow actions). Deliberately does
+ * NOT move a row between windows: a job that just completed stays in `today`
+ * until the next load picks it up server-side — hand-rebalancing would guess
+ * at server sort order. The Jobs tab's rows live in the shared `useJobs`
+ * store; its `upsertJob` handles the today-scope prepend there.
  *
  * Named `…TechnicianJob` (not `upsertJob`, like the owner store exports) so
  * a barrel-style import can never silently grab the owner-side prepend
@@ -303,13 +193,9 @@ export function apiJobOf(detail: JobDetail): ApiJob {
  */
 export function upsertTechnicianJob(job: ApiJob): void {
   const inToday = state.today.some(j => j.id === job.id);
-  const inHistory = state.history.some(j => j.id === job.id);
-  if (!inToday && !inHistory) return;
+  if (!inToday) return;
   dataGen += 1;
-  setState({
-    ...(inToday ? { today: state.today.map(j => (j.id === job.id ? job : j)) } : {}),
-    ...(inHistory ? { history: state.history.map(j => (j.id === job.id ? job : j)) } : {}),
-  });
+  setState({ today: state.today.map(j => (j.id === job.id ? job : j)) });
 }
 
 /** Reset to the pre-login state. Call on technician logout. */
@@ -326,14 +212,10 @@ export function useTechnicianJobs() {
 
   /** Re-fetch page 1 — for pull-to-refresh and the error view's retry. */
   const refreshToday = useCallback(() => loadToday({ force: true }), []);
-  const refreshHistory = useCallback(() => loadHistory({ force: true }), []);
 
   return {
     ...snapshot,
     loadToday,
-    loadHistory,
-    loadMoreHistory,
     refreshToday,
-    refreshHistory,
   };
 }

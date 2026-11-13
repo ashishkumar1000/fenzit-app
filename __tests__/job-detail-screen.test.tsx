@@ -36,7 +36,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../src/services', () => ({
-  jobService: { getById: jest.fn(), update: jest.fn() },
+  jobService: { getById: jest.fn(), update: jest.fn(), decidePending: jest.fn() },
 }));
 
 // The profile feature (roster store + phone formatting) is mocked whole —
@@ -50,13 +50,27 @@ jest.mock('../src/features/profile', () => ({
 }));
 
 import JobDetailScreen from '../src/features/jobDetail/JobDetailScreen';
+import { RejectJobSheet } from '../src/features/jobDetail/components/RejectJobSheet';
 import { Button, InlineError } from '../src/components/ui';
 import { jobService } from '../src/services';
 import { loadMyProfile } from '../src/features/profile';
 import type { ApiError, ApiJob, JobDetail } from '../src/services';
 
+// The Pending queue store is mocked at its module boundary: the decision
+// flow's contract with it is "drop the decided row", asserted here — the
+// store's own behaviour is use-approval-queue.test.tsx's job.
+const mockRemoveApprovalQueueItem = jest.fn();
+jest.mock('../src/features/jobs/useApprovalQueue', () => ({
+  // Lazy getter: the factory evaluates while the imports load, before the
+  // const below is initialized — an eager reference would break the mock.
+  get removeApprovalQueueItem() {
+    return mockRemoveApprovalQueueItem;
+  },
+}));
+
 const getById = jobService.getById as jest.Mock;
 const update = jobService.update as jest.Mock;
+const decidePending = jobService.decidePending as jest.Mock;
 const loadMyProfileMock = loadMyProfile as jest.Mock;
 
 function makeDetail(overrides: Partial<JobDetail> = {}): JobDetail {
@@ -600,6 +614,220 @@ it('a 409 on cancel refetches the detail without an alert', async () => {
   expect(getById).toHaveBeenCalledTimes(2);
   // No failure alert — the error alert never fires on a 409 refetch.
   expect(dialogs).not.toHaveBeenCalled();
+});
+
+// --- The pending decision bar (Epic 22, CAP-5) -------------------------------
+
+/** The bar's two buttons — absent (undefined) when the bar isn't rendered. */
+function decisionButtons(root: ReactTestRenderer.ReactTestRenderer['root']) {
+  const buttons = root.findAllByType(Button);
+  return {
+    approve: buttons.find(b => b.props.children === 'Approve'),
+    reject: buttons.find(b => b.props.children === 'Reject'),
+  };
+}
+
+describe('the pending decision bar', () => {
+  it('renders only on a pending_approval job, with the creator named', async () => {
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    const renderer = await mountScreen();
+
+    const { approve, reject } = decisionButtons(renderer.root);
+    expect(approve).toBeDefined();
+    expect(reject).toBeDefined();
+    // The note names the employee who created the job (CAP-2's creator is
+    // the job's technician) and says what approving does.
+    expect(renderedText(renderer).join(' ')).toContain('Anil Kumar created this job.');
+  });
+
+  it('falls back to the impersonal note when the creator has no name', async () => {
+    // A pending job always HAS a technician (CAP-2 creator-assigned) — the
+    // fallback covers a blank name, not a missing technician.
+    getById.mockResolvedValue(
+      makeDetail({ status: 'pending_approval', currentStep: null, technician: { id: 't1', name: '', countryCode: '+91', phoneNumber: '9000000001', skills: [] } }),
+    );
+    const renderer = await mountScreen();
+    expect(renderedText(renderer).join(' ')).toContain('An employee created this job.');
+    // Both buttons exist even without a creator name — the decision never
+    // depends on the note.
+    expect(decisionButtons(renderer.root).approve).toBeDefined();
+  });
+
+  it('never renders on a scheduled job', async () => {
+    getById.mockResolvedValue(makeDetail({ status: 'scheduled', currentStep: null }));
+    const renderer = await mountScreen();
+    expect(decisionButtons(renderer.root).approve).toBeUndefined();
+    expect(decisionButtons(renderer.root).reject).toBeUndefined();
+  });
+
+  it('Approve POSTs the decision, drops the queue row and reloads', async () => {
+    // The refetch returns the DECIDED job — the server's status moved on.
+    getById
+      .mockResolvedValueOnce(makeDetail({ status: 'pending_approval', currentStep: null }))
+      .mockResolvedValue(makeDetail({ status: 'scheduled', currentStep: null }));
+    decidePending.mockResolvedValue(
+      toApiJob(makeDetail({ status: 'scheduled', currentStep: null })),
+    );
+    const renderer = await mountScreen();
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(decidePending).toHaveBeenCalledTimes(1);
+    expect(decidePending).toHaveBeenCalledWith('j-1', 'approve', undefined);
+    expect(mockRemoveApprovalQueueItem).toHaveBeenCalledWith('j-1');
+    // The detail reloads so the screen shows the decided state — the bar is
+    // gone because the status moved on.
+    expect(getById).toHaveBeenCalledTimes(2);
+    expect(decisionButtons(renderer.root).approve).toBeUndefined();
+  });
+
+  it('Reject opens the reason sheet; confirming carries the reason', async () => {
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockResolvedValue(
+      toApiJob(makeDetail({ status: 'rejected', currentStep: null })),
+    );
+    const renderer = await mountScreen();
+
+    const sheet = renderer.root.findByType(RejectJobSheet);
+    expect(sheet.props.visible).toBe(false);
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).reject!.props.onPress();
+    });
+    expect(renderer.root.findByType(RejectJobSheet).props.visible).toBe(true);
+
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByType(RejectJobSheet).props.onConfirm('Duplicate visit');
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+    expect(decidePending).toHaveBeenCalledWith('j-1', 'reject', 'Duplicate visit');
+    expect(mockRemoveApprovalQueueItem).toHaveBeenCalledWith('j-1');
+    // Success closes the sheet.
+    expect(renderer.root.findByType(RejectJobSheet).props.visible).toBe(false);
+  });
+
+  it('a 409 JOB_NOT_PENDING reconciles silently: no alert, queue row dropped, detail reloaded', async () => {
+    // Another device decided first — nothing the owner did here failed, so
+    // the reconciliation (reload + row drop) replaces the error UI.
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockRejectedValueOnce(
+      Object.assign(new Error('Already decided'), { status: 409, code: 'JOB_NOT_PENDING' }),
+    );
+    const dialogs = confirmDialogs();
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(getById).toHaveBeenCalledTimes(2);
+    expect(mockRemoveApprovalQueueItem).toHaveBeenCalledWith('j-1');
+    expect(dialogs).not.toHaveBeenCalled();
+  });
+
+  it('the REJECT path reconciles a 409 the same way: sheet closes, no alert, reload', async () => {
+    // The reject 409 was never exercised — the sheet carries typed state
+    // (the reason), so "closes silently" had to be pinned, not assumed.
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockRejectedValueOnce(
+      Object.assign(new Error('Already decided'), { status: 409, code: 'JOB_NOT_PENDING' }),
+    );
+    const dialogs = confirmDialogs();
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).reject!.props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      renderer.root.findByType(RejectJobSheet).props.onConfirm('Job duplicates another');
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(decidePending).toHaveBeenCalledWith('j-1', 'reject', 'Job duplicates another');
+    expect(getById).toHaveBeenCalledTimes(2);
+    expect(mockRemoveApprovalQueueItem).toHaveBeenCalledWith('j-1');
+    expect(dialogs).not.toHaveBeenCalled();
+    expect(renderer.root.findByType(RejectJobSheet).props.visible).toBe(false);
+  });
+
+  it('a double-tap on Approve fires exactly one decision POST', async () => {
+    // The lock is more than a `disabled` prop: pressing a second time
+    // mid-flight must not mint a second POST (review catch — the lock was
+    // pinned visually, never exercised).
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockImplementation(() => new Promise(() => {})); // never settles
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+    });
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+    });
+    expect(decidePending).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed decision re-enables the buttons (the lock is for the flight, not forever)', async () => {
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockRejectedValueOnce(
+      Object.assign(new Error('Offline'), { status: 0, code: 'NETWORK_ERROR', message: 'Offline' }),
+    );
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+    const { approve, reject } = decisionButtons(renderer.root);
+    expect(approve!.props.disabled).toBe(false);
+    expect(reject!.props.disabled).toBe(false);
+    expect(approve!.props.loading).toBe(false);
+  });
+
+  it('a non-409 failure alerts instead of silently losing the decision', async () => {
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockRejectedValueOnce(
+      Object.assign(new Error('Offline'), { status: 0, code: 'NETWORK_ERROR', message: 'Offline' }),
+    );
+    const dialogs = confirmDialogs();
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(dialogs).toHaveBeenCalledWith("Couldn't save the decision", 'Offline');
+    // No refetch on a plain failure — the job stays pending for a retry.
+    expect(getById).toHaveBeenCalledTimes(1);
+    // The queue row is retained too: the job is still pending.
+    expect(mockRemoveApprovalQueueItem).not.toHaveBeenCalled();
+  });
+
+  it('locks both buttons while a decision is in flight, with per-button loading', async () => {
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    decidePending.mockImplementation(() => new Promise(() => {})); // never settles
+    const renderer = await mountScreen();
+
+    await ReactTestRenderer.act(async () => {
+      decisionButtons(renderer.root).approve!.props.onPress();
+    });
+    const { approve, reject } = decisionButtons(renderer.root);
+    expect(approve!.props.disabled).toBe(true);
+    expect(reject!.props.disabled).toBe(true);
+    // The loading spinner rides the pressed button only.
+    expect(approve!.props.loading).toBe(true);
+    expect(reject!.props.loading).toBe(false);
+  });
+
+  it('a viewer (read-only) sees no decision bar even on a pending job', async () => {
+    mockCanWrite = false;
+    getById.mockResolvedValue(makeDetail({ status: 'pending_approval', currentStep: null }));
+    const renderer = await mountScreen();
+    expect(decisionButtons(renderer.root).approve).toBeUndefined();
+  });
 });
 
 beforeEach(() => {

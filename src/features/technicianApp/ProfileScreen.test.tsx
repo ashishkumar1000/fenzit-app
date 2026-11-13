@@ -19,6 +19,7 @@ jest.mock('../profile', () => ({
     profile: {
       name: 'QA Technician',
       role: mockRole,
+      status: 'active',
       countryCode: '+91',
       phoneNumber: '9999900002',
     },
@@ -40,6 +41,16 @@ jest.mock('../../services/authToken', () => ({
 
 jest.mock('../../utils/linking', () => ({
   openWebPage: jest.fn(),
+}));
+
+// 2026-11-13 — the "My jobs" card is now an entry point (navigates to the
+// TechMyJobs screen). This suite pins the identity + Play rows, not the
+// card's destination, so useNavigation is mocked instead of mounting a
+// NavigationContainer. MyJobsSummaryCard's own navigation contract is
+// covered in my-jobs-summary-card.test.tsx.
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: mockNavigate }),
 }));
 
 import type ReactTestRenderer from 'react-test-renderer';
@@ -75,9 +86,13 @@ function pressRow(root: ReactTestRenderer.ReactTestRenderer['root'], label: stri
   });
 }
 
-function renderScreen() {
+/** Renders and flushes the summary card's fetch microtasks inside act —
+ *  the card resolves `GET /job-reports/employee` on mount, and its state
+ *  updates must land within the test's lifetime (React work leaking past
+ *  teardown crashes the suite on this Node's partial `window`). */
+async function renderScreen() {
   let renderer!: ReactTestRenderer.ReactTestRenderer;
-  act(() => {
+  await act(async () => {
     renderer = create(<ProfileScreen />);
   });
   return renderer.root;
@@ -98,8 +113,8 @@ beforeEach(() => {
 });
 
 describe('ProfileScreen — identity + the Play rows', () => {
-  it('shows the technician identity and all four rows', () => {
-    const root = renderScreen();
+  it('shows the technician identity and all four rows', async () => {
+    const root = await renderScreen();
     const labels = root
       .findAll(n => n.type === Text && typeof n.props.children === 'string')
       .map(t => t.props.children as string);
@@ -108,8 +123,8 @@ describe('ProfileScreen — identity + the Play rows', () => {
     }
   });
 
-  it('the legal rows open the configured fenzit.com pages', () => {
-    const root = renderScreen();
+  it('the legal rows open the configured fenzit.com pages', async () => {
+    const root = await renderScreen();
     pressRow(root, 'Privacy policy');
     expect(openWebPage).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
     pressRow(root, 'Terms of service');
@@ -117,8 +132,8 @@ describe('ProfileScreen — identity + the Play rows', () => {
     expect(openWebPage).toHaveBeenCalledTimes(2);
   });
 
-  it('Delete account opens the shared dialog with the employee consequences copy', () => {
-    const root = renderScreen();
+  it('Delete account opens the shared dialog with the employee consequences copy', async () => {
+    const root = await renderScreen();
     pressRow(root, 'Delete account');
     const dialog = dialogsUp(root)[0];
     expect(dialog.props.title).toBe('Delete your account?');
@@ -131,7 +146,7 @@ describe('ProfileScreen — identity + the Play rows', () => {
     (accountDeletionApi.requestAccountDeletion as jest.Mock).mockResolvedValueOnce({
       message: 'ok',
     });
-    const root = renderScreen();
+    const root = await renderScreen();
     pressRow(root, 'Delete account');
     act(() => {
       dialogsUp(root)[0].props.onConfirm();
@@ -143,8 +158,8 @@ describe('ProfileScreen — identity + the Play rows', () => {
     expect(mockReset).toHaveBeenCalled();
   });
 
-  it('cancel runs nothing — the session stays intact', () => {
-    const root = renderScreen();
+  it('cancel runs nothing — the session stays intact', async () => {
+    const root = await renderScreen();
     pressRow(root, 'Delete account');
     act(() => {
       dialogsUp(root)[0].props.onCancel();

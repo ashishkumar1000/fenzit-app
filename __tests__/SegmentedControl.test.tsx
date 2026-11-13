@@ -171,3 +171,93 @@ it('renders a count badge only for options that carry one', async () => {
   );
   expect(badges).toHaveLength(1);
 });
+
+// --- Dividers (the "one sentence of words" fix, 2026-11-13) -------------------
+
+/** The divider Views in the tree — identified by their exact style. Divider
+ *  nodes mirror at two tree layers (as the segments do), so dedupe by
+ *  keeping only those whose parent is the sunken track. */
+function dividersOf(renderer: ReactTestRenderer.ReactTestRenderer) {
+  return renderer.root.findAll(
+    node =>
+      node.type !== Text &&
+      flattenStyle(node.props.style)?.backgroundColor === colors.borderDefault &&
+      flattenStyle(node.props.style)?.width === 1 &&
+      flattenStyle(node.parent?.props.style)?.backgroundColor === colors.surfaceSunken,
+  );
+}
+
+it('renders a hairline divider between adjacent INACTIVE segments only', async () => {
+  // Active = Upcoming (2nd of 4): both boundaries touching the active pill
+  // are split by the raised card, so the single remaining boundary
+  // (Overdue | History) carries the one divider.
+  const { renderer } = await render('upcoming');
+  expect(dividersOf(renderer)).toHaveLength(1);
+});
+
+it('renders two dividers when the FIRST segment is active (both later boundaries)', async () => {
+  const { renderer } = await render('today');
+  expect(dividersOf(renderer)).toHaveLength(2);
+});
+
+it('renders two dividers when the LAST segment is active (both earlier boundaries)', async () => {
+  const { renderer } = await render('history');
+  expect(dividersOf(renderer)).toHaveLength(2);
+});
+
+it('renders three dividers when nothing is active (value outside the options)', async () => {
+  // The employee Jobs tab's Pending scope: the control receives value
+  // 'pending', which no option offers — no segment is active, so every
+  // boundary gets its divider.
+  const { renderer, onChange } = await render('pending' as Scope);
+  expect(dividersOf(renderer)).toHaveLength(3);
+  expect(segmentsOf(renderer).filter(s => s.props.accessibilityState.selected)).toHaveLength(0);
+  // Pressing any segment still switches (a value outside the options is a
+  // real state — Pending — not a disabled control).
+  const today = segmentsOf(renderer).find(s => labelOf(s) === 'Today');
+  await ReactTestRenderer.act(async () => {
+    today!.props.onPress();
+  });
+  expect(onChange).toHaveBeenCalledWith('today');
+});
+
+// --- Content sizing mode -------------------------------------------------------
+
+it('content mode wraps the track in a horizontal ScrollView that never stretches', async () => {
+  let renderer!: ReactTestRenderer.ReactTestRenderer;
+  await ReactTestRenderer.act(async () => {
+    renderer = ReactTestRenderer.create(
+      React.createElement(SegmentedControl<Scope>, {
+        options: OPTIONS,
+        value: 'today',
+        onChange: jest.fn(),
+        sizing: 'content',
+      }),
+    );
+  });
+  // The scroll container exists and its content container doesn't stretch
+  // to the viewport (otherwise content mode would be equal mode on wide
+  // screens).
+  const scroll = renderer.root.findAll(
+    node => node.props?.contentContainerStyle !== undefined,
+  );
+  expect(scroll.length).toBeGreaterThan(0);
+  const trackStyle = flattenStyle(scroll[0].props.contentContainerStyle);
+  expect(trackStyle.alignSelf).toBe('flex-start');
+
+  // Segments are content-sized (a minWidth floor), NOT flex:1.
+  const segment = segmentsOf(renderer)[0];
+  const segmentStyle = flattenStyle(segment.props.style);
+  expect(segmentStyle.flex).toBeUndefined();
+  expect(segmentStyle.minWidth).toBe(64);
+});
+
+it('equal mode keeps every segment flex:1 and never wraps the track in a ScrollView', async () => {
+  const { renderer } = await render('today');
+  const scroll = renderer.root.findAll(
+    node => node.props?.contentContainerStyle !== undefined,
+  );
+  expect(scroll).toHaveLength(0);
+  const segmentStyle = flattenStyle(segmentsOf(renderer)[0].props.style);
+  expect(segmentStyle.flex).toBe(1);
+});

@@ -398,17 +398,92 @@ it('prepends a created job via upsertJob and honours the active filter', async (
   expect(probe?.jobs).toEqual([]);
 });
 
-it('upsertJob is a no-op outside the today scope (server sorts must hold)', async () => {
+it('upsertJob updates an EXISTING row in place outside today; an absent id is still dropped', async () => {
+  // The old "no-op outside today" framing is gone: the timeline scopes now
+  // update a row they already hold (an edit, a completion) IN PLACE —
+  // never re-sorted, never appended where its sort position isn't the
+  // server's truth; only an absent id waits for the throttled refetch.
   list.mockResolvedValueOnce(page([makeJob('a')], null)) // today mount load
-      .mockResolvedValueOnce(page([makeJob('b')], null)); // upcoming load
+      .mockResolvedValueOnce(page([makeJob('b'), makeJob('c')], null)); // upcoming load
   await mountProbe();
 
   await run(() => loadJobs('upcoming'));
 
   ReactTestRenderer.act(() => {
-    upsertJob(makeJob('z')); // would violate upcoming's scheduled_start ASC sort
+    upsertJob(makeJob('c', { priority: 'urgent', notesForTechnician: 'edited' }));
   });
-  expect(probe?.jobs.map(j => j.id)).toEqual(['b']); // unchanged
+  // Updated in place, order preserved, nothing appended.
+  expect(probe?.jobs.map(j => j.id)).toEqual(['b', 'c']);
+  expect(probe?.jobs[1].priority).toBe('urgent');
+
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('z')); // absent id would violate upcoming's sort
+  });
+  expect(probe?.jobs.map(j => j.id)).toEqual(['b', 'c']); // unchanged
+});
+
+it('upsertJob refuses a pending/rejected job under every day scope and chip (CAP-4)', async () => {
+  list.mockResolvedValueOnce(page([makeJob('a')], null));
+  await mountProbe();
+
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('p', { status: 'pending_approval' }));
+    upsertJob(makeJob('r', { status: 'rejected' }));
+  });
+  expect(probe?.jobs.map(j => j.id)).toEqual(['a']); // neither entered
+
+  await run(() => loadJobs('history'));
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('p2', { status: 'pending_approval' }));
+  });
+  // History's default chip is `all` — which can never hold a pending job
+  // (the server's history scope forces completed/cancelled/rejected); the
+  // row the History load returned stays, and no pending row joined it.
+  expect(probe?.jobs.map(j => j.id)).toEqual(['a']);
+  expect(probe?.jobs.some(j => j.status === 'pending_approval')).toBe(false);
+});
+
+it('upsertJob feeds the PENDING view (scope all + pending_approval filter) — newest first', async () => {
+  // The employee's Pending list rides this same store; a create, a detail
+  // refetch or a decision must reach it even inside the 15s throttle.
+  list.mockResolvedValueOnce(page([makeJob('a')], null)) // today mount load
+      .mockResolvedValueOnce(page([], null)); // pending view load (empty)
+  await mountProbe();
+
+  await run(() => loadJobs('all', 'pending_approval'));
+
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('new-1', { status: 'pending_approval' }));
+  });
+  // Scope `all` sorts created_at DESC server-side — prepend keeps it.
+  expect(probe?.jobs.map(j => j.id)).toEqual(['new-1']);
+
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('scheduled-x')); // a scheduled job has no business there
+  });
+  expect(probe?.jobs.map(j => j.id)).toEqual(['new-1']);
+});
+
+it('upsertJob updates a row in place under the History Rejected chip; a new rejection waits for the load', async () => {
+  const rejected = makeJob('r1', { status: 'rejected' });
+  list.mockResolvedValueOnce(page([makeJob('a')], null)) // today mount load
+      .mockResolvedValueOnce(page([rejected], null)); // history + rejected load
+  await mountProbe();
+
+  await run(() => loadJobs('history', 'rejected'));
+
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('r1', { status: 'rejected', notesForTechnician: 're-rejected' }));
+  });
+  expect(probe?.jobs).toHaveLength(1);
+  expect(probe?.jobs[0].notesForTechnician).toBe('re-rejected');
+
+  ReactTestRenderer.act(() => {
+    upsertJob(makeJob('r2', { status: 'rejected' })); // not in the loaded window
+  });
+  // History sorts scheduled_start DESC — an absent row cannot be placed
+  // without re-sorting, so it waits for the next History load.
+  expect(probe?.jobs).toHaveLength(1);
 });
 
 it('upsertJob skips a job scheduled for a future day (Today is day-scoped)', async () => {

@@ -19,6 +19,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 jest.mock('../src/services', () => ({
   jobService: { list: jest.fn() },
+  approvalQueueService: { list: jest.fn() },
   customerService: { listAll: jest.fn(), create: jest.fn() },
   usersApi: { getMe: jest.fn() },
   skillService: { list: jest.fn(), create: jest.fn(), remove: jest.fn() },
@@ -33,15 +34,25 @@ jest.mock('../src/services', () => ({
 
 import { runAllResets } from '../src/services/resetRegistry';
 import { loadJobs, useJobs } from '../src/features/jobs/useJobs';
+import { loadApprovalQueue, useApprovalQueue } from '../src/features/jobs/useApprovalQueue';
 import { loadCustomers, useCustomers } from '../src/features/customers/useCustomers';
 import { loadMyProfile, useMyProfile } from '../src/features/profile/useMyProfile';
 import { useTechnicians } from '../src/features/technicians/useTechnicians';
 import { loadSkills, useSkills } from '../src/features/skills/useSkills';
 import { loadToday, useTechnicianJobs } from '../src/features/technicianApp/useTechnicianJobs';
 import { loadNotifications, useNotifications } from '../src/features/notifications/useNotifications';
-import { customerService, jobService, skillService, notificationService, usersApi } from '../src/services';
-import type { ApiCustomer, ApiNotification, MyProfile, Skill } from '../src/services';
+import { customerService, approvalQueueService, jobService, skillService, notificationService, usersApi } from '../src/services';
+import type { ApiCustomer, ApiNotification, ApprovalQueueItem, MyProfile, Skill } from '../src/services';
 import type { Technician } from '../src/features/technicians/types';
+
+const makeQueueItem = (): ApprovalQueueItem => ({
+  id: 'q-1',
+  jobNumber: 'JB-2026-0099',
+  submittedAt: '2026-11-13T08:00:00Z',
+  ageHours: 3,
+  employee: { id: 'u-2', name: 'Mom' },
+  customerName: 'Ravi Kumar',
+});
 
 const makeCustomer = (overrides: Partial<ApiCustomer> = {}): ApiCustomer => ({
   id: 'c-1',
@@ -108,9 +119,10 @@ const makeNotification = (overrides: Partial<ApiNotification> = {}): ApiNotifica
   ...overrides,
 });
 
-// One probe subscribed to all seven stores, exactly as the app's screens are.
+// One probe subscribed to all eight stores, exactly as the app's screens are.
 let probe: {
   jobs: ReturnType<typeof useJobs>;
+  approvalQueue: ReturnType<typeof useApprovalQueue>;
   customers: ReturnType<typeof useCustomers>;
   profile: ReturnType<typeof useMyProfile>;
   technicians: ReturnType<typeof useTechnicians>;
@@ -122,6 +134,7 @@ let probe: {
 function Probe(): null {
   probe = {
     jobs: useJobs(),
+    approvalQueue: useApprovalQueue(),
     customers: useCustomers(),
     profile: useMyProfile(),
     technicians: useTechnicians(),
@@ -134,6 +147,11 @@ function Probe(): null {
 
 it('resets every app store to its pre-login state (AC 5, AC 6)', async () => {
   (jobService.list as jest.Mock).mockResolvedValue({ data: [], nextCursor: null, hasMore: false });
+  (approvalQueueService.list as jest.Mock).mockResolvedValue({
+    data: [makeQueueItem()],
+    nextCursor: null,
+    hasMore: false,
+  });
   (customerService.listAll as jest.Mock).mockResolvedValue([makeCustomer()]);
   (usersApi.getMe as jest.Mock).mockResolvedValue(makeProfile());
   (skillService.list as jest.Mock).mockResolvedValue([makeSkill()]);
@@ -156,6 +174,7 @@ it('resets every app store to its pre-login state (AC 5, AC 6)', async () => {
   await act(async () => {
     await Promise.all([
       loadJobs(),
+      loadApprovalQueue(),
       loadCustomers(),
       loadMyProfile(),
       loadSkills(),
@@ -183,6 +202,9 @@ it('resets every app store to its pre-login state (AC 5, AC 6)', async () => {
   // never settle: the reset snapshot below stays exact and nothing updates
   // outside act.
   (jobService.list as jest.Mock).mockImplementation(() => new Promise(() => {}));
+  (approvalQueueService.list as jest.Mock).mockImplementation(
+    () => new Promise(() => {}),
+  );
   (customerService.listAll as jest.Mock).mockImplementation(
     () => new Promise(() => {}),
   );
@@ -197,17 +219,16 @@ it('resets every app store to its pre-login state (AC 5, AC 6)', async () => {
     runAllResets();
   });
 
-  // All seven back to pre-login — no store left holding the session's data.
+  // All eight back to pre-login — no store left holding the session's data.
   expect(probe?.jobs).toMatchObject({ jobs: [], hasLoaded: false });
+  expect(probe?.approvalQueue).toMatchObject({ items: [], hasLoaded: false });
   expect(probe?.customers).toMatchObject({ customers: [], hasLoaded: false });
   expect(probe?.profile.profile).toBeNull();
   expect(probe?.technicians.technicians).toEqual([]);
   expect(probe?.skills).toMatchObject({ skills: [], hasLoaded: false });
   expect(probe?.techJobs).toMatchObject({
     today: [],
-    history: [],
     hasLoadedToday: false,
-    hasLoadedHistory: false,
   });
   expect(probe?.notifications).toMatchObject({
     items: [],

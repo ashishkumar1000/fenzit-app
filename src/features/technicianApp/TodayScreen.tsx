@@ -38,7 +38,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import NetInfo from '@react-native-community/netinfo';
 import { Button, Eyebrow, InlineError } from '../../components/ui';
 import { PushEnableCard, PUSH_CARD_CLEARANCE } from '../push/PushEnableCard';
-import { colors, spacing, typography } from '../../theme';
+import { colors, fontSize, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
 import { firstName, useMyProfile } from '../profile';
 import { JobCard } from '../jobs/components/JobCard';
@@ -134,6 +134,7 @@ export default function TodayScreen() {
   const handleOpenNotifications = useCallback(() => {
     navigation.navigate('Notifications');
   }, [navigation]);
+
 
   const sections = buildTodaySections(today);
   // The urgency rail's clock — one 60s tick for the sectioned list.
@@ -253,18 +254,20 @@ const styles = StyleSheet.create({
   sectionHeaderSpacing: {
     paddingVertical: spacing.s2,
   },
-  // The punch zone's breathing room under the fixed header.
+  // The punch zone's breathing room under the fixed header. No horizontal
+  // padding of its own — it rides the list's 16dp gutter like the job cards
+  // below (a second one here put the punch block and the schedule heading
+  // at 32dp while the cards sat at 16dp — the misalignment on screen,
+  // Sally 2026-11-13).
   punchWrap: {
     alignSelf: 'stretch',
-    paddingHorizontal: spacing.s4,
     paddingTop: spacing.s2,
     paddingBottom: spacing.s3,
   },
   scheduleTitle: {
-    ...typography.title,
-    fontSize: 18,
+    ...typography.bodyStrong,
+    fontSize: fontSize.lg,
     color: colors.textStrong,
-    paddingHorizontal: spacing.s4,
     paddingTop: spacing.s2,
     paddingBottom: spacing.s2,
   },

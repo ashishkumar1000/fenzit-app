@@ -9,8 +9,12 @@
  */
 
 import type { JobScope, WorkflowTemplateStep } from '../services';
+import type { JobFilter } from '../features/jobs/types';
 import type { PickedOfficeLocation } from '../types/office';
-import type { PickedAddress } from '../features/customers/types';
+import type {
+  NewCustomerDraft,
+  PickedAddress,
+} from '../features/customers/types';
 
 /**
  * The shared map pin picker's flows (`MapPinPicker` route). The mode
@@ -27,8 +31,10 @@ export type MainTabParamList = {
    * consumes the param and clears it (`setParams({ scope: undefined })`):
    * tab params persist across navigations, so an uncleared param would
    * re-apply on every later tab-bar focus and fight a manually picked scope.
+   * Epic 22 adds `'pending'` — the approval-queue segment, which is NOT a
+   * `GET /jobs` scope; only the owner JobsScreen understands it.
    */
-  Jobs: { scope?: JobScope } | undefined;
+  Jobs: { scope?: JobScope | 'pending' } | undefined;
   /**
    * The owner's Attendance tab page (2026-10: Attendance took the Customers
    * footer slot; CAP-1 turned the tiles into a Today | Monthly | Leave
@@ -54,7 +60,13 @@ export type MainTabParamList = {
  * no More/settings, just their own day. */
 export type TechnicianTabParamList = {
   Today: undefined;
-  History: undefined;
+  /**
+   * Epic 22 — the employee Jobs tab. One-shot params mirror the owner Jobs
+   * screen's pattern: the summary card's tiles deep-link a segment
+   * (`scope`) and, for History, a status chip (`filter`); the screen
+   * consumes and clears them so a later tab-bar focus doesn't re-apply.
+   */
+  History: { scope?: JobScope | 'pending'; filter?: JobFilter } | undefined;
   /**
    * Story 15-10 — the technician's own attendance surfaces. The tab is
    * REGISTERED conditionally: `TechnicianTabs` mounts it only while the
@@ -94,15 +106,29 @@ export type RootStackParamList = {
    * with `selectedSkillId` — a string to pick it, `null` after "Clear", and
    * `undefined` (param absent) when the caller should change nothing.
    */
-  SelectSkills: { selectedSkillId?: string | null } | undefined;
+  SelectSkills: {
+    selectedSkillId?: string | null;
+    /**
+     * Epic 22 — the route to `popTo` on Apply/Clear, defaulting to `'NewJob'`
+     * (the owner flow, unchanged). The technician stack dual-registers this
+     * screen (the Notifications precedent) and its TechNewJob form passes
+     * `'TechNewJob'`. Must be a route already in the stack — the caller
+     * pushes the browser on top of itself.
+     */
+    returnTo?: 'NewJob' | 'TechNewJob';
+  } | undefined;
   /**
    * Full-screen customer browser behind New Job's "Browse all" link — the
    * skill picker's twin. Opens with the currently picked customer (if any);
    * Apply navigates back to `NewJob` with `selectedCustomerId` — a string to
    * pick it, `null` after "Clear", and `undefined` (param absent) when the
-   * caller should change nothing.
+   * caller should change nothing. `returnTo` behaves exactly as on
+   * `SelectSkills` (Epic 22's technician-stack dual registration).
    */
-  SelectCustomers: { selectedCustomerId?: string | null } | undefined;
+  SelectCustomers: {
+    selectedCustomerId?: string | null;
+    returnTo?: 'NewJob' | 'TechNewJob';
+  } | undefined;
   /**
    * Full-screen technician browser behind New Job's "Browse all" link —
    * also reused as the employee picker in the weekly-off override sheet
@@ -383,8 +409,48 @@ export type TechnicianRootStackParamList = {
    * route lives one navigator down; device-found). Params optional so
    * plain `navigate('TechnicianTabs')` call sites keep typechecking.
    */
-  TechnicianTabs: { screen: keyof TechnicianTabParamList } | undefined;
+  /**
+   * `params` rides the chosen tab's own param list (the delegation form of
+   * 15-10 needs it: the My-jobs screen's tiles deep-link a Jobs-tab scope
+   * from the root stack, and a plain `navigate('History')` here is not
+   * handled).
+   */
+  TechnicianTabs: {
+    screen: keyof TechnicianTabParamList;
+    params?: TechnicianTabParamList[keyof TechnicianTabParamList];
+  } | undefined;
   TechJobDetail: { jobId: string };
+  /**
+   * Epic 22 — the employee's "My jobs" record (created/approved/pending/
+   * rejected counts for the window, approval rate, average wait, lanes and
+   * rejection reasons), opened from the Profile tab's entry card. No
+   * params: the screen reads the caller's own report from the token.
+   */
+  TechMyJobs: undefined;
+  /**
+   * Epic 22 — the employee's create-job form, pushed from the Jobs tab's
+   * "Add job" button. The Jobs tab renders that action only while the
+   * profile's `canCreateJobs` is true (fail-hidden), and POST /jobs re-checks
+   * the flag server-side — this route is reachable, not a permission gate.
+   * Assignee is always the creator (CAP-2's no-assigning-others rule), so the
+   * form has no employee picker. `selectedSkillId`/`selectedCustomerId` are
+   * the same read-once-clear return channel `NewJob` carries (the
+   * dual-registered browser screens popTo here with the picked id; both
+   * screens branch their popTo by `returnTo` because `popTo` overloads
+   * distribute per route — a union screen name cannot typecheck).
+   */
+  TechNewJob: {
+    selectedSkillId?: string | null;
+    selectedCustomerId?: string | null;
+    /**
+     * The AddCustomer return channel (Epic 22): the full add-customer form
+     * pops back here with the collected details WITHOUT saving them (an
+     * employee JWT lacks `customer.write`; the fields ride `POST /jobs`'s
+     * `newCustomer` instead). Read once, then cleared — same rule as the
+     * picker ids above. `undefined` (param absent) means nothing to apply.
+     */
+    newCustomerDraft?: NewCustomerDraft;
+  } | undefined;
   /** Registered in Story 3.5 — the type is declared now so nav params are stable. */
   Signature: { jobId: string; stepKey: string; steps: WorkflowTemplateStep[] };
   /** Registered in Story 7.7 — location capture flow. */
@@ -423,6 +489,52 @@ export type TechnicianRootStackParamList = {
    * leave form's From/To rows). Same shared shape: `DatePickerParams`.
    */
   DatePicker: DatePickerParams;
+  /**
+   * Epic 22 — the skill and customer browsers, dual-registered from the
+   * owner stack (the Notifications precedent) so TechNewJob's picker
+   * sections keep their "Browse all" links. The screens pop back to
+   * `returnTo` — TechNewJob passes `'TechNewJob'`; the owner flow omits it
+   * and stays on `'NewJob'`. Same param shapes as the owner registrations
+   * above.
+   */
+  SelectSkills: {
+    selectedSkillId?: string | null;
+    returnTo?: 'NewJob' | 'TechNewJob';
+  } | undefined;
+  SelectCustomers: {
+    selectedCustomerId?: string | null;
+    returnTo?: 'NewJob' | 'TechNewJob';
+  } | undefined;
+  /**
+   * Epic 22 — the owner's full add-customer form, dual-registered (the
+   * pickers' precedent) so TechNewJob's "New customer" mode opens the same
+   * rich form (map pin, structured address, phone-book pick) instead of the
+   * retired inline mini-form. In THIS stack the form is a draft collector:
+   * it never POSTs (an employee JWT lacks `customer.write`) — Save pops back
+   * to `returnTo: 'TechNewJob'` with the collected details as
+   * `newCustomerDraft`, and the find-or-create happens server-side inside
+   * `POST /jobs`. `draft` is the previous capture, passed back in when the
+   * employee reopens the form to change it (a fresh push seeds a fresh
+   * form). `pickedAddress` is MapPinPicker's return channel, same as the
+   * owner registration above.
+   */
+  AddCustomer: {
+    returnTo?: 'TechNewJob';
+    pickedAddress?: PickedAddress;
+    draft?: NewCustomerDraft;
+  } | undefined;
+  /**
+   * Epic 22 — the shared map pin picker, dual-registered so the
+   * technician-stack AddCustomer's location box can open it (customer mode
+   * only; the office mode's `popTo('OfficeForm')` target never exists on
+   * this stack). Same param shape as the owner registration above.
+   */
+  MapPinPicker: {
+    mode: MapPinPickerMode;
+    initialLatitude?: number;
+    initialLongitude?: number;
+    radiusM?: number;
+  } | undefined;
 };
 
 /**

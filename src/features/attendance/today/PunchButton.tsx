@@ -193,7 +193,10 @@ export function PunchButton({ state, enabled, onPress }: Props) {
         onPress={interactive ? onPress : undefined}
         disabled={blocked}
         style={({ pressed }) => [styles.hit, pressed && interactive && styles.pressed]}>
-        <View style={styles.stage}>
+        {/* Blocked postures dim the face: the same bright circle minus its
+            labels otherwise reads exactly like "ready to tap" with no cue
+            that pressing it does nothing (Sally 2026-11-13). */}
+        <View style={[styles.stage, blocked ? styles.stageBlocked : null]}>
           <RotatingRing active={glowing} />
           <Svg width={RING_SIZE} height={RING_SIZE} style={StyleSheet.absoluteFill}>
             <Defs>
@@ -262,6 +265,9 @@ const styles = StyleSheet.create({
     height: RING_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stageBlocked: {
+    opacity: 0.55,
   },
   pill: {
     position: 'absolute',

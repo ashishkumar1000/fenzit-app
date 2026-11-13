@@ -281,7 +281,9 @@ export function EditJobSheet({ visible, job, technicians, onClose, onSaved }: Pr
       // native sheet has already dismissed, leaving the parent stuck).
       dismissible={!(submitting || isAutoClosing)}
       title="Edit job"
-      subtitle="Only scheduled jobs can be edited."
+      // Epic 22 (CAP-5) — the sheet also opens on a pending employee job;
+      // the old static line contradicted the action being performed.
+      subtitle={job.status === 'pending_approval' ? 'Approve the job when the changes look right.' : 'Only scheduled jobs can be edited.'}
       detents={[0.85]}
       scrollable>
       {/* The native sheet stretches this ScrollView over the whole content

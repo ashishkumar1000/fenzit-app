@@ -50,11 +50,13 @@ import {
   isLeaveEmployeeEvent,
   isLeaveOwnerEvent,
 } from './leaveNotificationModel';
+import { isJobApprovalEvent } from './jobApprovalNotificationModel';
 
 /** What a notification row renders as on the shared inbox. */
 export type NotificationEventAction =
   | 'job'
   | 'job-assigned'
+  | 'job-approval'
   | 'report'
   | 'attendance'
   | 'leave'
@@ -80,6 +82,11 @@ export function notificationEventAction(
   // always the assigned technician; the card builder + shared tap helper
   // handle the routing.
   if (n.eventType === 'job.assigned') return 'job-assigned';
+  // Epic 22 — the approval-lifecycle rows (submitted/approved/rejected/
+  // cancelled/edited) read like the assignment notice: composed copy from a
+  // non-step payload, one row = one card. Classified BEFORE the job
+  // fallback so they never render as workflow-step stages.
+  if (isJobApprovalEvent(n.eventType)) return 'job-approval';
   // Reports are a company-wide surface: the admin and the viewer (who may
   // request reports) see them; an employee's report rows stay generic.
   if (isCompanyWideRole(role) && isReportNotification(n)) return 'report';

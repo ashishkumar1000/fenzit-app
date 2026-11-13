@@ -17,6 +17,8 @@ const STATUS_LABEL = {
   done: 'Done',
   progress: 'In Progress',
   scheduled: 'Scheduled',
+  pendingApproval: 'Pending approval',
+  rejected: 'Rejected',
   cancelled: 'Cancelled',
 } as const;
 

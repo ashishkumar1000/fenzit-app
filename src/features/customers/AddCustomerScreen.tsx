@@ -34,6 +34,13 @@
  *
  * The submit chain lives in `useCreateCustomer`; `returnRouteName` decides
  * post-save navigation — see the contract in `useCreateCustomer.ts`.
+ *
+ * DRAFT mode (Epic 22, `returnTo: 'TechNewJob'`): the same form opened from
+ * the employee's create-job screen. Save never posts — an employee JWT
+ * lacks `customer.write` — so the collected details pop back to TechNewJob
+ * as a `NewCustomerDraft` and `POST /jobs` finds-or-creates the customer
+ * server-side. A `draft` param (the previous capture) seeds the form when
+ * the employee reopens it to change the details.
  */
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -79,10 +86,14 @@ import {
 } from './locationStatus';
 import type {
   NewCustomerInput,
+  NewCustomerDraft,
   PickedAddress,
   PickedAddressSnapshot,
 } from './types';
-import type { RootStackParamList } from '../../navigation/types';
+import type {
+  RootStackParamList,
+  TechnicianRootStackParamList,
+} from '../../navigation/types';
 import { FormSectionCard } from './components/FormSectionCard';
 import { NoPinNotice } from './components/NoPinNotice';
 import { useCreateCustomer } from './useCreateCustomer';
@@ -94,38 +105,63 @@ import { PickContactButton } from '../../components/ui';
 const NOT_MOBILE_COPY = "This number isn't a 10-digit mobile number. Type the number instead.";
 const PICK_FAILED_COPY = "Couldn't open your contacts. Type the number instead.";
 
-type Props = NativeStackScreenProps<RootStackParamList, 'AddCustomer'>;
+/**
+ * Dual-registered (Epic 22): the owner stack since Story 11-8 — and the
+ * technician stack now, where the form runs in DRAFT mode (`returnTo:
+ * 'TechNewJob'`): an employee JWT lacks `customer.write`, so Save never
+ * POSTs — it pops back to TechNewJob with the collected details as
+ * `newCustomerDraft`, and `POST /jobs` finds-or-creates the customer
+ * server-side. The intersection keeps ONE component compilable against
+ * both lists (the SelectSkills precedent).
+ */
+type Props = NativeStackScreenProps<
+  RootStackParamList & TechnicianRootStackParamList,
+  'AddCustomer'
+>;
 
 export default function AddCustomerScreen({ navigation, route }: Props) {
-  // `returnRouteName` is always supplied by real callers; the default only
-  // type-placates the MapPinPicker merge-return, which carries just
-  // `pickedAddress` (the NewJob convention of all-optional merge params).
+  // `returnRouteName` is always supplied by real owner-stack callers; the
+  // default only type-placates the MapPinPicker merge-return, which carries
+  // just `pickedAddress` (the NewJob convention of all-optional merge
+  // params). The technician stack instead passes `returnTo: 'TechNewJob'`
+  // and never `returnRouteName`.
   const {
     returnRouteName = 'Customers',
     pickedAddress: pickedAddressParam,
     customerId,
+    returnTo,
+    draft,
   } = route.params ?? {};
   // Presence of `customerId` = edit mode (see navigation/types.ts).
   const isEdit = Boolean(customerId);
+  // Draft mode (technician stack): collect, return, never save.
+  const isDraft = returnTo === 'TechNewJob';
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  // A draft seed (the previous capture, passed back in on a re-open) is a
+  // fresh push's initial state — TechNewJob always pushes a fresh instance,
+  // so plain initializers need no effect and no clear-once dance.
+  const [name, setName] = useState(draft?.name ?? '');
+  const [phone, setPhone] = useState(draft?.phone ?? '');
   const [pickError, setPickError] = useState('');
   const [picking, setPicking] = useState(false);
   const pickingRef = useRef(false);
-  const [city, setCity] = useState('');
-  const [area, setArea] = useState('');
+  const [city, setCity] = useState(draft?.city ?? '');
+  const [area, setArea] = useState(draft?.area ?? '');
   // Street, Landmark or Locality — the user's own navigational text; the
   // free-text `address` column. The resolved line is never copied here.
-  const [street, setStreet] = useState('');
+  const [street, setStreet] = useState(draft?.street ?? '');
   // The user's extra location detail (flat/building/wing — CAP-5).
-  const [addressDetails, setAddressDetails] = useState('');
+  const [addressDetails, setAddressDetails] = useState(
+    draft?.addressDetails ?? '',
+  );
   // Structured snapshot from a located pick — independent of the free text
   // above (a hand-edit never clears it; additive backend columns).
-  const [snapshot, setSnapshot] = useState<PickedAddressSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<PickedAddressSnapshot | null>(
+    draft?.snapshot ?? null,
+  );
   // What the preview box shows: the last pick's display line (resolved
   // formattedAddress / coordinate fallback, or a manual entry's line).
-  const [previewLine, setPreviewLine] = useState('');
+  const [previewLine, setPreviewLine] = useState(draft?.previewLine ?? '');
   // Discard guard (CAP-6): leaving with unsaved input asks first.
   const [discardVisible, setDiscardVisible] = useState(false);
   // No-pin confirm (text-only save): shown before the save goes through.
@@ -267,6 +303,7 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   useEffect(() => {
     return navigation.addListener('beforeRemove', e => {
       if (submittingRef.current) return;
+      if (draftSaveRef.current) return;
       if (!isDirtyRef.current) return;
       e.preventDefault();
       removeActionRef.current = e;
@@ -329,6 +366,11 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
   isDirtyRef.current = isDirty;
   const submittingRef = useRef(submitting);
   submittingRef.current = submitting;
+  // Draft mode's "Use customer" leaves via its own popTo — that removal IS
+  // the save, so it must not trip the discard guard below (the real-save
+  // path gets the same pass through the hook's `submitting` state, which
+  // draft mode never sets).
+  const draftSaveRef = useRef(false);
 
   // The phone gate is add-only: edit seeds the server's digits into a
   // read-only field, so a legacy short row must not dead-end Save with no
@@ -376,6 +418,19 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
       : {}),
   });
 
+  /** The form state as a `NewCustomerDraft` — what draft mode returns to
+   *  TechNewJob and what TechNewJob passes back in as the re-open seed. */
+  const buildDraft = (): NewCustomerDraft => ({
+    name: name.trim(),
+    phone,
+    city: city.trim(),
+    area: area.trim(),
+    street: street.trim(),
+    addressDetails: addressDetails.trim(),
+    snapshot,
+    previewLine,
+  });
+
   const submitForm = () => {
     // The baseline can't be null on a save press (the form only renders
     // after the seed, and the load-error form has nothing seeded to save) —
@@ -392,6 +447,19 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
         return;
       }
       void handleSubmit(patch);
+      return;
+    }
+    if (isDraft) {
+      // Never a POST — an employee JWT can't write customers. The draft
+      // rides the navigation param; `POST /jobs` turns it into the
+      // customer server-side (find-or-create by phone). The popTo below
+      // IS the save — flag it so the discard guard lets it through.
+      draftSaveRef.current = true;
+      navigation.popTo(
+        'TechNewJob',
+        { newCustomerDraft: buildDraft() },
+        { merge: true },
+      );
       return;
     }
     void handleSubmit(toCreateCustomerRequest(buildRequest()));
@@ -665,7 +733,13 @@ export default function AddCustomerScreen({ navigation, route }: Props) {
                 <CheckCircle2 size={20} color={colors.onPrimary} strokeWidth={2.5} />
               )
             }>
-            {submitting ? 'Saving…' : isEdit ? 'Save changes' : 'Save customer'}
+            {submitting
+              ? 'Saving…'
+              : isEdit
+                ? 'Save changes'
+                : isDraft
+                  ? 'Use customer'
+                  : 'Save customer'}
           </Button>
         </SafeAreaView>
       </KeyboardAvoidingView>

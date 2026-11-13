@@ -60,6 +60,16 @@ jest.mock('../src/features/home', () => ({
   // enabled — not what these tests pin, so the card and its hook are stubs.
   useTodayPulse: jest.fn(() => ({ status: 'loading' })),
   TodayPulseCard: jest.fn(() => null),
+  // Epic 22's owner summary strip is its own request — not what these tests
+  // pin; stubbed so the mounted screen never fires it through the barrel.
+  useOwnerJobSummary: jest.fn(() => ({
+    summary: null,
+    isLoading: false,
+    error: null,
+    refresh: jest.fn(),
+  })),
+  EmployeeJobsStrip: jest.fn(() => null),
+  LeaveReviewBanner: jest.requireActual('../src/features/home').LeaveReviewBanner,
   NoJobsCard: jest.requireActual('../src/features/home').NoJobsCard,
   hasAnyJobCount: jest.requireActual('../src/features/home').hasAnyJobCount,
   // Real implementation — Story 1.7's filtering/strip/empty-state behaviour

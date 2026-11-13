@@ -36,6 +36,7 @@ import { matchesTechnicianQuery } from './format';
 import type { RootStackParamList } from '../../navigation/types';
 import { useTechnicians } from './useTechnicians';
 import { AddTechnicianSheet } from './components/AddTechnicianSheet';
+import { JobSettingsSheet } from './components/JobSettingsSheet';
 import { TechnicianRow } from './components/TechnicianRow';
 import { useMyProfile } from '../profile';
 import { useCanWrite, useSessionRole } from '../auth';
@@ -59,6 +60,13 @@ export default function TechniciansScreen({ navigation, route }: Props) {
   const [sheetVisible, setSheetVisible] = useState(
     canWrite && (route.params?.autoOpenAdd ?? false),
   );
+  // Epic 22 — tapping a team row opens the job-settings sheet (the owner's
+  // per-employee create/approval switches). Owner-only: a viewer's rows
+  // stay inert (the row is only interactive when a handler is passed).
+  const [settingsTarget, setSettingsTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Search narrows the list only; the counts always describe the whole team.
   const [query, setQuery] = useState('');
@@ -192,7 +200,15 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           }
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <TechnicianRow technician={item} canResend={canResend} />
+            <TechnicianRow
+              technician={item}
+              canResend={canResend}
+              onPress={
+                canWrite
+                  ? t => setSettingsTarget({ id: t.id, name: t.name })
+                  : undefined
+              }
+            />
           )}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -231,6 +247,14 @@ export default function TechniciansScreen({ navigation, route }: Props) {
           onSubmit={handleSubmit}
         />
       ) : null}
+
+      {/* Epic 22 — the per-employee job switches. Kept mounted while a row
+          is targeted; `visible` alone drives present/dismiss. */}
+      <JobSettingsSheet
+        visible={settingsTarget !== null}
+        technician={settingsTarget}
+        onClose={() => setSettingsTarget(null)}
+      />
     </SafeAreaView>
   );
 }

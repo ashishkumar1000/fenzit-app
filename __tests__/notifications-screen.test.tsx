@@ -418,6 +418,24 @@ describe('filter chips', () => {
     expect(bar.props.counts).toEqual({ all: 2, active: 1, completed: 1 });
   });
 
+  it('approval-lifecycle rows count toward "All" — the chip can never disagree with its list', async () => {
+    // The review catch: the All list included the new job-approval cards but
+    // the count's sum (and its memo deps) didn't — "All · N" with N three
+    // less than the rows on screen.
+    mockStore = emptyStore({
+      items: [
+        makeNotification('w1', {
+          eventType: 'job.submitted',
+          payload: { job_number: 'JB-2026-0099', customer_name: 'Ravi' },
+        }),
+        makeNotification('w2', { eventType: 'on_my_way' }),
+      ],
+    });
+    const renderer = await mountScreen();
+    const bar = renderer.root.findByType(NotificationFilterBar);
+    expect(bar.props.counts.all).toBe(2);
+  });
+
   it('a drifted card counts as active — and the chips agree with the filter', async () => {
     mockStore = emptyStore({ items: [makeNotification('n1', { payload: {} })] });
     const renderer = await mountScreen();

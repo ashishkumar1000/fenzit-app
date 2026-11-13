@@ -247,11 +247,53 @@ export function loadMoreJobs(): Promise<void> {
  * airtight. (Call sites: NewJobScreen's create, JobDetailScreen's edit/cancel.)
  */
 export function upsertJob(job: ApiJob): void {
-  if (state.scope !== 'today' || !isSameIstDay(job.scheduledStart)) return;
-  const statuses = filterToStatuses(state.filter);
-  if (statuses && !statuses.includes(job.status)) return;
-  const rest = state.jobs.filter(j => j.id !== job.id);
-  setState({ jobs: [job, ...rest] });
+  // Epic 22 (CAP-4) — a pending/rejected job is never ACTIVE work: it may
+  // not enter any day window. The two queries that legitimately hold one
+  // are the employee's Pending list (scope `all` + the `pending_approval`
+  // filter) and the History Rejected chip (scope `history` + `rejected`) —
+  // both ride this same store, so a create, a decision or a detail refetch
+  // must still reach them. Guard: only when the ACTIVE query names the
+  // job's status does the row land here; every other scope/chip refuses it.
+  if (job.status === 'pending_approval' || job.status === 'rejected') {
+    const targeted =
+      (job.status === 'pending_approval' && state.scope === 'all' && state.filter === 'pending_approval') ||
+      (job.status === 'rejected' && state.scope === 'history' && state.filter === 'rejected');
+    if (!targeted) return;
+    if (state.scope === 'all') {
+      // Scope `all` sorts created_at DESC server-side (fenzit-be jobs.service)
+      // — newest first, same as Today — so prepending keeps the server's sort.
+      const rest = state.jobs.filter(j => j.id !== job.id);
+      setState({ jobs: [job, ...rest] });
+      return;
+    }
+    // History sorts scheduled_start DESC: an existing row updates IN PLACE;
+    // an absent one waits for the next (throttled) History load.
+    const idx = state.jobs.findIndex(j => j.id === job.id);
+    if (idx === -1) return;
+    const jobs = state.jobs.slice();
+    jobs[idx] = job;
+    setState({ jobs });
+    return;
+  }
+  if (state.scope === 'today') {
+    if (!isSameIstDay(job.scheduledStart)) return;
+    // Direct comparison (not `filterToStatuses(...).includes`): a filter chip
+    // is one status value, and `job.status` may hold a status the chips
+    // never offer — those can never match, which is what the guard wants.
+    if (state.filter !== 'all' && job.status !== state.filter) return;
+    const rest = state.jobs.filter(j => j.id !== job.id);
+    setState({ jobs: [job, ...rest] });
+    return;
+  }
+  // The other scopes sort server-side (created_at / scheduled_start DESC): a
+  // row already in the window (an edit, a completion) updates IN PLACE —
+  // never re-sorted client-side, never appended where its sort position
+  // isn't the server's truth.
+  const idx = state.jobs.findIndex(j => j.id === job.id);
+  if (idx === -1) return;
+  const jobs = state.jobs.slice();
+  jobs[idx] = job;
+  setState({ jobs });
 }
 
 /** Reset to the pre-login state. Call on logout. */

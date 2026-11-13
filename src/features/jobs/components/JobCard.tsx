@@ -17,7 +17,7 @@
  * design decision.
  */
 import { StyleSheet, Text, View } from 'react-native';
-import { Clock } from 'lucide-react-native';
+import { ClockIcon } from '../icons';
 import { Avatar, Badge, Card } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
 import { daysOverdue, formatIstDateLabel } from '../../../utils';
@@ -32,7 +32,8 @@ type Props = {
    * Which timeline scope the row is rendered in — drives the scheduled-time
    * meta row. Defaults to `today` (time-only rendering): the owner screens
    * must render byte-identical to before Story 1.5, and the technician's
-   * `TodayScreen` passes nothing too; `HistoryScreen` passes `history`.
+   * `TodayScreen` passes nothing too; the Jobs tabs (owner and employee)
+   * pass `history` for their finished rows.
    *   upcoming — prefixed with the scheduled IST date (times alone aren't
    *              enough when rows span days).
    *   overdue  — time label plus a neutral "N days overdue" badge (attention,
@@ -67,6 +68,8 @@ const STATUS_LABEL: Record<JobBadgeStatus, string> = {
   done: 'Done',
   progress: 'In Progress',
   scheduled: 'Scheduled',
+  pendingApproval: 'Pending approval',
+  rejected: 'Rejected',
   cancelled: 'Cancelled',
 };
 
@@ -141,8 +144,10 @@ export function JobCard({
         <View style={styles.badgeRow}>
           {job.priority === 'urgent' ? (
             // Urgent borrows the cancelled palette — red communicates urgency
-            // without inventing a new status colour.
-            <Badge status="cancelled" tone="soft" size="sm">
+            // without inventing a new status colour. Default size: it sits
+            // beside the status badge, and a smaller pill beside a taller
+            // one reads as a mistake (Sally 2026-11-13).
+            <Badge status="cancelled" tone="soft">
               Urgent
             </Badge>
           ) : null}
@@ -152,13 +157,18 @@ export function JobCard({
         </View>
       </View>
 
+      {/* The description line only when it says something: the fallback is
+          the skill label, and a card reading "Pipe Leak Repair" twice is
+          line noise (Sally 2026-11-13). */}
+      {job.description && job.description !== (customerName ?? skillLabel) ? (
+        <View style={styles.metaRow}>
+          <Text style={styles.metaText} numberOfLines={1}>
+            {job.description}
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.metaRow}>
-        <Text style={styles.metaText} numberOfLines={1}>
-          {job.description ?? skillLabel}
-        </Text>
-      </View>
-      <View style={styles.metaRow}>
-        <Clock size={15} color={colors.textMuted} strokeWidth={2} />
+        <ClockIcon size={15} color={colors.textMuted} strokeWidth={2} />
         {/* One line: the row now shares width with the job number (and the
             overdue badge) — wrapping here would jump the row height. */}
         <Text style={styles.metaText} numberOfLines={1}>

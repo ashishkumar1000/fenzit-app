@@ -25,6 +25,7 @@
 import type { ApiNotification } from '../../services';
 import type { StatusKey } from '../../theme';
 import type { WorkflowTemplateStep } from '../../services/resources/jobs';
+import { isJobApprovalEvent } from './jobApprovalNotificationModel';
 
 export type DisplayStageKey = string;
 
@@ -150,6 +151,10 @@ export function groupNotificationsByJob(
     // is built separately (jobAssignedNotificationModel.ts) and it must
     // never appear as a stage on the job's timeline.
     if (n.eventType === 'job.assigned') continue;
+    // Epic 22 — the approval-lifecycle rows also carry a job id but are
+    // composed one-row cards (jobApprovalNotificationModel.ts), never
+    // workflow-step stages on the job's timeline.
+    if (isJobApprovalEvent(n.eventType)) continue;
     const group = byJob.get(n.jobId);
     if (group) group.push(n);
     else byJob.set(n.jobId, [n]);

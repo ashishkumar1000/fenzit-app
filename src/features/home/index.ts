@@ -12,3 +12,5 @@ export { useTodayPulse } from './useTodayPulse';
 export { NoJobsCard } from './components/NoJobsCard';
 export { LeaveReviewBanner } from './components/LeaveReviewBanner';
 export type { LeaveReviewBannerProps } from './components/LeaveReviewBanner';
+export { EmployeeJobsStrip } from './components/EmployeeJobsStrip';
+export { useOwnerJobSummary } from './useOwnerJobSummary';

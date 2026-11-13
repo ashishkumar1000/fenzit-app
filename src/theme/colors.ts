@@ -172,6 +172,25 @@ export const colors = {
       solid: palette.amber500,
       border: palette.amber200,
     },
+    // Epic 22 — an employee-created job waiting for the owner's decision.
+    // "Waiting" reads amber (the same hue family Scheduled wears); a distinct
+    // key keeps the vocabulary semantic instead of overloading `scheduled`,
+    // which means a confirmed job. Same values, additive only.
+    pendingApproval: {
+      fg: palette.amber700,
+      bg: palette.amber50,
+      solid: palette.amber500,
+      border: palette.amber200,
+    },
+    // Epic 22 — the owner declined an employee-created job. Red family (the
+    // same values Cancelled carries); a distinct key because Cancelled means
+    // the job was dropped by consent, Rejected means it was refused.
+    rejected: {
+      fg: palette.red700,
+      bg: palette.red50,
+      solid: palette.red600,
+      border: palette.red200,
+    },
     cancelled: {
       fg: palette.red700,
       bg: palette.red50,

@@ -43,11 +43,12 @@ import {
   IconButton,
   InlineError,
 } from '../../components/ui';
-import { colors, palette, radius, spacing, typography } from '../../theme';
+import { colors, palette, radius, shadow, spacing, typography } from '../../theme';
 import { jobService } from '../../services';
 import type { ApiError, ApiJob, JobDetail } from '../../services';
 import type { RootStackParamList } from '../../navigation/types';
 import { upsertJob } from '../jobs';
+import { removeApprovalQueueItem } from '../jobs/useApprovalQueue';
 import { loadMyProfile, useMyProfile } from '../profile';
 import { useCanWrite } from '../auth';
 import { flattenApiMessage } from './editJobModel';
@@ -59,6 +60,7 @@ import { SectionCard } from './components/SectionCard';
 import { WorkflowStatusCard } from './components/WorkflowStatus';
 import { JobHeaderCard } from './components/JobHeaderCard';
 import { JobActionsSection } from './components/JobActionsSection';
+import { RejectJobSheet } from './components/RejectJobSheet';
 import { eventLabel } from './eventLabels';
 import {
   jobSiteCoords,
@@ -92,6 +94,17 @@ export default function JobDetailScreen() {
   // Alert (the 20-1 modal ask); `submitting` mirrors the cancel PATCH.
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
+
+  // Epic 22 — the approve/reject decision on a pending employee job. The
+  // reject sheet carries the optional reason; both paths share the handler.
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [deciding, setDeciding] = useState(false);
+  // Which decision is in flight — the tapped button shows the spinner, so
+  // the owner can tell which call is running (Sally review 2026-11-13).
+  const [decidingKind, setDecidingKind] = useState<'approve' | 'reject' | null>(null);
+  // A double-tap on Approve/Reject confirm must not fire the request twice —
+  // same guard as the cancel PATCH.
+  const isDecidingRef = useRef(false);
 
   // Copy affordances on the person cards (after the phone number): a brief
   // "Copied" note confirms the tap. Copies the raw diallable number.
@@ -258,6 +271,54 @@ export default function JobDetailScreen() {
 
   const confirmCancel = useCallback(() => setCancelConfirmOpen(true), []);
 
+  // Epic 22 — approve or reject a pending employee job. Success applies the
+  // post-decision job everywhere (this screen, the jobs store, Home's
+  // counts), drops the row from the Pending queue store, and reloads the
+  // detail so the screen shows the new state. A 409 means the owner already
+  // decided (another device or a double fire) — the reload reconciles.
+  const handleDecision = useCallback(
+    async (decision: 'approve' | 'reject', reason?: string) => {
+      if (!detail || isDecidingRef.current) return;
+      isDecidingRef.current = true;
+      setDeciding(true);
+      setDecidingKind(decision);
+      // Abort any in-flight detail GET first: its response is pre-decision
+      // and, worse, `load` refuses to run while that fetch is busy — the
+      // post-decision reload (and the 409 reconcile) would silently no-op
+      // and the decision bar would linger on stale state (review 2026-11-13).
+      latestControllerRef.current?.abort();
+      try {
+        const updated = await jobService.decidePending(detail.id, decision, reason);
+        applyJobUpdate(updated);
+        removeApprovalQueueItem(updated.id);
+        void load(false);
+        setIsRejectOpen(false);
+      } catch (caught) {
+        const apiError = caught as ApiError;
+        if (apiError.code === 'JOB_NOT_PENDING') {
+          // Already decided elsewhere — reconcile: the stale row leaves the
+          // queue too (it may still be on screen), and the reload shows the
+          // decision. No alert: nothing the owner did here failed.
+          removeApprovalQueueItem(detail.id);
+          void load(false);
+          setIsRejectOpen(false);
+          return;
+        }
+        Alert.alert(
+          "Couldn't save the decision",
+          flattenApiMessage(apiError.message) || 'Please try again.',
+        );
+      } finally {
+        isDecidingRef.current = false;
+        setDeciding(false);
+        setDecidingKind(null);
+      }
+    },
+    [applyJobUpdate, detail, load],
+  );
+
+  const openRejectSheet = useCallback(() => setIsRejectOpen(true), []);
+
   if (!jobId) return null;
 
   const notFound = Boolean(error && (error.status === 404 || error.status === 403));
@@ -332,8 +393,9 @@ export default function JobDetailScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <>
+        <View style={styles.detailBody}>
           <ScrollView
+            style={styles.scrollFlex}
             contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -348,9 +410,26 @@ export default function JobDetailScreen() {
               description / notes behind dividers. */}
           <JobHeaderCard detail={detail} urgent={urgent} statusBadge={statusBadge} />
 
+          {/* Epic 22 (CAP-5) — the owner sees the rejection reason they (or
+              another admin) gave: the badge alone says "Rejected"; the
+              reason is what the review promise made visible. A rejected job
+              with NO reason still reads the badge honestly. */}
+          {detail.status === 'rejected' && detail.rejectionReason ? (
+            <View style={styles.rejectionNote}>
+              <Badge status="rejected" dot size="sm">
+                Owner's reason
+              </Badge>
+              <Text style={styles.rejectionText}>{detail.rejectionReason}</Text>
+            </View>
+          ) : null}
+
           {/* 1.5. Workflow status — show progress through workflow steps when
-              the job has a template. */}
-          {detail.workflowTemplate?.steps ? (
+              the job has a template. Epic 22 — a pending/rejected job never
+              entered the workflow (the owner hasn't approved it), so the
+              chain stays hidden until it actually starts. */}
+          {detail.workflowTemplate?.steps &&
+          detail.status !== 'pending_approval' &&
+          detail.status !== 'rejected' ? (
             <WorkflowStatusCard
               steps={detail.workflowTemplate.steps}
               currentStepIndex={detail.currentStepIndex ?? null}
@@ -358,7 +437,9 @@ export default function JobDetailScreen() {
             />
           ) : null}
 
-          {/* 2. Actions slot — edit + cancel for scheduled jobs only. */}
+          {/* 2. Actions slot — edit + cancel for scheduled and pending jobs
+              (CAP-5: a pending employee job takes owner edits). Approve /
+              Reject live in the sticky decision bar below the scroll. */}
           {canWrite ? (
             <JobActionsSection
               jobStatus={detail.status}
@@ -553,19 +634,68 @@ export default function JobDetailScreen() {
           ) : null}
         </ScrollView>
 
+        {/* Epic 22 — the pending job's decision bar: sticky, loud (the amber
+            family the Pending badge wears, lifted off the page by the sheet
+            shadow), and bottom safe-area inset so the buttons clear the
+            gesture bar. */}
+        {detail.status === 'pending_approval' && canWrite ? (
+          <SafeAreaView edges={['bottom']} style={styles.decisionFooter}>
+            <Text style={styles.decisionNote}>
+              {detail.technician?.name?.trim()
+                ? `${detail.technician.name.trim()} created this job.`
+                : 'An employee created this job.'}{' '}
+              Approve it to schedule it like any other job.
+            </Text>
+            <View style={styles.actionsRow}>
+              <Button
+                variant="secondary"
+                size="lg"
+                style={styles.decisionButton}
+                disabled={deciding}
+                loading={decidingKind === 'reject'}
+                onPress={openRejectSheet}>
+                Reject
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                style={styles.decisionButton}
+                disabled={deciding}
+                loading={decidingKind === 'approve'}
+                onPress={() => void handleDecision('approve')}>
+                Approve
+              </Button>
+            </View>
+          </SafeAreaView>
+        ) : null}
+
         {/* Gated on `detail`, never on `isEditOpen`: TrueSheet's unmount does
             NOT dismiss a presented sheet, so unmounting on close would strand
             the native sheet on screen, frozen (seen live 2026-09-15 — the
             sheet stayed on "Saving…" after a successful save). Kept mounted
             while the detail exists, `visible` alone drives present/dismiss. */}
         {detail && canWrite ? (
-          <EditJobSheet
-            visible={isEditOpen}
-            job={detail}
-            technicians={profile?.technicians ?? []}
-            onClose={handleEditClosed}
-            onSaved={handleEditSaved}
-          />
+          <>
+            <EditJobSheet
+              visible={isEditOpen}
+              job={detail}
+              technicians={profile?.technicians ?? []}
+              onClose={handleEditClosed}
+              onSaved={handleEditSaved}
+            />
+
+            {/* Epic 22 — the reject path's reason sheet. The subtitle names
+                the employee who created the job (their id is the pending
+                job's technician — CAP-2 creator-assigned). */}
+            <RejectJobSheet
+              visible={isRejectOpen}
+              jobNumber={detail.jobNumber}
+              employeeName={detail.technician?.name ?? null}
+              submitting={deciding}
+              onClose={() => setIsRejectOpen(false)}
+              onConfirm={reason => void handleDecision('reject', reason || undefined)}
+            />
+          </>
         ) : null}
 
         <ConfirmDialog
@@ -580,7 +710,7 @@ export default function JobDetailScreen() {
           onConfirm={() => void handleCancelJob()}
           onCancel={() => setCancelConfirmOpen(false)}
         />
-      </>
+      </View>
     )}
     </SafeAreaView>
   );
@@ -590,6 +720,50 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.surfacePage,
+  },
+  // Epic 22 — the scroll and the sticky decision bar share one flex column,
+  // so the bar is pinned below the scroll instead of scrolling with it.
+  detailBody: {
+    flex: 1,
+  },
+  scrollFlex: {
+    flex: 1,
+  },
+  decisionFooter: {
+    // Loud by meaning, not by volume: the amber family the "Pending
+    // approval" badge wears, lifted off the page by the sheet's upward
+    // shadow. The bottom inset comes from the SafeAreaView wrapper.
+    backgroundColor: colors.status.pendingApproval.bg,
+    borderTopWidth: 1,
+    borderTopColor: colors.status.pendingApproval.border,
+    paddingHorizontal: spacing.s4,
+    paddingTop: spacing.s3,
+    ...shadow.sheet,
+    gap: spacing.s3,
+  },
+  decisionNote: {
+    ...typography.caption,
+    color: colors.status.pendingApproval.fg,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s3,
+  },
+  decisionButton: {
+    flex: 1,
+  },
+  rejectionNote: {
+    gap: spacing.s1,
+    padding: spacing.s3,
+    borderRadius: radius.md,
+    backgroundColor: colors.status.rejected.bg,
+    borderWidth: 1,
+    borderColor: colors.status.rejected.border,
+  },
+  rejectionText: {
+    ...typography.bodySm,
+    color: colors.status.rejected.fg,
   },
   // Back header pattern (spec §0): icon button + title@20, hairline under.
   header: {

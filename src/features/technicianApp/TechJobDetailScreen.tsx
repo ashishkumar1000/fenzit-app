@@ -35,11 +35,12 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Badge, IconButton } from '../../components/ui';
-import { colors, spacing, typography } from '../../theme';
+import { colors, radius, spacing, typography } from '../../theme';
 import { jobService } from '../../services';
 import type { ApiError, JobDetail } from '../../services';
 import type { TechnicianRootStackParamList } from '../../navigation/types';
 import { apiJobOf, loadToday, upsertTechnicianJob } from './useTechnicianJobs';
+import { upsertJob } from '../jobs/useJobs';
 import { statusToBadge } from '../jobs/format';
 import { actionBarAction } from './workflowActionBarModel';
 import { useWorkflowAdvance } from './useWorkflowAdvance';
@@ -55,6 +56,8 @@ const STATUS_LABEL = {
   done: 'Done',
   progress: 'In Progress',
   scheduled: 'Scheduled',
+  pendingApproval: 'Pending approval',
+  rejected: 'Rejected',
   cancelled: 'Cancelled',
 } as const;
 
@@ -127,10 +130,13 @@ export default function TechJobDetailScreen() {
           setDetail(fresh);
           setError(null);
           clearActionErrorRef.current();
-          // Push the ApiJob subset (NO presigned URLs) into the shared store
-          // so the list badges (the in-progress/scheduled grouping) stay
-          // honest without a list refetch.
+          // Push the ApiJob subset (NO presigned URLs) into BOTH shared
+          // stores so the lists stay honest without a refetch: Today's
+          // replace-in-place row, and the Jobs tab's `useJobs` row (its
+          // today-scope prepend is a no-op elsewhere — same limits the
+          // owner's JobDetail accepts).
           upsertTechnicianJob(apiJobOf(fresh));
+          upsertJob(apiJobOf(fresh));
         } catch (caught) {
           const apiError = caught as ApiError;
           if (isAbort(apiError, signal)) return;
@@ -311,6 +317,18 @@ export default function TechJobDetailScreen() {
                 tintColor={colors.primary}
               />
             }>
+            {/* Epic 22 (CAP-5) — the creator sees the owner's rejection
+                reason on the job. The badge alone says "Rejected"; the
+                reason is what the review promise made visible. A rejected
+                job with NO reason still reads the badge honestly. */}
+            {detail.status === 'rejected' && detail.rejectionReason ? (
+              <View style={styles.rejectionNote}>
+                <Badge status="rejected" dot size="sm">
+                  Owner's reason
+                </Badge>
+                <Text style={styles.rejectionText}>{detail.rejectionReason}</Text>
+              </View>
+            ) : null}
             <TechJobDetailContent
               detail={detail}
               onAdvance={advance}
@@ -348,6 +366,18 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.surfacePage,
+  },
+  rejectionNote: {
+    backgroundColor: colors.status.rejected.bg,
+    borderWidth: 1,
+    borderColor: colors.status.rejected.border,
+    borderRadius: radius.lg,
+    padding: spacing.s4,
+    gap: spacing.s2,
+  },
+  rejectionText: {
+    ...typography.body,
+    color: colors.status.rejected.fg,
   },
   // Back header pattern (spec §0): icon button + title@20 + trailing badge,
   // hairline under.

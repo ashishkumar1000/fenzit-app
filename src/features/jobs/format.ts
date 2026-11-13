@@ -13,7 +13,12 @@ import type { JobStatusApi } from '../../services';
  */
 export type JobBadgeStatus = Extract<
   StatusKey,
-  'done' | 'progress' | 'scheduled' | 'cancelled'
+  | 'done'
+  | 'progress'
+  | 'scheduled'
+  | 'pendingApproval'
+  | 'rejected'
+  | 'cancelled'
 >;
 
 /**
@@ -27,6 +32,8 @@ export function statusToBadge(s: JobStatusApi): JobBadgeStatus {
     in_progress: 'progress',
     completed: 'done',
     cancelled: 'cancelled',
+    pending_approval: 'pendingApproval',
+    rejected: 'rejected',
   } as const;
   // Fallback for enum drift: an unknown status must not render `undefined`
   // into `<Badge status>` — fall back to the scheduled badge.

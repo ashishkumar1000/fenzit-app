@@ -265,3 +265,15 @@ Animated.loop = (animation, config) =>
     iterations:
       config?.iterations && config.iterations > 0 ? config.iterations : 1,
   });
+
+// Node 25+ ships a partial `window` global (ErrorEvent present,
+// dispatchEvent missing). React 19's reportGlobalError checks
+// `typeof window.ErrorEvent === 'function'`, takes the window branch, and
+// crashes on the missing dispatchEvent — turning any uncaught React error
+// into a process-level crash that MASKS the real error. Clearing
+// ErrorEvent routes errors back through process.emit, so jest reports the
+// actual failure like on older Node.
+if (typeof window !== 'undefined' && typeof window.dispatchEvent !== 'function') {
+  // @ts-expect-error jest.setup is plain JS
+  window.ErrorEvent = undefined;
+}

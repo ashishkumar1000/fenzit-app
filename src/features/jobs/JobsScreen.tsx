@@ -22,16 +22,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import {
-  Bell,
-  CalendarClock,
-  CircleAlert,
-  CircleCheck,
-  CircleX,
-  ClipboardList,
-  Plus,
-  Wrench,
-  type LucideIcon,
-} from 'lucide-react-native';
+  BellIcon,
+  CalendarClockIcon,
+  CircleAlertIcon,
+  CircleCheckIcon,
+  CircleXIcon,
+  ClipboardListIcon,
+  PlusIcon,
+  WrenchIcon,
+  type IconComponent,
+} from './icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeScreenProps } from '@react-navigation/native';
@@ -39,7 +39,7 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Button, EmptyState, IconButton, InlineError, SegmentedControl } from '../../components/ui';
 import { PushEnableCard, PUSH_CARD_CLEARANCE } from '../push/PushEnableCard';
-import { useCanWrite } from '../auth';
+import { isAdminRole, useCanWrite, useSessionRole } from '../auth';
 import { colors, spacing, typography } from '../../theme';
 import { useNow } from '../../hooks';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
@@ -50,16 +50,27 @@ import { bellBadgeLabel } from '../notifications/bellBadge';
 import { JobCard } from './components/JobCard';
 import { StatusFilterBar } from './components/StatusFilterBar';
 import { DispatchTip } from './components/DispatchTip';
+import { PendingQueue } from './components/PendingQueue';
 import { useJobs } from './useJobs';
-import { filterForScope, HISTORY_FILTERS } from './scopeFilters';
+import { TODAY_FILTERS, filterForScope, HISTORY_FILTERS } from './scopeFilters';
+import { loadApprovalQueue } from './useApprovalQueue';
 import type { ApiJob, JobFilter, JobScope } from './types';
 
-/** Scope selector labels — the four timeline buckets. */
-const SCOPES: { value: JobScope; label: string; badge?: number }[] = [
+/**
+ * The segment values the owner's tab offers: the four timeline buckets plus
+ * Epic 22's Pending queue — not a `GET /jobs` scope at all (its list comes
+ * from `GET /approval-queue`, so the screen keeps a segment state distinct
+ * from the store's `scope`).
+ */
+type ScreenScope = JobScope | 'pending';
+
+/** Scope selector labels — the timeline buckets + the approval queue. */
+const SCOPES: { value: ScreenScope; label: string; badge?: number }[] = [
   { value: 'today', label: 'Today' },
   { value: 'upcoming', label: 'Upcoming' },
   { value: 'overdue', label: 'Overdue' },
   { value: 'history', label: 'History' },
+  { value: 'pending', label: 'Pending' },
 ];
 
 /**
@@ -67,47 +78,66 @@ const SCOPES: { value: JobScope; label: string; badge?: number }[] = [
  * meaning so empty pages aren't identical. Today keeps the original per-chip
  * entries (the Story 1.1 baseline); the other scopes get their own.
  */
-type EmptyStateSpec = { icon: LucideIcon; title: string; description: string };
+type EmptyStateSpec = { icon: IconComponent; title: string; description: string };
 
-const EMPTY_BY_FILTER: Record<JobFilter, { icon: LucideIcon; description: string }> = {
+// The employee-only `pending_approval` filter never reaches this screen
+// (its chips never offer it and `filterForScope` resets it on any scope
+// change), so the map excludes it. `rejected` is a real History chip here
+// (Epic 22) — the owner sees tenant-wide rejections too.
+const EMPTY_BY_FILTER: Record<
+  Exclude<JobFilter, 'pending_approval'>,
+  { icon: IconComponent; description: string }
+> = {
   all: {
-    icon: ClipboardList,
+    icon: ClipboardListIcon,
     description:
       'Create your first job to assign it to an employee and track it through to completion.',
   },
   scheduled: {
-    icon: CalendarClock,
+    icon: CalendarClockIcon,
     description: 'Jobs booked for a future date and time will show up here.',
   },
   in_progress: {
-    icon: Wrench,
+    icon: WrenchIcon,
     description:
       'Jobs an employee has started, but not yet finished, will show up here.',
   },
   completed: {
-    icon: CircleCheck,
+    icon: CircleCheckIcon,
     description: 'Jobs an employee has marked complete will show up here.',
   },
   cancelled: {
-    icon: CircleX,
+    icon: CircleXIcon,
     description: 'Jobs called off before completion will show up here.',
+  },
+  rejected: {
+    icon: CircleXIcon,
+    description: 'Jobs declined on review will show up here.',
   },
 };
 
 function emptyStateFor(scope: JobScope, filter: JobFilter): EmptyStateSpec {
   if (scope === 'today') {
-    return { title: 'No jobs yet', ...EMPTY_BY_FILTER[filter] };
+    // Belt for the type system: the employee-only `pending_approval` chip
+    // and the Rejected chip can't survive a move to Today (filterForScope
+    // resets both), but the index must stay total.
+    return {
+      title: 'No jobs yet',
+      ...EMPTY_BY_FILTER[
+        filter === 'pending_approval' || filter === 'rejected' ? 'all' : filter
+      ],
+    };
   }
   if (scope === 'upcoming') {
     return {
-      icon: CalendarClock,
+      icon: CalendarClockIcon,
       title: 'No upcoming jobs',
       description: 'Jobs booked for tomorrow or later will show up here.',
     };
   }
   if (scope === 'overdue') {
     return {
-      icon: CircleAlert,
+      icon: CircleAlertIcon,
       title: 'Nothing overdue',
       description: 'Jobs past their date that were never finished will show up here.',
     };
@@ -118,10 +148,13 @@ function emptyStateFor(scope: JobScope, filter: JobFilter): EmptyStateSpec {
   if (filter === 'cancelled') {
     return { title: 'No history yet', ...EMPTY_BY_FILTER.cancelled };
   }
+  if (filter === 'rejected') {
+    return { title: 'No history yet', ...EMPTY_BY_FILTER.rejected };
+  }
   return {
-    icon: ClipboardList,
+    icon: ClipboardListIcon,
     title: 'No history yet',
-    description: 'Jobs marked complete or cancelled will show up here.',
+    description: 'Finished, cancelled or declined jobs will show up here.',
   };
 }
 
@@ -150,9 +183,19 @@ export default function JobsScreen({ navigation, route }: Props) {
   } = useJobs();
   const { customers } = useCustomers();
   const { profile } = useMyProfile();
+  // Epic 22 — the Pending segment is screen-local (it reads the approval
+  // queue, not the jobs store), so the segment state lives here while the
+  // store's `scope` keeps tracking the GET /jobs buckets.
+  const [pendingSelected, setPendingSelected] = useState(false);
+  const segment: ScreenScope = pendingSelected ? 'pending' : scope;
   // The bell's badge (Story 3.4) — refreshed on focus below, TTL-throttled
   // in the store, and driven live by the 3.3 socket's own refetch.
   const { unreadCount, loadUnreadCount } = useNotifications();
+  // The Pending segment is admin-only (the queue endpoint is company-
+  // admin-only); read once at the top so both the focus effect (deep link)
+  // and the segment list can gate on it.
+  const sessionRole = useSessionRole();
+  const isAdminViewer = isAdminRole(sessionRole);
 
   // The urgency rail's clock — one 60s tick for the whole list. `now` is in
   // renderJob's deps, so every visible row re-renders on each tick (cheap at
@@ -176,7 +219,19 @@ export default function JobsScreen({ navigation, route }: Props) {
   useFocusEffect(
     useCallback(() => {
       const paramScope = route.params?.scope;
-      if (paramScope && paramScope !== scope) {
+      if (paramScope === 'pending' && isAdminViewer) {
+        // Epic 22 — the Home strip's deep link: the Pending segment is
+        // screen-local, so this branch only flips the segment (the queue
+        // store's mount effect loads it). Admin-only: a viewer has no
+        // Pending segment (and the strip only deep-links for admins).
+        if (!pendingSelected) setPendingSelected(true);
+      } else if (
+        paramScope &&
+        // A viewer deep-linked with `pending` has no such segment — ignore.
+        paramScope !== 'pending' &&
+        (paramScope !== scope || pendingSelected)
+      ) {
+        setPendingSelected(false);
         void loadJobs(paramScope, filterForScope(filter, paramScope));
       }
       if (paramScope) {
@@ -185,16 +240,26 @@ export default function JobsScreen({ navigation, route }: Props) {
       void loadJobs();
       void loadMyProfile();
       void loadUnreadCount();
-    }, [route.params?.scope, scope, filter, loadJobs, navigation, loadUnreadCount]),
+      // Epic 22 — returning to the tab while the Pending queue is on screen
+      // refreshes it too (the store throttles within its TTL window).
+      if (pendingSelected) {
+        void loadApprovalQueue();
+      }
+    }, [route.params?.scope, scope, filter, loadJobs, navigation, loadUnreadCount, pendingSelected, isAdminViewer]),
   );
 
   /** Scope selector handler — one `loadJobs` with the reset/kept filter. */
   const handleScopeChange = useCallback(
-    (next: JobScope) => {
-      if (next === scope) return;
+    (next: ScreenScope) => {
+      if (next === segment) return;
+      if (next === 'pending') {
+        setPendingSelected(true);
+        return;
+      }
+      setPendingSelected(false);
       void loadJobs(next, filterForScope(filter, next));
     },
-    [scope, filter, loadJobs],
+    [segment, filter, loadJobs],
   );
 
   // `customerId` → display name, for the card titles.
@@ -244,6 +309,14 @@ export default function JobsScreen({ navigation, route }: Props) {
     emptyStateFor(scope, filter);
 
   const canWrite = useCanWrite();
+  // Epic 22 — the Pending segment is the OWNER's approval queue: a viewer
+  // cannot decide anything, and the queue endpoint is company-admin-only —
+  // a viewer who opened it would land in a permanent 403 InlineError
+  // (review 2026-11-13). The segment simply doesn't exist for them.
+  const scopesForViewer = useMemo(
+    () => (isAdminViewer ? SCOPES : SCOPES.filter(s => s.value !== 'pending')),
+    [isAdminViewer],
+  );
 
   const handleNewJob = () => {
     navigation.navigate('NewJob');
@@ -256,6 +329,14 @@ export default function JobsScreen({ navigation, route }: Props) {
   const handleOpenJob = useCallback(
     (job: ApiJob) => {
       navigation.navigate('JobDetail', { jobId: job.id });
+    },
+    [navigation],
+  );
+
+  /** The Pending queue's rows carry only the id — same destination. */
+  const handleOpenJobById = useCallback(
+    (jobId: string) => {
+      navigation.navigate('JobDetail', { jobId });
     },
     [navigation],
   );
@@ -288,7 +369,7 @@ export default function JobsScreen({ navigation, route }: Props) {
             size="md"
             label="Notifications"
             onPress={handleOpenNotifications}>
-            <Bell size={22} color={colors.textStrong} strokeWidth={2} />
+            <BellIcon size={22} color={colors.textStrong} strokeWidth={2} />
             {unreadCount !== null && unreadCount > 0 ? (
               <View style={styles.bellBadge}>
                 <Text style={styles.bellBadgeText}>{bellBadgeLabel(unreadCount)}</Text>
@@ -303,7 +384,7 @@ export default function JobsScreen({ navigation, route }: Props) {
               size="md"
               shape="pill"
               onPress={handleNewJob}
-              leadingIcon={<Plus size={18} color={colors.onPrimary} strokeWidth={2.5} />}>
+              leadingIcon={<PlusIcon size={18} color={colors.onPrimary} />}>
               New job
             </Button>
           ) : null}
@@ -312,11 +393,15 @@ export default function JobsScreen({ navigation, route }: Props) {
 
       <View style={styles.filterWrap}>
         <SegmentedControl
-          options={SCOPES.map(s =>
+          options={scopesForViewer.map(s =>
             s.value === 'overdue' && overdueCount > 0 ? { ...s, badge: overdueCount } : s,
           )}
-          value={scope}
+          value={segment}
           onChange={handleScopeChange}
+          // Five full-word scopes don't fit equal slots on a phone without
+          // truncating — content-sized segments keep every label whole (the
+          // track scrolls if a future scope set ever overflows).
+          sizing="content"
         />
         {/* Chips only where status is user-selectable: all five under Today,
             All/Done/Cancelled under History. Upcoming and Overdue hide the
@@ -325,16 +410,21 @@ export default function JobsScreen({ navigation, route }: Props) {
             sections stay discoverable. Visual hierarchy: the segmented
             control owns "you are here" (view switching); these chips are a
             filter and use a soft-tint active state (StatusFilterBar). */}
-        {scope === 'today' || scope === 'history' ? (
+        {segment === 'today' || segment === 'history' ? (
           <StatusFilterBar
             value={filter}
             onChange={setFilter}
-            filters={scope === 'history' ? HISTORY_FILTERS : undefined}
+            filters={segment === 'today' ? TODAY_FILTERS : HISTORY_FILTERS}
           />
         ) : null}
       </View>
 
-      {isLoading ? (
+      {/* Epic 22 — the Pending segment swaps the jobs tree for the approval
+          queue: different endpoint, different row shape, own state grammar
+          (PendingQueue), so nothing of the GET /jobs branch runs under it. */}
+      {segment === 'pending' ? (
+        <PendingQueue onOpenJob={handleOpenJobById} />
+      ) : isLoading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
@@ -411,7 +501,7 @@ export default function JobsScreen({ navigation, route }: Props) {
                   ctaLabel={canWrite && scope === 'upcoming' ? 'Schedule a job' : undefined}
                   ctaIcon={
                     canWrite && scope === 'upcoming' ? (
-                      <Plus size={20} color={colors.onPrimary} strokeWidth={2.5} />
+                      <PlusIcon size={20} color={colors.onPrimary} />
                     ) : undefined
                   }
                   onPressCta={canWrite && scope === 'upcoming' ? handleNewJob : undefined}

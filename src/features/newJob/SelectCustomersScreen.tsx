@@ -41,9 +41,22 @@ import {
   useCustomers,
 } from '../customers';
 import type { Customer } from '../customers';
-import type { RootStackParamList } from '../../navigation/types';
+import type {
+  RootStackParamList,
+  TechnicianRootStackParamList,
+} from '../../navigation/types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'SelectCustomers'>;
+/**
+ * Dual-registered (Epic 22): the owner stack since Story 11-8, the
+ * technician stack behind TechNewJob's "Browse all" now. The intersection
+ * keeps ONE component compilable against both lists — `popTo(returnTo)`
+ * needs whichever route the caller named, and the param shape is identical
+ * in both.
+ */
+type Props = NativeStackScreenProps<
+  RootStackParamList & TechnicianRootStackParamList,
+  'SelectCustomers'
+>;
 
 const CIRCLE = 26;
 
@@ -64,24 +77,32 @@ export default function SelectCustomersScreen({ navigation, route }: Props) {
     [customers, trimmedQuery],
   );
 
+  // Where to return: `NewJob` (the owner flow, the default) or `TechNewJob`
+  // (the technician flow, Epic 22). The caller pushes the browser on top of
+  // itself, so popTo pops us off and merges the param onto it — React
+  // Navigation 7's plain `navigate` no longer goes back to an existing
+  // screen, it PUSHES a new one. The popTo call is BRANCHED, not passed a
+  // union screen name: popTo's arg tuple type distributes per route, so
+  // `popTo(returnTo, …)` cannot typecheck.
+  const returnTo = route.params?.returnTo ?? 'NewJob';
+
+  const popBack = (pickedId: string | null) => {
+    if (returnTo === 'TechNewJob') {
+      navigation.popTo('TechNewJob', { selectedCustomerId: pickedId }, { merge: true });
+    } else {
+      navigation.popTo('NewJob', { selectedCustomerId: pickedId }, { merge: true });
+    }
+  };
+
   const apply = () => {
-    // NewJob sits directly beneath this screen, so popTo pops us off the
-    // stack and merges the param onto it. React Navigation 7's plain
-    // `navigate` no longer goes back to an existing screen — it PUSHES a new
-    // one, which left the picker stranded in the stack (it resurfaced after
-    // New Job's post-create goBack).
-    navigation.popTo(
-      'NewJob',
-      { selectedCustomerId: pendingId },
-      { merge: true },
-    );
+    popBack(pendingId);
   };
 
   // Only reachable with a pending selection (disabled otherwise): dropping
   // the customer is a decision too, so it applies straight away instead of
   // leaving the user stuck on a screen whose Apply button is now disabled.
   const clearAndReturn = () => {
-    navigation.popTo('NewJob', { selectedCustomerId: null }, { merge: true });
+    popBack(null);
   };
 
   const renderRow = ({ item }: { item: Customer }) => {

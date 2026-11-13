@@ -93,11 +93,25 @@ export default function PermissionsPrimerScreen({ role, notice, onContinue }: Pr
       setPerms(p => ({ ...p, notifications }));
     } catch (err) {
       // Fail to 'denied' — the row then offers Allow, and tapping it runs
-      // the real request (the attendance probe's fail-open rule).
+      // the real request (the attendance probe's fail-open rule). Leaving
+      // 'checking' would render the row as muted-granted and Continue
+      // would never ask for it — a probe failure must not silence the ask
+      // (deferred-work item, fixed 2026-11-13). Two known states survive
+      // the catch: anything already 'granted' stays granted (a post-Allow
+      // re-probe that throws must not re-ask a granted permission), and
+      // iOS camera's 'unknown' stays unknown (the JS-cannot-read state
+      // keeps its ask-at-first-use path; flipping it to 'denied' would
+      // render an Allow pill whose iOS request is a no-op).
       console.error('[PermissionsPrimer] probe failed:', err);
       setPerms(p => ({
         location: p.location === 'granted' ? 'granted' : 'denied',
-        camera: p.camera === 'granted' ? 'granted' : p.camera,
+        camera:
+          p.camera === 'granted'
+            ? 'granted'
+            : p.camera === 'unknown'
+              ? 'unknown'
+              : 'denied',
+        notifications: p.notifications === 'granted' ? 'granted' : 'denied',
       }));
     }
   };

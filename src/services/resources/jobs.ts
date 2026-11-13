@@ -34,8 +34,18 @@ export type JobServiceType =
 
 export type JobPriority = 'normal' | 'urgent';
 
-/** Status enum as the API spells it (snake_case), per api-contracts §1. */
-export type JobStatusApi = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+/**
+ * Status enum as the API spells it (snake_case), per api-contracts §1.
+ * Epic 22 adds the employee-created-job states: `pending_approval` (saved,
+ * waiting for the owner's decision) and `rejected` (the owner declined it).
+ */
+export type JobStatusApi =
+  | 'scheduled'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled'
+  | 'pending_approval'
+  | 'rejected';
 
 
 /**
@@ -62,18 +72,59 @@ export interface WorkflowTemplate {
 
 /**
  * Timeline buckets `GET /jobs` splits the tenant's jobs into (fenzit-be
- * Story 3-7). The four are mutually exclusive by construction: Upcoming starts
- * at tomorrow's IST boundary (so a job booked for today is ONLY in Today) and
- * History is the finished set (completed/cancelled) the active buckets exclude.
+ * Story 3-7). The day scopes are mutually exclusive by construction: Upcoming
+ * starts at tomorrow's IST boundary (so a job booked for today is ONLY in
+ * Today) and History is the finished set (completed/cancelled/rejected) the
+ * active buckets exclude. `all` (Epic 22 — the employee Jobs tab) drops both
+ * the day window and the status predicate: every status, newest created first.
  *
  * Each scope also fixes the sort server-side, which is why the FE must never
  * re-sort rows client-side — see `useJobs`' today-only `upsertJob` guard.
  */
-export type JobScope = 'today' | 'upcoming' | 'overdue' | 'history';
+export type JobScope = 'today' | 'upcoming' | 'overdue' | 'history' | 'all';
 
-export interface CreateJobRequest {
-  /** Existing customer UUID. */
-  customerId: string;
+/**
+ * Epic 22 — the inline "new customer" payload (`POST /jobs` `newCustomer`,
+ * find-or-create by phone server-side). Exactly one of `customerId` /
+ * `newCustomer` may be sent (the API 422s on both or neither). Identity
+ * fields (`name`, `countryCode`, `phoneNumber` — all required) plus the
+ * same structured-address fields the customer form posts; those address
+ * fields are optional — the job's `serviceLocation` still must be
+ * non-empty, so a caller creating a customer inline derives it from them
+ * (address + city) and blocks submit when nothing yields.
+ */
+export interface NewCustomerPayload {
+  name: string;
+  /** Dial code with `+`, e.g. `+91`. */
+  countryCode: string;
+  /** Digits only, no dial code. */
+  phoneNumber: string;
+  address?: string;
+  city?: string;
+  /** Resolved Places line from the address autosuggest, when one was used. */
+  formattedAddress?: string;
+  pincode?: string;
+  latitude?: number;
+  longitude?: number;
+  /** Extra location detail (flat / building / floor / landmark). */
+  addressDetails?: string;
+}
+
+/**
+ * `POST /jobs` body: the shared job fields plus EXACTLY ONE customer arm —
+ * an existing customer id, or the inline new-customer payload (CAP-2). The
+ * TS union keeps a caller from sending both (the API would 422).
+ */
+export type CreateJobRequest =
+  | (Omit<CreateJobRequestFields, 'customerId' | 'newCustomer'> & {
+      customerId: string;
+    })
+  | (Omit<CreateJobRequestFields, 'customerId' | 'newCustomer'> & {
+      newCustomer: NewCustomerPayload;
+    });
+
+/** The job fields both arms of `CreateJobRequest` share. */
+type CreateJobRequestFields = {
   /** Where the work happens. Required by the API — never omitted. */
   serviceLocation: string;
   /**
@@ -91,7 +142,7 @@ export interface CreateJobRequest {
   /** Defaults to `normal` server-side when omitted. */
   priority?: JobPriority;
   notesForTechnician?: string;
-}
+};
 
 /**
  * `PATCH /jobs/:id` body: any subset of the editable fields, OR exactly
@@ -196,6 +247,15 @@ export interface ApiJob {
   description: string | null;
   /** Null when the form left it blank. */
   notesForTechnician: string | null;
+  /**
+   * Epic 22 — creator (`created_by`) and, once the owner has decided on a
+   * pending job, the decision time and rejection reason. Optional because
+   * these ride only backends at fenzit-be 873273b or newer; absent means the
+   * running backend predates the fields, not "no creator".
+   */
+  createdBy?: string | null;
+  decidedAt?: string | null;
+  rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -317,14 +377,36 @@ export interface ListJobsQuery {
 }
 
 /**
- * `POST /jobs` — creates a job for the owner's tenant. `201` returns the full
- * row, same shape as list responses.
+ * `POST /jobs` — creates a job for the signed-in user's tenant. `201`
+ * returns the full row, same shape as list responses. The endpoint also
+ * serves employee creators (Epic 22): the backend resolves the caller's
+ * `canCreateJobs`/`jobApprovalRequired` memberships flags itself, so the
+ * app sends the same body from either role — `technicianId` must be the
+ * employee's own id there.
+ *
+ * `idempotencyKey` is optional but RECOMMENDED for a user-initiated submit:
+ * the backend replays the first answer for 24h against the same key, so a
+ * double tap cannot create two jobs. Mint a fresh key per action
+ * (`generateIdempotencyKey()`), never reuse one across different actions.
  *
  * Documented failures, all surfaced as `ApiError`:
- *   400 company not set up · 403 technician JWT · 422 validation error
+ *   400 company not set up · 403 technician JWT (employee without
+ *   `canCreateJobs`) · 404 unknown customer/technician · 422 validation
+ *   (exactly one of customerId/newCustomer, past slot, both customer arms)
  */
-async function create(input: CreateJobRequest): Promise<ApiJob> {
-  const res = await apiClient.post<ApiJob>('/jobs', input);
+async function create(
+  input: CreateJobRequest,
+  idempotencyKey?: string,
+): Promise<ApiJob> {
+  // Spread the config arg in — a keyless call must stay a 2-argument post
+  // (the verbatim-body contract the tests assert on).
+  const res = await apiClient.post<ApiJob>(
+    '/jobs',
+    input,
+    ...(idempotencyKey
+      ? [{ headers: { 'X-Idempotency-Key': idempotencyKey } }]
+      : []),
+  );
   return res.data;
 }
 
@@ -446,10 +528,42 @@ async function advanceWorkflow(
   return res.data;
 }
 
+/** The owner's decision on a pending employee-created job (Epic 22). */
+export type PendingDecision = 'approve' | 'reject';
+
+/**
+ * `POST /jobs/:id/approval` — the owner approves or rejects a job in
+ * `pending_approval`. `200` returns the job AFTER the decision (approved →
+ * `scheduled` and dispatchable; rejected → `rejected` with the reason).
+ * `reason` is a reject-only concern at the app layer (the server accepts
+ * and trims it; an approval has nothing to explain).
+ *
+ * Documented failures, all surfaced as `ApiError`:
+ *   400 decision/reason not valid · 403 not a company admin · 404 job not
+ *   in this company · 409 JOB_NOT_PENDING (already decided — reload the
+ *   detail and reconcile).
+ */
+async function decidePending(
+  id: string,
+  decision: PendingDecision,
+  reason?: string,
+): Promise<ApiJob> {
+  // Blank (or whitespace-only) reason = no reason at all: the key is
+  // omitted, never sent as an empty string. A non-blank reason rides
+  // verbatim — the server trims and validates it.
+  const hasReason = !!reason && reason.trim().length > 0;
+  const res = await apiClient.post<ApiJob>(`/jobs/${id}/approval`, {
+    decision,
+    ...(hasReason ? { reason } : {}),
+  });
+  return res.data;
+}
+
 export const jobService = {
   create,
   list,
   getById,
   update,
   advanceWorkflow,
+  decidePending,
 };

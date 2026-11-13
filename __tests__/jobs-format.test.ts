@@ -13,6 +13,11 @@ describe('statusToBadge', () => {
     ['in_progress', 'progress'],
     ['completed', 'done'],
     ['cancelled', 'cancelled'],
+    // Epic 22's two new statuses — dropping either map entry would hit the
+    // scheduled fallback and label a rejected job "Scheduled" (review catch:
+    // these two rows had no pin).
+    ['pending_approval', 'pendingApproval'],
+    ['rejected', 'rejected'],
   ] as const)('maps %s to the %s badge key', (apiStatus, badge) => {
     expect(statusToBadge(apiStatus)).toBe(badge);
   });

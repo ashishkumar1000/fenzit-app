@@ -22,6 +22,7 @@ import { failedReportCopy } from '../reports/reportModel';
 import type { NotificationCardData } from './notificationCardModel';
 import type { LeaveNotificationCardData } from './leaveNotificationModel';
 import type { JobAssignedNotificationCardData } from './jobAssignedNotificationModel';
+import type { JobApprovalNotificationCardData } from './jobApprovalNotificationModel';
 import type {
   AttendanceNotificationCardData,
   GenericNotificationCardData,
@@ -90,6 +91,7 @@ export type NotificationListItem =
   | AttendanceNotificationCardData
   | LeaveNotificationCardData
   | JobAssignedNotificationCardData
+  | JobApprovalNotificationCardData
   | GenericNotificationCardData;
 
 /**
@@ -97,7 +99,9 @@ export type NotificationListItem =
  * The registry's generic card (Story 14-3) is inert (no deep link, no tap),
  * the attendance card (15-10) carries its own tap guard in the screen, and
  * the leave card (17-6) renders through the generic shell with its own
- * handler — all three are excluded here.
+ * handler — all three are excluded here. The assignment card (Firebase
+ * plan) and the approval-lifecycle cards (Epic 22) also render through the
+ * generic shell with their own handlers, so they are excluded too.
  */
 export type TappableNotificationListItem = Exclude<
   NotificationListItem,
@@ -105,6 +109,7 @@ export type TappableNotificationListItem = Exclude<
   | { kind: 'attendance' }
   | { kind: 'leave' }
   | { kind: 'job-assigned' }
+  | { kind: 'job-approval' }
 >;
 
 /**
@@ -176,12 +181,14 @@ export function mergeNotificationCards(
   attendanceCards: AttendanceNotificationCardData[] = [],
   leaveCards: LeaveNotificationCardData[] = [],
   jobAssignedCards: JobAssignedNotificationCardData[] = [],
+  jobApprovalCards: JobApprovalNotificationCardData[] = [],
 ): NotificationListItem[] {
   return [
     ...genericCards,
     ...attendanceCards,
     ...leaveCards,
     ...jobAssignedCards,
+    ...jobApprovalCards,
     ...reportCards,
     ...jobCards,
   ].sort((a, b) => Date.parse(b.latestCreatedAt) - Date.parse(a.latestCreatedAt));

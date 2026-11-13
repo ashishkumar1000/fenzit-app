@@ -122,6 +122,16 @@ describe('actionBarAction', () => {
     expect(actionBarAction(job({ status: 'cancelled' }), [])).toEqual({ kind: 'none' });
   });
 
+  it('pending_approval → no bar at all (the owner has not approved it — no step may advance)', () => {
+    // Epic 22: without this row, buildStepper would run on a pending job and
+    // invite the employee to advance a job that has not started.
+    expect(actionBarAction(job({ status: 'pending_approval' }), [])).toEqual({ kind: 'none' });
+  });
+
+  it('rejected → no bar at all (a rejected job never enters the workflow)', () => {
+    expect(actionBarAction(job({ status: 'rejected' }), [])).toEqual({ kind: 'none' });
+  });
+
   it('custom template with custom labels → uses template labels, not hardcoded strings', () => {
     const customTemplate = {
       version: 1,

@@ -15,6 +15,15 @@ const LABELS: Record<string, string> = {
   job_reassigned: 'Reassigned to another employee',
   job_cancelled: 'Job cancelled',
   conflict_resolved: 'Sent a saved update',
+  // Epic 22 — the employee-created-job lifecycle. Plain words; the header
+  // chip and the timeline rows both render through here, so a raw key can
+  // never reach the screen.
+  job_submitted: 'Submitted for approval',
+  job_approved: 'Approved',
+  job_rejected: 'Rejected',
+  // The owner's edit row — the timeline label; its per-field values render
+  // through editHistoryModel.ts (CAP-6).
+  job_edited: 'Changed by owner',
 };
 
 export const eventLabel = (t: string) => LABELS[t] ?? t;
@@ -24,6 +33,8 @@ export const eventLabel = (t: string) => LABELS[t] ?? t;
  * the timeline rows and the header's latest-event badge: completed steps
  * green, in-progress steps blue, cancellation red, everything else neutral
  * grey (created, reassigned, conflict-resolved, unknown future types).
+ * Epic 22 adds the approval lifecycle: submitted waits (amber), approved is
+ * green, rejected red.
  */
 export function eventStatusKey(eventType: string): StatusKey {
   // Guard against null/undefined eventType (API contract violation, but
@@ -31,6 +42,9 @@ export function eventStatusKey(eventType: string): StatusKey {
   if (!eventType) return 'neutral';
   if (eventType === 'step_completed') return 'done';
   if (eventType === 'job_cancelled') return 'cancelled';
+  if (eventType === 'job_approved') return 'done';
+  if (eventType === 'job_rejected') return 'rejected';
+  if (eventType === 'job_submitted') return 'pendingApproval';
   if (eventType.startsWith('step_')) return 'progress';
   return 'neutral';
 }

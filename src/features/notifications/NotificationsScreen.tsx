@@ -96,6 +96,10 @@ import {
   buildJobAssignedCards,
   type JobAssignedNotificationCardData,
 } from './jobAssignedNotificationModel';
+import {
+  buildJobApprovalCards,
+  type JobApprovalNotificationCardData,
+} from './jobApprovalNotificationModel';
 import { isAttendanceReachable } from '../../services/attendanceAccessEvents';
 import { useJobTemplateCache } from './useJobTemplateCache';
 import {
@@ -272,6 +276,9 @@ export default function NotificationsScreen({ navigation }: Props) {
   // notices — one readable "New job assigned" card per `job.assigned` row,
   // never a workflow-step stage (the grouper skips them).
   const jobAssignedCards = useMemo(() => buildJobAssignedCards(items), [items]);
+  // Epic 22 — the approval-lifecycle notices (submitted/approved/rejected/
+  // cancelled/edited), one readable card per row, never a workflow step.
+  const jobApprovalCards = useMemo(() => buildJobApprovalCards(items), [items]);
   // Interleaved by recency under "All"; the job buckets (below) stay job-only.
   const listCards = useMemo(
     () =>
@@ -282,8 +289,9 @@ export default function NotificationsScreen({ navigation }: Props) {
         attendanceCards,
         leaveCards,
         jobAssignedCards,
+        jobApprovalCards,
       ),
-    [cards, reportCards, genericCards, attendanceCards, leaveCards, jobAssignedCards],
+    [cards, reportCards, genericCards, attendanceCards, leaveCards, jobAssignedCards, jobApprovalCards],
   );
   const [filter, setFilter] = useState<NotificationFilter>('all');
   // Active/Completed are JOB-status buckets — report and generic
@@ -304,11 +312,12 @@ export default function NotificationsScreen({ navigation }: Props) {
         genericCards.length +
         attendanceCards.length +
         leaveCards.length +
-        jobAssignedCards.length,
+        jobAssignedCards.length +
+        jobApprovalCards.length,
       active: filterCards(cards, 'active').length,
       completed: filterCards(cards, 'completed').length,
     }),
-    [cards, reportCards, genericCards, attendanceCards, leaveCards, jobAssignedCards],
+    [cards, reportCards, genericCards, attendanceCards, leaveCards, jobAssignedCards, jobApprovalCards],
   );
 
   // 15-10: attendance taps mark the row read, then deep link ONLY when the
@@ -358,6 +367,19 @@ export default function NotificationsScreen({ navigation }: Props) {
     [markNotificationRead, navigate, role],
   );
 
+  // Epic 22 — an approval card's tap is the SAME shared job-card decision:
+  // the owner lands on JobDetail (the decision bar sits there), the creator
+  // on TechJobDetail. Same one mapping the push tap uses.
+  const handleJobApprovalCardPress = useCallback(
+    (card: JobApprovalNotificationCardData) => {
+      const target = tapTargetForJobCard(role, card.jobId);
+      if (target === null) return;
+      for (const id of card.unreadIds) void markNotificationRead(id);
+      openTapTarget(navigate, target, 'inbox');
+    },
+    [markNotificationRead, navigate, role],
+  );
+
   const renderCard = useCallback(
     ({ item }: { item: NotificationListItem }) =>
       item.kind === 'generic' ? (
@@ -378,10 +400,15 @@ export default function NotificationsScreen({ navigation }: Props) {
           card={item}
           onPress={() => handleJobAssignedCardPress(item)}
         />
+      ) : item.kind === 'job-approval' ? (
+        <GenericNotificationCard
+          card={item}
+          onPress={() => handleJobApprovalCardPress(item)}
+        />
       ) : (
         <NotificationCard card={item} onPress={handleCardPress} />
       ),
-    [handleAttendanceCardPress, handleCardPress, handleJobAssignedCardPress, handleLeaveCardPress],
+    [handleAttendanceCardPress, handleCardPress, handleJobAssignedCardPress, handleJobApprovalCardPress, handleLeaveCardPress],
   );
 
   const hasData = items.length > 0;

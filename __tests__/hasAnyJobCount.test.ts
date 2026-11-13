@@ -22,6 +22,16 @@ it.each(['today', 'upcoming', 'overdue', 'completed', 'cancelled'] as const)(
   },
 );
 
+it('is true when only the pending bucket is nonzero (Epic 22 — a tenant whose only jobs await approval is not a first-run account)', () => {
+  expect(hasAnyJobCount({ ...zero, pending: 1 })).toBe(true);
+});
+
 it('is false when every bucket is zero (fresh account)', () => {
   expect(hasAnyJobCount(zero)).toBe(false);
+});
+
+it('is false when every bucket is zero and the backend predates the pending field (additive-safe)', () => {
+  // An older backend omits `pending` entirely — the helper must not crash
+  // or misread an absent key as a nonzero count.
+  expect(hasAnyJobCount(zero as JobCounts)).toBe(false);
 });

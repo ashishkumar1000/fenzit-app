@@ -2,12 +2,14 @@
  * Badge — Fenzit's signature status pill. Used everywhere to convey job state.
  * Ported from the Fenzit Design System (web) to React Native.
  *
- * status: done | progress | scheduled | cancelled | neutral
+ * status: done | progress | scheduled | pendingApproval | rejected |
+ *         cancelled | neutral
  * tone:   soft (default, tinted) | solid (filled)
  * Optionally renders a leading dot.
  *
  * Status vocabulary maps 1:1 to color — Done / In Progress / Scheduled /
- * Cancelled (+ neutral/Draft). Don't invent synonyms.
+ * Pending approval / Rejected / Cancelled (+ neutral/Draft). Don't invent
+ * synonyms.
  */
 import { type ReactNode } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
