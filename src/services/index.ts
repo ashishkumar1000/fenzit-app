@@ -10,6 +10,10 @@
  *                   — all API calls for the whole app live here, in one
  *                   place, regardless of which feature uses them. See
  *                   resources/technicians.ts for the template to copy.
+ *   jobDetailMerge.ts → the pure rule for merging a mutation/list-shape
+ *                   `ApiJob` over an open `JobDetail` (not a resource; a
+ *                   shared contract helper, type-import-only so test suites
+ *                   can requireActual it without the API client chain).
  *
  * Import from this barrel (`@services` / `'../../services'`), not from the
  * individual files — it keeps call sites stable if files move around inside
@@ -53,4 +57,5 @@ export {
   setAttendanceReachable,
 } from './attendanceAccessEvents';
 export * from './resources';
+export { mergeJobIntoDetail } from './jobDetailMerge';
 

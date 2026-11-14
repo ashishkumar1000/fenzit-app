@@ -21,7 +21,12 @@
  *   `clearActionError` — fresh truth invalidates old failure copy.
  */
 import { useCallback, useRef, useState } from 'react';
-import { jobService, type ApiError, type JobDetail } from '../../services';
+import {
+  jobService,
+  mergeJobIntoDetail,
+  type ApiError,
+  type JobDetail,
+} from '../../services';
 import { logEvent } from '../../services/telemetry';
 import { generateIdempotencyKey } from '../../utils/idempotency';
 import { apiJobOf, upsertTechnicianJob } from './useTechnicianJobs';
@@ -107,7 +112,10 @@ export function useWorkflowAdvance({
         // The response is the post-advance ApiJob: merge into the open detail
         // and into the shared list store. No optimistic activity-log append —
         // the new step's timestamp arrives with the resync below.
-        setDetail(d => (d ? { ...d, ...job } : d));
+        // mergeJobIntoDetail, not a bare spread: the response's thin
+        // `technician`/`customer` embeds must not clobber the detail's full
+        // person profiles (the JobDetailScreen Crashlytics crash, 2026-11).
+        setDetail(d => mergeJobIntoDetail(d, job));
         upsertTechnicianJob(job);
         // Both stores hold this row: the shared Jobs tab must not keep the
         // pre-advance status until its next load (the detail screen's own

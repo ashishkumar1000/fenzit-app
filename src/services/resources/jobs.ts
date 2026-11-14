@@ -258,6 +258,17 @@ export interface ApiJob {
   rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Epic 23 — the assignee's and the customer's thin `{ id, name }` embeds,
+   * riding every job response (list, detail, and every mutation). Thin on
+   * purpose: the detail endpoint's FULL person profiles are the same keys
+   * widened with phones/skills/addresses (`JobDetail.technician/customer`).
+   * ⚠️ Never spread a bare `ApiJob` over a `JobDetail` — the thin embeds
+   * would clobber the full profiles and crash the next render
+   * (`technician.skills.length` — seen live in Crashlytics 2026-11).
+   */
+  technician?: { id: string; name: string | null } | null;
+  customer?: { id: string; name: string | null } | null;
 }
 
 /**
@@ -336,13 +347,21 @@ export interface JobDetailCustomer {
  * The full job as `GET /jobs/:id` returns it — the `ApiJob` row plus the
  * embedded profiles, the activity log (oldest-first) and the attachments
  * (oldest-first, presigned URLs fresh per call).
+ *
+ * `Omit` before widening, not `extends ApiJob`: spreading a bare `ApiJob`
+ * (whose `technician`/`customer` are the thin `{ id, name }` embeds) over a
+ * detail must be a COMPILE error, not just the documented footgun that
+ * crashed `JobDetailScreen` (Crashlytics 2026-11) — with `extends`, the
+ * thin embeds type-compatible clobber the full profiles silently. The same
+ * shape `ProfileJob` uses. `JobDetail` stays assignable to `ApiJob` (a full
+ * profile widens to the thin pair), so every existing pass-through works.
  */
-export interface JobDetail extends ApiJob {
+export type JobDetail = Omit<ApiJob, 'technician' | 'customer'> & {
   technician: JobDetailTechnician;
   customer: JobDetailCustomer;
   activityLog: ActivityLogEntry[];
   attachments: JobAttachment[];
-}
+};
 
 /** Query accepted by `GET /jobs`. Omitted fields are simply not sent. */
 export interface ListJobsQuery {

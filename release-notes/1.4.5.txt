@@ -1,0 +1,1 @@
+Fixed a crash on the job details screen that could happen after saving changes or deciding on an employee-created job.

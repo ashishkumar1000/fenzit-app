@@ -44,7 +44,7 @@ import {
   InlineError,
 } from '../../components/ui';
 import { colors, palette, radius, shadow, spacing, typography } from '../../theme';
-import { jobService } from '../../services';
+import { jobService, mergeJobIntoDetail } from '../../services';
 import type { ApiError, ApiJob, JobDetail } from '../../services';
 import type { RootStackParamList } from '../../navigation/types';
 import { upsertJob } from '../jobs';
@@ -211,7 +211,13 @@ export default function JobDetailScreen() {
    * the shared store de-duplicates the request.
    */
   const applyJobUpdate = useCallback((updated: ApiJob) => {
-    setDetail(prev => (prev ? { ...prev, ...updated } : prev));
+    // The mutation response is a LIST-shape job: its `technician`/`customer`
+    // embeds are the thin `{ id, name }` pair (Epic 23), NOT the detail's
+    // full profiles. Spreading it bare over `prev` clobbers skills/phones/
+    // addresses and crashes the next render (`technician.skills.length` —
+    // seen live in Crashlytics 2026-11). The helper keeps the detail's own
+    // embeds; the silent refetch below brings fresh ones.
+    setDetail(prev => mergeJobIntoDetail(prev, updated));
     upsertJob(updated);
     // Force: a successful mutation must land on Home's tiles immediately,
     // bypassing the focus-refresh throttle. Fire-and-forget — a failure here
@@ -560,11 +566,16 @@ export default function JobDetailScreen() {
                 </>
               }
             />
-            {detail.technician.skills.length ? (
+            {/* Optional-chained, not bare `.length`: the detail endpoint and
+                the merge both guarantee the array today, but this line is
+                where the one embed-shape surprise already crashed in
+                production (Crashlytics 2026-11) — a missing chips row beats
+                a crash if any future path leaves `skills` undefined. */}
+            {detail.technician.skills?.length ? (
                 <View style={styles.skillsRow}>
                   <Text style={styles.skillsLabel}>Skills</Text>
                   <View style={styles.skillsChips}>
-                    {detail.technician.skills.map((skill) => (
+                    {(detail.technician.skills ?? []).map((skill) => (
                         <Badge key={skill} status="scheduled" tone="soft" size="sm">
                           {skill}
                         </Badge>
