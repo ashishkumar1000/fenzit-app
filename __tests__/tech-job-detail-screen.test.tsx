@@ -54,6 +54,12 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../src/services', () => ({
   jobService: { getById: jest.fn(), list: jest.fn(), advanceWorkflow: jest.fn() },
+  // The REAL merge helper, not a stub: the advance flow applies the response
+  // through it. Its module is type-import-only (no api client/MMKV chain),
+  // so requireActual stays noise-free here.
+  mergeJobIntoDetail:
+    jest.requireActual('../src/services/jobDetailMerge')
+      .mergeJobIntoDetail,
 }));
 
 // The screen mints a fresh idempotency key per advance; pin it so the
@@ -486,6 +492,40 @@ it('advancing posts the next step with a fresh idempotency key and merges the re
   const row = storeSnapshot!.today.find(j => j.id === 'j-1');
   expect(row!.status).toBe('in_progress');
   expect(row!.currentStep).toBe('on_my_way');
+});
+
+it('a thin-embed advance response must not clobber the detail profiles (Crashlytics 2026-11)', async () => {
+  // Epic 23 advance responses carry the thin `{ id, name }` embeds. If the
+  // advance merge ever reverts to a bare spread, the customer embed loses
+  // address/city and this test fails where the embed-less fixtures above
+  // stayed green.
+  list.mockResolvedValue({ data: [listRow], nextCursor: null, hasMore: false });
+  await loadToday({ force: true });
+  // Mount load resolves; the chained silent resync stays PENDING so the
+  // merged (pre-resync) state is what's asserted.
+  getById
+    .mockResolvedValueOnce(makeDetail())
+    .mockImplementationOnce(() => new Promise(() => {}));
+  advanceWorkflow.mockResolvedValueOnce({
+    ...listRow,
+    status: 'in_progress',
+    currentStep: 'on_my_way',
+    updatedAt: '2026-09-04T10:05:00Z',
+    technician: { id: 'tech-1', name: 'Anil' },
+    customer: { id: 'c-1', name: 'Ravi Kumar' },
+  });
+  const renderer = await mountScreen();
+  expect(renderedText(renderer)).toContain('On my way');
+
+  await ReactTestRenderer.act(async () => {
+    advanceButton(renderer)[0].props.onPress();
+  });
+
+  expect(advanceWorkflow).toHaveBeenCalledTimes(1);
+  // Between the merge and the (pending) resync the FULL customer profile
+  // survives: the address line renders from the detail embed (a bare spread
+  // blanked it until the resync, the same crash class the owner screen hit).
+  expect(renderedText(renderer)).toContain('12 Anna Nagar');
 });
 
 it('advancing the signature step navigates to Signature — it never POSTs (3.5)', async () => {

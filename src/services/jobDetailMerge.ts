@@ -7,7 +7,7 @@
  * tests can still pull the REAL helper in via `jest.requireActual` without
  * dragging the API client / MMKV chain into the suite.
  */
-import type { ApiJob, JobDetail } from './jobs';
+import type { ApiJob, JobDetail } from './resources/jobs';
 
 /**
  * Merges a mutation/list-shape `ApiJob` over an existing `JobDetail` without
@@ -22,18 +22,20 @@ export function mergeJobIntoDetail(
   job: ApiJob,
 ): JobDetail | null {
   if (!detail) return detail;
-  // Rest-destructure strips the two thin embeds (the same omission idiom
-  // `apiJobOf` uses for the detail→row direction) — the '^_' names are
-  // intentional discards, ignored by the repo's unused-vars rule.
-  const { technician: _thinTechnician, customer: _thinCustomer, ...jobFields } =
-    job;
-  // The full embeds are re-asserted AFTER the spread: a bare `{ ...detail,
-  // ...jobFields }` would widen `technician`/`customer` with the thin union
-  // type and no longer satisfy `JobDetail`.
-  return {
-    ...detail,
-    ...jobFields,
-    technician: detail.technician,
-    customer: detail.customer,
-  };
+  // Rest-destructure strips the thin `{ id, name }` embeds — the same
+  // omission idiom `apiJobOf` uses for the detail→row direction ('^_'
+  // discards; rest siblings are ignored by the repo's unused-vars rule).
+  // The detail-only keys are stripped too: a list-shape response never
+  // carries `activityLog`/`attachments` (the latter hold 1-hour presigned
+  // URLs, regenerated per GET), so if contract drift ever adds one, a stale
+  // array must not survive the merge. The cast only widens the view for the
+  // strip; runtime payloads are unchanged.
+  const {
+    technician: _thinTechnician,
+    customer: _thinCustomer,
+    activityLog: _staleActivityLog,
+    attachments: _staleAttachments,
+    ...jobFields
+  } = job as ApiJob & Partial<JobDetail>;
+  return { ...detail, ...jobFields };
 }

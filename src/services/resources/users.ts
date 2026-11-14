@@ -149,8 +149,15 @@ export interface ProfileCustomerSummary {
  * One `/users/me` job row: the plain `ApiJob` fields plus the technician and
  * customer embeds (fenzit-be Story 3-9) — always present (`technician_id` is
  * NOT NULL, so unassigned jobs cannot exist), never re-fetched by id on-device.
+ * `Omit` first, not a plain `ApiJob &`: the plain intersection makes
+ * `technician`/`customer` the intersection of the thin `{ id, name } | null`
+ * union with the full profile — a messy union type that leaked into
+ * consumers (a `Partial<ProfileJob>` override widens these props with
+ * `| null`). The Omit yields exactly the full profile. (A bare spread of an
+ * `ApiJob` over a `ProfileJob` is still a compile hazard; `JobDetail`'s
+ * Omit-based type is what makes THAT a compile error.)
  */
-export type ProfileJob = ApiJob & {
+export type ProfileJob = Omit<ApiJob, 'technician' | 'customer'> & {
   technician: ProfileTechnicianSummary;
   customer: ProfileCustomerSummary;
 };

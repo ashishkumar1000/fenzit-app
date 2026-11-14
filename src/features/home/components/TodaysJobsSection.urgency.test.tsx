@@ -10,11 +10,12 @@ import React from 'react';
 import type { ViewStyle } from 'react-native';
 import { act, create } from 'react-test-renderer';
 import { colors } from '../../../theme';
-import type { ApiJob } from '../../jobs/types';
 import type { ProfileJob } from '../../../services';
 import { TodaysJobsSection } from './TodaysJobsSection';
 
-function job(minutesUntilStart: number, overrides: Partial<ApiJob> = {}): ProfileJob {
+// Partial<ProfileJob>, not Partial<ApiJob>: ApiJob's thin `technician`/`customer`
+// embeds would widen these props with the `| null` union and break the return type.
+function job(minutesUntilStart: number, overrides: Partial<ProfileJob> = {}): ProfileJob {
   const now = Date.now();
   return {
     id: 'job-1',

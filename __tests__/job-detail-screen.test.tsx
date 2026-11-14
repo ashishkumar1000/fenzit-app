@@ -37,6 +37,12 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../src/services', () => ({
   jobService: { getById: jest.fn(), update: jest.fn(), decidePending: jest.fn() },
+  // The REAL merge helper, not a stub: the screen applies mutation responses
+  // through it. Its module is type-import-only (no api client/MMKV chain),
+  // so requireActual stays noise-free here.
+  mergeJobIntoDetail:
+    jest.requireActual('../src/services/jobDetailMerge')
+      .mergeJobIntoDetail,
 }));
 
 // The profile feature (roster store + phone formatting) is mocked whole —
@@ -561,6 +567,45 @@ it('cancel confirms via the ConfirmDialog and PATCHes exactly { status: "cancell
   expect(loadMyProfileMock).toHaveBeenCalledWith({ force: true });
   expect(getById).toHaveBeenCalledTimes(2);
   expect(dialogs).not.toHaveBeenCalled();
+});
+
+it('a thin-embed mutation response must not clobber the detail profiles (Crashlytics 2026-11)', async () => {
+  // Epic 23 mutation responses carry the thin `{ id, name }` embeds — the
+  // exact wire shape this suite never fed the screen before the crash fix.
+  // If applyJobUpdate ever reverts to a bare spread, this test fails where
+  // every embed-less fixture stayed green.
+  const scheduled = makeDetail({ status: 'scheduled', currentStep: null });
+  const thinCancelled = {
+    ...toApiJob({ ...scheduled, status: 'cancelled' }),
+    technician: { id: 't1', name: 'Anil Kumar' },
+    customer: { id: 'c1', name: 'Ravi Kumar' },
+  };
+  getById.mockResolvedValueOnce(scheduled);
+  // The chained silent refetch stays PENDING so the merged (pre-refetch)
+  // state is what's asserted — a resolved refetch would mask the merge.
+  getById.mockImplementationOnce(() => new Promise(() => {}));
+  update.mockResolvedValueOnce(thinCancelled);
+  const renderer = await mountScreen();
+
+  const cancelButton = renderer.root
+    .findAllByType(Button)
+    .find(b => b.props.children === 'Cancel job');
+  await ReactTestRenderer.act(async () => {
+    cancelButton!.props.onPress();
+  });
+  const [dialog] = upDialogs(renderer.root);
+  await ReactTestRenderer.act(async () => {
+    dialog.props.onConfirm();
+  });
+
+  expect(update).toHaveBeenCalledTimes(1);
+  // Between the merge and the (pending) refetch the FULL person profiles
+  // survive: the employee's phone renders from the detail embed (a bare
+  // spread renders "+91 undefined") and the skill chips still exist (a bare
+  // spread crashed the render outright on `skills.length`).
+  const text = renderedText(renderer);
+  expect(text).toContain('+91 9000000001');
+  expect(text).toContain('AC repair');
 });
 
 it('a failed cancel surfaces an alert instead of vanishing', async () => {
