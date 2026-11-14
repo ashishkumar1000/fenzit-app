@@ -1,55 +1,36 @@
-Fenzit app release 1.4.0 — the punch day, redesigned (2026-11-11)
+Fenzit app release 1.4.4 — employees create jobs, owners approve (2026-11-14)
 
-The punch button
-- One blue circle for every posture — no more red failure face, no lock.
-  State lives in the pill (READY / ON SHIFT), the sub-label and the cards.
-  The dashed ring spins slowly while a punch is invited (respects
-  reduce-motion) and freezes otherwise.
-- The client geofence LOCK is gone. The button is always tappable once the
-  day's facts are known; the press does its own strict location capture
-  and the server decides. A blind press can never lock anyone out.
+Employees create jobs
+- A new "New job" flow on the Jobs tab: pick the skill, the customer and
+  the time slot, add a new customer on the way if needed, and the job is
+  created as a request.
+- The job goes to the owner for approval and the employee sees
+  "Job created — waiting for approval". Owners can turn this ability on
+  or off per employee in job settings.
+- A job that is still waiting or was rejected stays quiet: no workflow
+  bar on its detail screen, and the owner's reason is readable there.
 
-The punch card (owner mockups, 2026-11-10)
-- Two edge-aligned tiles: CHECK IN and CHECK OUT, each reading big time →
-  verdict. Green "On time", amber "Late by N min" / "Early by N min", red
-  "Early by …" when the leave crossed the shift midpoint (half the shift
-  or less worked), and a grey Pending pill before a punch lands.
-- One WORKED chip under the divider, toned by the day: a full shift keeps
-  the green ✓ celebration ("Full shift completed • Sched 9:30 AM - 6:30
-  PM"); a short day drops the ✓, turns amber and captions the gap ("Short
-  by 6h 31m"); a day with no schedule stays neutral ("Shift duration").
-- Done state: no button, no status card — the tiles are the receipt.
+The Pending queue (owners)
+- Jobs has a new Pending segment listing employee-created jobs waiting
+  for approval, with a count on the row so nothing hides.
+- Approve from the job, or reject with a reason. The employee sees the
+  reason on the job; deciding the same job twice is ignored and the
+  list corrects itself.
+- Every edit the owner makes to a pending job is recorded field by
+  field, with the time of each change.
 
-Location problems now explain themselves
-- Location services off: a RED blocker card (lost-pin motif) plus a tap-time
-  popup in the app's own design system ("Location is off" — Turn on
-  location / Not now). "Turn on location" deep-links to the system's
-  Location screen.
-- Permission denied: the plain system rationale popup is retired. Tapping
-  opens OUR dialog first ("Location access is off" — Allow location / Not
-  now); only its confirm fires the OS permission sheet.
-- Distance failures keep their guidance card ("Too far from … Go closer,
-  then check in.") — advice, never a gate.
+My jobs (employees)
+- Profile opens into a "My jobs" record: a 30-day or 7-day window, the
+  outcome counts, the approval rate, and jobs split into waiting and
+  done, with the reasons for rejections readable right there. Pull to
+  refresh.
 
-Today tab
-- The empty-day schedule card is COMPACT when attendance is enabled (the
-  punch zone owns the attention) and keeps the big dashed-well card when
-  attendance is disabled. The compact medallion carries a hand-drawn
-  clipboard illustration.
-- The green at-office card uses the owner's own words: "You're at the
-  office — You're at <office>, just <N> meters away. Your location is
-  verified."
-
-Under the hood
-- The fence prescreen is now pull-based: one snapshot capture on tab focus
-  and on foreground return; no background watcher, ever. The press always
-  captures fresh at the moment of truth.
-- Expected capture failures (permission, services off) no longer paint dev
-  builds red in the console.
-
-Version: 1.4.0 (versionCode 10400, iOS build 10400 — in sync).
-Tests: 275/275 suites, 3,664/3,664 tests green; typecheck clean.
-
-Needs the backend deployed first (fenzit-be 0.0.2: rate-limit threshold
-70, too_far decounted) — the old app build already renders 429 + Retry-After,
-so the order is safe both ways, but deploy BE → app.
+Home
+- Admins see a summary strip of employee-created jobs: 30-day counts
+  and a row linking straight to the waiting approvals.
+- The screen reads cleaner: section headings moved up a size rank, all
+  times use uppercase AM/PM app-wide instead of the phone deciding, and
+  the punch tiles, worked chip and job times keep fixed-width digits so
+  the seconds no longer wiggle.
+- The "Add employee" and "Add customer" tile labels no longer clip to
+  their first word on some Android phones — they wrap to two lines.

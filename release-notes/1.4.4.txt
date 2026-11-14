@@ -1,0 +1,5 @@
+Employees can create jobs: pick the skill, customer and time slot; the job waits for owner approval.
+Owners approve or reject employee jobs in the new Pending segment on Jobs, and can switch the feature off in job settings.
+Rejected jobs show the owner's reason on the job.
+Home shows admins a summary of employee jobs, linked to waiting approvals.
+Times read as uppercase AM/PM app-wide, and "Add employee" and "Add customer" labels show in full on small phones.
