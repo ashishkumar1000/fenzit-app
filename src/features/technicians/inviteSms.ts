@@ -19,7 +19,9 @@ const STATUS_LINE_COPY: Record<'failed' | 'not_configured', string> = {
 };
 
 export const RESEND_FORBIDDEN_COPY = 'Only a company admin can resend this SMS.';
-export const RESEND_GONE_COPY = 'This invite can no longer be resent.';
+export const RESEND_NOT_FOUND_COPY = 'No invite was found for this person.';
+export const RESEND_JOINED_COPY =
+  'This person has already joined, so no invite SMS is needed.';
 export const RESEND_CONNECTION_COPY =
   'Could not send the SMS. Check your connection and try again.';
 export const RESEND_UNKNOWN_COPY = 'Could not send the SMS. Try again.';
@@ -54,8 +56,9 @@ export function resendErrorMessage(err: ApiError): string {
       return RESEND_FORBIDDEN_COPY;
     case 'INVITE_NOT_FOUND':
     case 'NOT_FOUND':
+      return RESEND_NOT_FOUND_COPY;
     case 'INVITE_NOT_PENDING':
-      return RESEND_GONE_COPY;
+      return RESEND_JOINED_COPY;
     case 'TIMEOUT':
     case 'NETWORK_ERROR':
       return RESEND_CONNECTION_COPY;
