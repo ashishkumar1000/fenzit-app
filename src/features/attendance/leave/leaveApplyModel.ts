@@ -130,14 +130,87 @@ export function buildWireDates(state: LeaveFormState): LeaveWireDates | null {
   };
 }
 
-/** The POST body: the wire dates plus the (already trimmed) reason. The
+/** The POST body: the wire dates plus the (already trimmed) reason, and
+ *  — story 23-14 — the picked leave type, OMITTED when null (absent =
+ *  untyped, which the BE reads as paid leave; a never-send `null`). The
  *  submit gate guarantees `from`, so the empty fallback never fires. */
 export function buildApplyBody(
   state: LeaveFormState,
   reason: string,
-): LeaveWireDates & { reason: string } {
+  leaveTypeId: string | null = null,
+): LeaveWireDates & { reason: string; leaveTypeId?: string } {
   const dates = buildWireDates(state) ?? { startDate: '' };
-  return { ...dates, reason };
+  return {
+    ...dates,
+    reason,
+    ...(leaveTypeId ? { leaveTypeId } : {}),
+  };
+}
+
+// --- Story 23-14 — the Leave type picker's captions + ordering. -------------
+
+/** The picker's display order (the owner's call, 2026-11-19: "just show
+ *  four types — Earned, Sick, Comp-Off, Bereavement — in order"): the
+ *  balance-accruing types lead (monthly first, higher rate first), then
+ *  Comp-Off (mode none), then the remaining modes (annual…). Deterministic
+ *  and data-driven — it yields exactly that order for the seed catalog
+ *  without hard-coding names. */
+export function sortLeaveTypes<
+  T extends {
+    id: string;
+    name: string;
+    accrualMode: 'monthly' | 'annual' | 'none' | null;
+    accrualDays: number | null;
+  },
+>(types: T[]): T[] {
+  const rank = (mode: 'monthly' | 'annual' | 'none' | null): number =>
+    mode === 'monthly' ? 0 : mode === 'none' ? 1 : 2;
+  return [...types].sort(
+    (a, b) =>
+      rank(a.accrualMode) - rank(b.accrualMode) ||
+      (b.accrualDays ?? 0) - (a.accrualDays ?? 0) ||
+      a.name.localeCompare(b.name),
+  );
+}
+
+/** One picker/trigger caption for a leave type (23-14). Viewer-aware:
+ *  the mode-none (Comp-Off) line is addressed to whoever is reading —
+ *  the EMPLOYEE reads "Owner approves each request", while the OWNER
+ *  applying on behalf reads it as their own duty ("You approve each
+ *  request"). Remaining figures never reach a mode-none type. */
+export function leaveTypeOptionCaption(
+  accrualMode: 'monthly' | 'annual' | 'none' | null,
+  remaining: number | null,
+  viewer: 'employee' | 'owner' = 'employee',
+): string {
+  if (accrualMode === 'none') {
+    return viewer === 'owner'
+      ? 'You approve each request'
+      : 'Owner approves each request';
+  }
+  if (remaining == null || accrualMode == null) return '';
+  const rounded = Math.round(Math.abs(remaining) * 10) / 10;
+  if (remaining < 0) return `Overdrawn by ${rounded}`;
+  return `${rounded} ${rounded === 1 ? 'day' : 'days'} left`;
+}
+
+/** Whether the picker should OFFER a type at all (the owner's ruling,
+ *  2026-11-19: a zero-balance type is dead weight — selecting it only
+ *  produces a submit error, so the sheet disables it and the default
+ *  selection skips it). The rule mirrors the BE's apply-time check
+ *  exactly: mode-none types carry no balance (Comp-Off), an
+ *  allow-over type may go negative, and an accrual-bearing type needs
+ *  remaining > 0 (0.5 stays selectable — it still covers a half-day).
+ *  A MISSING balance row never disables: not-loaded data must not
+ *  block a choice; the BE stays the gate. */
+export function typeSelectable(
+  accrualMode: 'monthly' | 'annual' | 'none' | null,
+  allowOverBalance: boolean,
+  remaining: number | null,
+): boolean {
+  if (accrualMode === 'none' || remaining == null) return true;
+  if (allowOverBalance) return true;
+  return remaining > 0;
 }
 
 /** The count chip's copy — the server's integer, verbatim, pluralised. */

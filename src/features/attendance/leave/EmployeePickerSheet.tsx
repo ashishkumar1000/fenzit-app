@@ -4,11 +4,18 @@
  * FILTERED TO TRACKED ROWS (`attendanceStartDate != null` — the ungated
  * per-employee truth; never `attendanceAccess` — module-gated, and never
  * `attendanceEnabled` — the tenant flag): a never-enrolled person must not
- * be pickable for a tracked leave. `officeName` is `string | null` on those
- * rows — a null renders the neutral "No office" fallback. The Search input
- * appears only past 8 rows (the OfficesScreen idiom; the needle filters
- * client-side by name). A controlled DS `Sheet` with plain pressable rows
- * (NOT a nested FlatList — the Sheet is a ScrollView).
+ * be pickable for a tracked leave.
+ *
+ * Search (2026-11-19 device-pass compaction): ALWAYS visible while the
+ * roster is non-empty — the old >8-rows threshold left big companies
+ * (50–100+ tracked people) scrolling blind. The needle matches NAME,
+ * EMP CODE and PHONE: the name case-insensitively, the code and the
+ * phone on their digits ("080" finds EMP-080, "9817001040" or "98170
+ * 001 040" finds the number — formatting never blocks a match). Each
+ * row carries its code · phone · office caption so the user can see
+ * what to type and why a row matched. A controlled DS `Sheet` with
+ * plain pressable rows (NOT a nested FlatList — the Sheet is a
+ * ScrollView).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -20,13 +27,43 @@ import { colors, spacing, typography } from '../../../theme';
 export interface LeavePickerEmployee {
   employeeId: string;
   employeeName: string;
+  /** The human-readable EMP code (CAP) — searchable + shown on the row. */
+  employeeCode?: string | null;
+  /** The full phone (country code + number) — searchable + shown. */
+  phone?: string;
   officeName: string | null;
   /** Photo link or null; absent shows initials. */
   avatarUrl?: string | null;
 }
 
-/** The name filter appears only past this many rows. */
-const SEARCH_THRESHOLD = 8;
+/** Case- and formatting-insensitive form: lowercase alphanumerics only,
+ *  so "EMP-080" ≍ "emp080" and "98170 001 040" ≍ "9817001040". */
+const searchable = (value: string): string =>
+  value.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function matchesNeedle(employee: LeavePickerEmployee, needle: string): boolean {
+  if (needle === '') return true;
+  if (employee.employeeName.toLowerCase().includes(needle)) return true;
+  const code = searchable(employee.employeeCode ?? '');
+  if (code !== '' && code.includes(searchable(needle))) return true;
+  const phone = searchable(employee.phone ?? '');
+  if (phone !== '' && phone.includes(searchable(needle))) return true;
+  return false;
+}
+
+/** The row's caption: the identity fields the search matches on, joined —
+ *  "EMP-080 · 9817001040 · Test Branch". The office-only degenerate case
+ *  keeps the old "No office" fallback. */
+function captionFor(employee: LeavePickerEmployee): string {
+  const caption = [
+    employee.employeeCode,
+    employee.phone || null,
+    employee.officeName,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return caption === '' ? 'No office' : caption;
+}
 
 export function EmployeePickerSheet(input: {
   visible: boolean;
@@ -48,16 +85,9 @@ export function EmployeePickerSheet(input: {
     if (visible) setQuery('');
   }, [visible]);
 
-  const showSearch = employees.length > SEARCH_THRESHOLD;
-  // The needle only filters while the search box is on screen — if the
-  // rows drop back under the threshold, the input unmounts and a
-  // still-applied needle would silently hide rows with no way to clear it.
-  const needle = showSearch ? query.trim().toLowerCase() : '';
+  const needle = query.trim().toLowerCase();
   const filtered = useMemo(
-    () =>
-      needle
-        ? employees.filter(e => e.employeeName.toLowerCase().includes(needle))
-        : employees,
+    () => employees.filter(employee => matchesNeedle(employee, needle)),
     [employees, needle],
   );
 
@@ -86,16 +116,14 @@ export function EmployeePickerSheet(input: {
         </Text>
       ) : (
         <>
-          {showSearch ? (
-            <Input
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search team members..."
-              autoCapitalize="none"
-              autoCorrect={false}
-              leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
-            />
-          ) : null}
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search name, EMP code or phone..."
+            autoCapitalize="none"
+            autoCorrect={false}
+            leadingIcon={<Search size={18} color={colors.textMuted} strokeWidth={2} />}
+          />
           {filtered.length === 0 ? (
             <Text style={styles.empty}>
               No team members match "{query.trim()}"
@@ -114,7 +142,7 @@ export function EmployeePickerSheet(input: {
                     {employee.employeeName}
                   </Text>
                   <Text style={styles.rowSubtitle} numberOfLines={1}>
-                    {employee.officeName ?? 'No office'}
+                    {captionFor(employee)}
                   </Text>
                 </View>
               </Pressable>

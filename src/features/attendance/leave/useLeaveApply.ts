@@ -16,7 +16,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { attendanceLeaveService } from '../../../services';
-import type { LeavePart } from '../../../services/resources/attendanceLeave';
+import type {
+  LeaveBalanceView,
+  LeavePart,
+  LeaveTypeView,
+} from '../../../services/resources/attendanceLeave';
 import type { ApiError } from '../../../services/api/apiError';
 import { generateIdempotencyKey } from '../../../utils/idempotency';
 import {
@@ -33,9 +37,12 @@ import {
   changePart,
   clearTo,
   initialLeaveForm,
+  leaveTypeOptionCaption,
   minSelectableDate,
   pickFrom,
   pickTo,
+  sortLeaveTypes,
+  typeSelectable,
   typeOptions,
   type LeaveFormState,
   type LeaveFormStep,
@@ -48,6 +55,7 @@ export const SUBMIT_OFFLINE_MESSAGE =
   "You're offline. Submitting leave needs a working connection.";
 export const GENERIC_ERROR_MESSAGE = 'Something went wrong. Please try again.';
 export const SUBMITTED_ANNOUNCEMENT = 'Leave request submitted';
+export const BALANCES_ERROR_MESSAGE = "Couldn't load your balances.";
 
 /** The live preview's render state. In-flight keeps the previous count so
  *  the chip dims in place (no spinner swap, no layout shift). */
@@ -57,7 +65,9 @@ export interface LeavePreviewState {
   message: string | null;
 }
 
-const IDLE_PREVIEW: LeavePreviewState = {
+/** The no-dates state both leave forms share (the on-behalf hook imports
+ *  it — one idle shape, no drift). */
+export const IDLE_PREVIEW: LeavePreviewState = {
   status: 'idle',
   workingDays: null,
   message: null,
@@ -101,6 +111,22 @@ export function useLeaveApply(input: {
   const [footerError, setFooterError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // --- Story 23-14 — the Leave type picker + the balances card. ------------
+  // Catalog types (enabled only — the BE hard-filters) and the per-type
+  // balances. Both non-blocking: a failed balances GET leaves the form
+  // fully usable (the picker falls back to bare names, the card shows a
+  // quiet notice) — balances are context, not a gate.
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeView[]>([]);
+  const [typesLoading, setTypesLoading] = useState(true);
+  const [balances, setBalances] = useState<LeaveBalanceView[]>([]);
+  const [balancesLoading, setBalancesLoading] = useState(true);
+  const [balancesError, setBalancesError] = useState<string | null>(null);
+  // The PICKED type's raw id. There is no "No type" row in the picker
+  // (owner's call, 2026-11-19): the first sorted type is the default, and
+  // null only survives when the catalog is empty/failed — then the request
+  // goes on the wire untyped (paid leave, the shipped BE semantic).
+  const [pickedTypeId, setPickedTypeId] = useState<string | null>(null);
+
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -116,7 +142,116 @@ export function useLeaveApply(input: {
     setFooterError(null);
   }, []);
 
+  // --- 23-14 fetches: the catalog types once; balances on mount + focus. ---
+  // Focus refetch is the staleness guard: the owner's decisions and the
+  // check-in auto-cancel consume balance server-side while this form can
+  // sit open, and a balance card that lies is worse than none.
+  const typesSeq = useRef(0);
+  const balancesSeq = useRef(0);
+  useEffect(() => {
+    const requestSeq = ++typesSeq.current;
+    attendanceLeaveService
+      .listMyLeaveTypes()
+      .then(types => {
+        if (!mounted.current || requestSeq !== typesSeq.current) return;
+        setLeaveTypes(types);
+      })
+      .catch(() => {
+        // Non-blocking by design — the empty list renders the picker's
+        // neutral notice and the form behaves exactly as pre-23-14.
+      })
+      .finally(() => {
+        if (requestSeq === typesSeq.current) setTypesLoading(false);
+      });
+  }, []);
+
+  const loadBalances = useCallback(() => {
+    const requestSeq = ++balancesSeq.current;
+    setBalancesLoading(true);
+    attendanceLeaveService
+      .getMyLeaveBalances()
+      .then(rows => {
+        if (!mounted.current || requestSeq !== balancesSeq.current) return;
+        setBalances(rows);
+        setBalancesError(null);
+      })
+      .catch(() => {
+        if (!mounted.current || requestSeq !== balancesSeq.current) return;
+        setBalancesError(BALANCES_ERROR_MESSAGE);
+      })
+      .finally(() => {
+        if (requestSeq === balancesSeq.current) setBalancesLoading(false);
+      });
+  }, []);
+
+  // First load + every re-entry. The navigation-prop listener (not
+  // useFocusEffect) keeps the hook testable without a NavigationContainer
+  // — the same access-flip listener below uses this form already.
+  useEffect(() => {
+    loadBalances();
+  }, [loadBalances]);
+  useEffect(() => {
+    return navigation.addListener('focus', loadBalances);
+  }, [navigation, loadBalances]);
+
+  /** The picker's rows: enabled catalog types in the model's display
+   *  order (accruing first, then Comp-Off), each with its balance caption
+   *  (viewer 'employee') and its pickability — zero-balance accrual types
+   *  are disabled in the sheet (the owner's ruling; mirrors the BE's
+   *  apply-time check; Comp-Off and allow-over types stay offered). */
+  const sortedTypes = sortLeaveTypes(leaveTypes);
+  const leaveTypePickerOptions = sortedTypes.map(type => {
+    const remaining =
+      balances.find(row => row.typeId === type.id)?.remaining ?? null;
+    return {
+      id: type.id,
+      name: type.name,
+      caption: leaveTypeOptionCaption(type.accrualMode, remaining),
+      disabled: !typeSelectable(type.accrualMode, type.allowOverBalance, remaining),
+    };
+  });
+
+  /** The effective selection: the raw pick while it is still OFFERED,
+   *  else the first pickable type (the default), else null — an empty
+   *  catalog means the wire request carries no type. */
+  const firstPickableId: string | null =
+    leaveTypePickerOptions.find(option => !option.disabled)?.id ?? null;
+  const selectedTypeId: string | null =
+    pickedTypeId != null &&
+    leaveTypePickerOptions.some(
+      option => option.id === pickedTypeId && !option.disabled,
+    )
+      ? pickedTypeId
+      : firstPickableId;
+  // Sally F6: options exist but NONE is pickable (every accrual type's
+  // balance is used up, no Comp-Off/allow-over type) — the fields must not
+  // dress a disabled type up as the selection; the neutral notice renders
+  // instead and the wire request stays untyped (the BE's paid-leave
+  // semantic — the preview/POST still govern it).
+  const leaveTypeUnavailable =
+    leaveTypePickerOptions.length > 0 && firstPickableId == null;
+
+  /** A picker tap — a param change, so the message area clears with it.
+   *  The sheet closes at the call site (select + dismiss is one gesture). */
+  const pickLeaveType = useCallback((id: string | null) => {
+    setPickedTypeId(id);
+    setFooterError(null);
+  }, []);
+
+  // The type chooser sheet (the inline rows collapsed into it — the
+  // device-pass compaction). Visibility is screen-adjacent state, so it
+  // rides the hook like the form state it modifies.
+  const [typePickerVisible, setTypePickerVisible] = useState(false);
+  const openTypePicker = useCallback(() => setTypePickerVisible(true), []);
+  const closeTypePicker = useCallback(() => setTypePickerVisible(false), []);
+
   // --- Live preview: latest-wins GET, only when From exists (D4). ----------
+  // 23-14: the preview now carries the picked type, so the BE runs the
+  // apply-time balance check (and the payroll-lock and type gates) inside
+  // it — a `ok: false` verdict IS the server's refusal message, rendered
+  // inline, and it gates submit (the form must not apply a request the
+  // server has already said it would refuse). A transport failure stays
+  // fail-open: the BE re-verdicts at POST.
   const seq = useRef(0);
   const { from, to, part } = state;
   useEffect(() => {
@@ -131,10 +266,13 @@ export function useLeaveApply(input: {
       workingDays: prev.workingDays, // the dim-in-place previous value
       message: null,
     }));
-    const query = buildWireDates({ from, to, part });
-    if (!query) return; // unreachable when from is set (model contract)
+    const dates = buildWireDates({ from, to, part });
+    if (!dates) return; // unreachable when from is set (model contract)
     attendanceLeaveService
-      .previewLeave(query)
+      .previewLeave({
+        ...dates,
+        ...(selectedTypeId ? { leaveTypeId: selectedTypeId } : {}),
+      })
       .then(res => {
         if (!mounted.current || requestSeq !== seq.current) return; // stale
         if (!res.ok) {
@@ -152,7 +290,7 @@ export function useLeaveApply(input: {
         if (!mounted.current || requestSeq !== seq.current) return;
         setPreview({ status: 'transport', workingDays: null, message: PREVIEW_TRANSPORT_MESSAGE });
       });
-  }, [from, to, part]);
+  }, [from, to, part, selectedTypeId]);
 
   // --- The DatePicker return channel: read once, then clear (D1). ----------
   const lastPickRef = useRef<string | null>(null);
@@ -206,16 +344,26 @@ export function useLeaveApply(input: {
   }, [navigation, maybePopForAccessFlip]);
 
   // --- Submit (D5): gate → latch → fresh key → announce-and-leave. ---------
+  // 23-14: a server verdict that the request would be refused (insufficient
+  // balance, locked month, overlap, disabled type) also gates the button —
+  // the refusal message renders inline above, so a disabled button always
+  // has its reason on screen. Transport failures and in-flight GETs stay
+  // fail-open; the BE re-verdicts at POST regardless.
   const submitLatch = useRef(false);
-  const canSubmit = from != null && reason.trim() !== '';
+  const canSubmit =
+    from != null && reason.trim() !== '' && preview.status !== 'rejected';
   const submit = useCallback(() => {
     if (submitLatch.current) return; // double-tap no-op while in flight
     if (!state.from || reason.trim() === '') return; // the disabled gate
+    if (preview.status === 'rejected') return; // the server's refusal stands
     submitLatch.current = true;
     setSubmitting(true);
     const idempotencyKey = generateIdempotencyKey(); // fresh per tap
     attendanceLeaveService
-      .applyLeave(buildApplyBody(state, reason.trim()), idempotencyKey)
+      .applyLeave(
+        buildApplyBody(state, reason.trim(), selectedTypeId),
+        idempotencyKey,
+      )
       // 201 = success for BOTH the create and the replay (same handler) —
       // announce and leave; a submitted write stands even if we unmount.
       .then(() => {
@@ -236,7 +384,7 @@ export function useLeaveApply(input: {
         submitLatch.current = false;
         if (mounted.current) setSubmitting(false);
       });
-  }, [state, reason, navigation]);
+  }, [state, reason, selectedTypeId, navigation, preview.status]);
 
   // --- Navigation + control handlers handed to the screen. -----------------
   const openPicker = useCallback(
@@ -284,6 +432,18 @@ export function useLeaveApply(input: {
     clearTo: useCallback(() => transition(clearTo), [transition]),
     openFromPicker: useCallback(() => openPicker('from'), [openPicker]),
     openToPicker: useCallback(() => openPicker('to'), [openPicker]),
+    // 23-14 additions — the picker + balances pass through to the fields.
+    leaveTypePickerOptions,
+    typesLoading,
+    leaveTypeUnavailable,
+    selectedTypeId,
+    pickLeaveType,
+    typePickerVisible,
+    openTypePicker,
+    closeTypePicker,
+    balances,
+    balancesLoading,
+    balancesError,
     submit,
   };
 }

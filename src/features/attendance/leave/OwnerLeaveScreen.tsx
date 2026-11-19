@@ -32,12 +32,13 @@ import { LeaveEmptyArt } from './LeaveEmptyArt';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { attendanceLeaveService } from '../../../services';
 import type { ApiError } from '../../../services/api/apiError';
-import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
+import type { LeaveBalanceView, LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import type { RootStackParamList } from '../../../navigation/types';
 import { VIEW_ONLY_REASON, useCanWrite } from '../../auth';
 import { loadMyProfile } from '../../profile';
 import ScreenHeader from '../offices/ScreenHeader';
 import { LeaveRequestRow as LeaveRequestRowView } from './LeaveRequestRow';
+import { LeaveBalancesCard } from './LeaveBalancesCard';
 import { LeaveDetailSheet, type LeaveDetailActionState } from './LeaveDetailSheet';
 import { classifyLeaveWriteFailure, type LeaveTab } from './ownerLeaveModel';
 import { useOwnerLeaveQueue } from './useOwnerLeaveQueue';
@@ -117,6 +118,41 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
       mounted.current = false;
     };
   }, []);
+
+  // --- 23-14 — the opened request's balances (the sheet renders the slot;
+  // the SHEET never calls the API itself — its own docblock contract).
+  const balancesSeq = useRef(0);
+  const [detailBalances, setDetailBalances] = useState<LeaveBalanceView[]>([]);
+  const [detailBalancesLoading, setDetailBalancesLoading] = useState(false);
+  const [detailBalancesError, setDetailBalancesError] = useState<string | null>(null);
+  useEffect(() => {
+    const employeeId = detail?.employeeId ?? null;
+    if (employeeId == null) {
+      setDetailBalances([]);
+      setDetailBalancesError(null);
+      setDetailBalancesLoading(false);
+      return;
+    }
+    const requestSeq = ++balancesSeq.current;
+    setDetailBalancesLoading(true);
+    setDetailBalancesError(null);
+    attendanceLeaveService
+      .getEmployeeBalances(employeeId)
+      .then(rows => {
+        if (!mounted.current || requestSeq !== balancesSeq.current) return;
+        setDetailBalances(rows);
+        setDetailBalancesError(null);
+      })
+      .catch(() => {
+        if (!mounted.current || requestSeq !== balancesSeq.current) return;
+        // Includes the 404 for a since-removed employee — a quiet
+        // notice, never a blocking failure of the decision surface.
+        setDetailBalancesError("Couldn't load balances.");
+      })
+      .finally(() => {
+        if (requestSeq === balancesSeq.current) setDetailBalancesLoading(false);
+      });
+  }, [detail]);
 
   // Deep link / on-behalf landing: consume the merged `{ tab }` param —
   // pushed mode ONLY. Embedded, the route belongs to the tab PAGE (its
@@ -291,6 +327,16 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
         visible={detail != null}
         request={detail}
         actionState={actionState}
+        balancesSlot={
+          detail ? (
+            <LeaveBalancesCard
+              balances={detailBalances}
+              loading={detailBalancesLoading}
+              error={detailBalancesError}
+              compact
+            />
+          ) : null
+        }
         onClose={() => {
           if (actionState.kind === 'submitting') return; // latch mid-write
           setDetail(null);

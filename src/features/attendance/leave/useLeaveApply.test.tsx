@@ -16,6 +16,9 @@ jest.mock('../../../services', () => ({
   attendanceLeaveService: {
     previewLeave: jest.fn(),
     applyLeave: jest.fn(),
+    // 23-14 — the picker + balances mounts (non-blocking stubs).
+    listMyLeaveTypes: jest.fn().mockResolvedValue([]),
+    getMyLeaveBalances: jest.fn().mockResolvedValue([]),
   },
 }));
 
@@ -180,6 +183,10 @@ beforeEach(() => {
   // Quiet defaults — mockResolvedValueOnce overrides these per scenario.
   previewLeave.mockResolvedValue(previewOk(1));
   applyLeave.mockResolvedValue(REQUEST_VIEW);
+  // 23-14 — re-stub after resetAllMocks (quiet defaults; the picker and
+  // the balances card are not this suite's subject).
+  (attendanceLeaveService.listMyLeaveTypes as jest.Mock).mockResolvedValue([]);
+  (attendanceLeaveService.getMyLeaveBalances as jest.Mock).mockResolvedValue([]);
   jest
     .spyOn(AccessibilityInfo, 'announceForAccessibility')
     .mockImplementation(() => undefined);
@@ -319,6 +326,26 @@ describe('submit (D5)', () => {
       expect(latest.canSubmit).toBe(true); // rejections never pre-disable (D4)
       expect(latest.submitting).toBe(false);
     }
+  });
+
+  it('a rejected PREVIEW pre-disables: canSubmit false, the tap is a no-op (23-14)', async () => {
+    // The POST's rejections never pre-disable (above); the preview's
+    // verdict DOES — the server has already ruled the request unapplyable.
+    previewLeave.mockResolvedValueOnce(
+      previewReject(
+        'LEAVE_INSUFFICIENT_BALANCE',
+        'Not enough Sick balance — you have 7 days left and this request needs 8 days',
+      ),
+    );
+    const ctx = readyWithFrom();
+    await settle();
+    act(() => { latest.setReason('Family event'); });
+    expect(latest.preview.status).toBe('rejected');
+    expect(latest.canSubmit).toBe(false);
+    act(() => { latest.submit(); });
+    await settle();
+    expect(applyLeave).not.toHaveBeenCalled();
+    expect(latest.footerError).toBe(null);
   });
 
   it('mints a FRESH idempotency key per tap and no-ops a double-tap mid-flight', async () => {

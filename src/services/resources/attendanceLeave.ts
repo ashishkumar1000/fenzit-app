@@ -41,7 +41,10 @@ export interface LeavePreviewOk {
 /**
  * `ok: false` — a validation/gate rejection, inline-renderable. The union
  * is the FULL rejection set: the preview gate answers gate failures
- * (incl. NOT_TRACKED) and overlap as `200 { ok: false }`.
+ * (incl. NOT_TRACKED) and overlap as `200 { ok: false }`; 23-14 adds the
+ * write path's later gates (a disabled/foreign type, a payroll-locked
+ * month, an insufficient balance) — the preview runs the POST's whole
+ * validation ladder so the forms catch a refusal at pick time.
  */
 export type LeavePreviewErrorCode =
   | 'ATTENDANCE_NOT_TRACKED'
@@ -50,7 +53,12 @@ export type LeavePreviewErrorCode =
   | 'LEAVE_TOO_OLD'
   | 'LEAVE_CHECKED_IN_CONFLICT'
   | 'LEAVE_ALREADY_OFF'
-  | 'LEAVE_OVERLAP';
+  | 'LEAVE_OVERLAP'
+  | 'LEAVE_TYPE_DISABLED'
+  | 'RESOURCE_NOT_FOUND'
+  | 'PAYROLL_MONTH_LOCKED'
+  | 'LEAVE_INSUFFICIENT_BALANCE'
+  | 'VALIDATION_ERROR';
 
 export interface LeavePreviewRejection {
   ok: false;
@@ -67,6 +75,10 @@ export interface ApplyLeaveBody {
   /** Omitted for full_day (the BE DTO defaults it). */
   part?: LeavePart;
   reason: string;
+  /** Story 23-14 — the picked catalog type. Absent/null = untyped, which
+   *  reads as paid leave and skips the balance check (the shipped BE
+   *  semantic — the FE renders it as an explicit "No type" choice). */
+  leaveTypeId?: string | null;
 }
 
 export interface ApplyOnBehalfBody {
@@ -74,9 +86,58 @@ export interface ApplyOnBehalfBody {
   startDate: string;
   /** Omitted for a single date (the BE defaults startDate). */
   endDate?: string;
-  /** Omitted for full_day (the BE defaults it). */
+  /** Omitted for full_day (the BE DTO defaults it). */
   part?: LeavePart;
   reason: string;
+  /** Same 23-14 semantic as the self body. */
+  leaveTypeId?: string | null;
+}
+
+// --- Story 23-14 — the fixed catalog types + per-type balances -------------
+
+/**
+ * One row of `GET /attendance/me/leave/types` (enabled only — a disabled
+ * type structurally never reaches the app). `accrualMode: 'none'` is
+ * Comp-Off — no balance, the owner approves each request; `null` is a
+ * legacy remnant (never returned by the enabled list, kept for the
+ * type's own honesty).
+ */
+export interface LeaveTypeView {
+  id: string;
+  code: string | null;
+  name: string;
+  accrualMode: 'monthly' | 'annual' | 'none' | null;
+  accrualDays: number;
+  carryForward: boolean;
+  allowOverBalance: boolean;
+  paid: boolean;
+  enabled: boolean;
+  configurable: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * One row of the balances endpoints (self + owner's per-employee): one
+ * per accrual-bearing type, DISABLED included (their consumed days still
+ * count and show); Comp-Off (`mode none`) never appears — it has no
+ * balance. Derived as of today for the current April–March FY:
+ * `remaining = credits + accrued + carryForward − consumed`, and it is
+ * NOT clamped — an allow-over-balance type can answer negative.
+ */
+export interface LeaveBalanceView {
+  typeId: string;
+  code: string;
+  name: string;
+  accrualMode: 'monthly' | 'annual';
+  accrualDays: number;
+  paid: boolean;
+  enabled: boolean;
+  credits: number;
+  accrued: number;
+  carryForward: number;
+  consumed: number;
+  remaining: number;
 }
 
 // --- Story 17-7 — the revoke/cancel split preview + write shapes -----------
@@ -150,9 +211,33 @@ export const attendanceLeaveService = {
     startDate: string;
     endDate?: string;
     part?: LeavePart;
+    /** 23-14: a named type makes the preview run the apply-time balance
+     *  check too — the form catches the refusal at pick time. */
+    leaveTypeId?: string;
   }): Promise<LeavePreview> {
     return apiClient
       .get<LeavePreview>('/attendance/me/leave/preview', { params })
+      .then(res => res.data);
+  },
+
+  /**
+   * `GET /attendance/leave/on-behalf/preview` (23-14) — the owner's
+   * apply-on-behalf form had NO preview (the `me` one is
+   * technician-scoped and the owner JWT answers 403 there); this route
+   * runs the on-behalf POST's validation read-only for one employee, so
+   * that form gets the same working-days count, the same inline verdict
+   * and the same submit gate as the self-apply form. Rejections render
+   * `ok: false` with the message verbatim, exactly like `previewLeave`.
+   */
+  previewOnBehalf(params: {
+    employeeId: string;
+    startDate: string;
+    endDate?: string;
+    part?: LeavePart;
+    leaveTypeId?: string;
+  }): Promise<LeavePreview> {
+    return apiClient
+      .get<LeavePreview>('/attendance/leave/on-behalf/preview', { params })
       .then(res => res.data);
   },
 
@@ -294,6 +379,60 @@ export const attendanceLeaveService = {
     return apiClient
       .post<LeaveActionView>(
         `/attendance/me/leave/${encodeURIComponent(id)}/cancel`,
+      )
+      .then(res => res.data);
+  },
+
+  // --- Story 23-14 — the catalog types + per-type balances. ----------------
+
+  /**
+   * `GET /attendance/me/leave/types` — the enabled leave types for the
+   * apply form's picker (a disabled type never reaches the app; Comp-Off
+   * is included with `accrualMode: 'none'`). EMPLOYEE-only (`leave.own`)
+   * — the owner surfaces use `listCompanyLeaveTypes` below.
+   */
+  listMyLeaveTypes(): Promise<LeaveTypeView[]> {
+    return apiClient
+      .get<LeaveTypeView[]>('/attendance/me/leave/types')
+      .then(res => res.data);
+  },
+
+  /**
+   * `GET /attendance/leave/types` — the owner's read of the FULL catalog
+   * (`leave.types`): the fixed four plus disabled types and read-only
+   * legacy remnants. The on-behalf picker filters `enabled` CLIENT-SIDE
+   * from this response — a disabled type must never reach the picker,
+   * and the owner has no enabled-only endpoint of their own.
+   */
+  listCompanyLeaveTypes(): Promise<LeaveTypeView[]> {
+    return apiClient
+      .get<LeaveTypeView[]>('/attendance/leave/types')
+      .then(res => res.data);
+  },
+
+  /**
+   * `GET /attendance/me/leave/balances` — the employee's own per-type
+   * balances (accrual-bearing types only, disabled included; Comp-Off
+   * never appears). NOT clamped — an overdrawn allow-over type answers
+   * negative, which the card renders as "Overdrawn by N days".
+   */
+  getMyLeaveBalances(): Promise<LeaveBalanceView[]> {
+    return apiClient
+      .get<LeaveBalanceView[]>('/attendance/me/leave/balances')
+      .then(res => res.data);
+  },
+
+  /**
+   * `GET /attendance/leave/:employeeId/balances` — the owner's read of
+   * one employee's balances (the detail sheet's Balances section, the
+   * on-behalf form's card). Unknown/foreign id answers 404 "The employee
+   * is not in this company" — the hosts render it as a quiet notice, not
+   * a blocking failure.
+   */
+  getEmployeeBalances(employeeId: string): Promise<LeaveBalanceView[]> {
+    return apiClient
+      .get<LeaveBalanceView[]>(
+        `/attendance/leave/${encodeURIComponent(employeeId)}/balances`,
       )
       .then(res => res.data);
   },

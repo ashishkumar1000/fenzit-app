@@ -4,10 +4,13 @@
  * employee Card (Avatar + name + office + ghost "Change"), the shared
  * `LeaveApplyFields` body, and a pinned footer holding the inline-error
  * slot above the primary lg **"Approve"** — the AC's born-approved submit
- * (never "Submit for approval"). The count-chip slot holds a muted
- * one-liner instead of the technician's live preview (the preview GET is
- * technician-only; the owner JWT answers 403 — wire-truth F3), and the
- * count is discovered from the 201 view. The EmployeePickerSheet opens
+ * (never "Submit for approval"). Since 23-14 the form renders the REAL
+ * live preview: the owner route `GET /attendance/leave/on-behalf/preview`
+ * (the technician-scoped `me` preview still 403s an owner JWT) returns
+ * the working-days count and — when the request would be refused (an
+ * insufficient balance on the target, a locked payroll month, an
+ * overlap) — the server's message verbatim in the count slot, with the
+ * Approve button gated while it stands. The EmployeePickerSheet opens
  * automatically on a cold entry and re-opens from "Change".
  */
 import {
@@ -26,12 +29,11 @@ import type { RootStackParamList } from '../../../navigation/types';
 import ScreenHeader from '../offices/ScreenHeader';
 import { EmployeePickerSheet } from './EmployeePickerSheet';
 import { LeaveApplyFields } from './LeaveApplyFields';
+import { LeaveBalancesCard } from './LeaveBalancesCard';
+import { LeaveTypePickerSheet } from './LeaveTypePickerSheet';
 import { useApplyOnBehalf } from './useApplyOnBehalf';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ApplyOnBehalf'>;
-
-const NO_PREVIEW_HINT =
-  'The working-days count appears once the request is submitted.';
 
 export default function ApplyOnBehalfScreen({ navigation, route }: Props) {
   const form = useApplyOnBehalf({ navigation, route });
@@ -87,13 +89,27 @@ export default function ApplyOnBehalfScreen({ navigation, route }: Props) {
             onOpenFromPicker={form.openFromPicker}
             onOpenToPicker={form.openToPicker}
             onClearTo={form.clearTo}
-            preview={{ status: 'idle', workingDays: null, message: null }}
-            countSlot={
-              <Text style={styles.noPreviewHint}>{NO_PREVIEW_HINT}</Text>
-            }
-            showEmptyHint={false}
+            preview={form.preview}
+            showEmptyHint={form.employee != null}
             reason={form.reason}
             onChangeReason={form.setReason}
+            balancesSlot={
+              form.employee ? (
+                <LeaveBalancesCard
+                  balances={form.balances}
+                  loading={form.balancesLoading}
+                  error={form.balancesError}
+                  highlightTypeId={form.selectedTypeId}
+                  compact
+                />
+              ) : null
+            }
+            leaveTypeOptions={form.leaveTypePickerOptions}
+            typesLoading={form.typesLoading}
+            leaveTypeUnavailable={form.leaveTypeUnavailable}
+            selectedLeaveTypeId={form.selectedTypeId}
+            onChangeLeaveType={form.pickLeaveType}
+            onOpenTypePicker={form.openTypePicker}
           />
         </ScrollView>
 
@@ -122,6 +138,17 @@ export default function ApplyOnBehalfScreen({ navigation, route }: Props) {
           else form.closePicker();
         }}
         onPick={form.onPickEmployee}
+      />
+
+      <LeaveTypePickerSheet
+        visible={form.typePickerVisible}
+        onClose={form.closeTypePicker}
+        options={form.leaveTypePickerOptions}
+        selectedId={form.selectedTypeId}
+        onSelect={id => {
+          form.pickLeaveType(id);
+          form.closeTypePicker();
+        }}
       />
     </SafeAreaView>
   );
@@ -169,10 +196,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   pickHint: {
-    ...typography.bodySm,
-    color: colors.textMuted,
-  },
-  noPreviewHint: {
     ...typography.bodySm,
     color: colors.textMuted,
   },

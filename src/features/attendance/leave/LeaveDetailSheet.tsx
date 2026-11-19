@@ -26,6 +26,7 @@
  */
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
 // eslint-disable-next-line prettier/prettier -- file budget: one import line
 import { Avatar, Button, InlineError, InlineNotice, Sheet } from '../../../components/ui';
 import { colors, radius, spacing, typography } from '../../../theme';
@@ -70,8 +71,12 @@ export function LeaveDetailSheet(input: {
   onCancelRequest?: () => void;
   /** The already-handled notice's OK — closes the WHOLE sheet. */
   onDismissHandled: () => void;
+  /** 23-14 — the requesting employee's balances slot (host-fetched,
+   *  rendered in compact mode; absent in the employee's readOnly mode
+   *  for now — the own-history surface doesn't show balances). */
+  balancesSlot?: ReactNode;
 }) {
-  const { visible, request, readOnly = false, actionState, onClose, onApprove, onReject, onRevoke, onCancelRequest, onDismissHandled } = input;
+  const { visible, request, readOnly = false, actionState, onClose, onApprove, onReject, onRevoke, onCancelRequest, onDismissHandled, balancesSlot } = input;
 
   const [stage, setStage] = useState<DetailStage>('detail');
 
@@ -162,8 +167,11 @@ export function LeaveDetailSheet(input: {
           ) : null}
 
           <View style={styles.kvRows}>
+            {/* 23-14 — "Day part" now: the apply form has a real "Leave
+                type" section, so a bare "Type" here read as that picker
+                (the copy fix rides the same review round). */}
             <View style={styles.kvRow}>
-              <Text style={styles.kvLabel}>Type</Text>
+              <Text style={styles.kvLabel}>Day part</Text>
               <Text style={styles.kvValue}>{LEAVE_TYPE_LABELS[request.part]}</Text>
             </View>
             <View style={styles.kvRow}>
@@ -181,6 +189,11 @@ export function LeaveDetailSheet(input: {
               <LeaveStatusBadge status={request.status} size="sm" />
             </View>
           </View>
+
+          {/* 23-14 — the requesting employee's balances, in compact mode.
+              The sheet never calls the API itself: the balances (loading
+              included) arrive as a rendered slot from the host. */}
+          {balancesSlot != null ? balancesSlot : null}
 
           {request.reason.trim() !== '' ? (
             <View style={styles.reasonBox}>

@@ -1,9 +1,10 @@
 /**
  * Screen tests for `LeaveApplyScreen` (Story 17-5, spec §4) — composition
  * only; the hook is mocked (its behaviour is pinned in useLeaveApply.test).
- * Pins: the mockup Frame A anatomy ORDER (Type → Dates → Reason → footer);
- * the reason counter's amber flip at ≥450; the reset note rendering UNDER
- * the Type control; the Clear affordance only when To is filled; the
+ * Pins: the mockup Frame A anatomy ORDER (Leave type → Day part → Dates →
+ * Reason → footer); the reason counter's amber flip at ≥450; the reset
+ * note rendering UNDER the Day part control; the Clear affordance only
+ * when To is filled; the
  * InlineError slot above the footer button; the count chip's live region
  * and in-flight dim; a Dynamic-Type reflow smoke (nothing disables font
  * scaling); a11y labels/roles. The Attendance tab's entry row is pinned
@@ -37,7 +38,11 @@ jest.mock('../me/attendanceAccessStore', () => ({
 jest.mock('../../../services', () => ({
   ...jest.requireActual('../../../services'),
   attendanceLeaveService: {
+    ...jest.requireActual('../../../services').attendanceLeaveService,
     listMyLeave: jest.fn(() => new Promise(() => undefined)),
+    // 23-14 — the picker + balances mounts (non-blocking stubs).
+    listMyLeaveTypes: jest.fn().mockResolvedValue([]),
+    getMyLeaveBalances: jest.fn().mockResolvedValue([]),
   },
 }));
 
@@ -89,6 +94,28 @@ function leaveState(overrides: Partial<Hook> = {}): Hook {
     clearTo: jest.fn(),
     openFromPicker: jest.fn(),
     openToPicker: jest.fn(),
+    // 23-14 — the picker + balances pass through (typed on the hook).
+    // One catalog option: the EMPTY list would render the neutral
+    // "No leave types…" notice and break the notice-count pins below.
+    leaveTypePickerOptions: [
+      {
+        id: 'lt_casual',
+        name: 'Casual leave',
+        caption: '5 days left',
+        disabled: false,
+      },
+    ],
+    typesLoading: false,
+    leaveTypeUnavailable: false,
+    selectedTypeId: null,
+    pickLeaveType: jest.fn(),
+    // The type chooser sheet (the inline rows collapsed into it).
+    typePickerVisible: false,
+    openTypePicker: jest.fn(),
+    closeTypePicker: jest.fn(),
+    balances: [],
+    balancesLoading: false,
+    balancesError: null,
     submit: jest.fn(),
     ...overrides,
   };
@@ -164,7 +191,7 @@ function renderScreen(state: Hook = leaveState()): {
 }
 
 describe('the mockup Frame A anatomy (spec D2)', () => {
-  it('renders every block in reading order: header → Type → Dates → Reason → footer', () => {
+  it('renders every block in reading order: header → Leave type → Day part → Dates → Reason → footer', () => {
     const { root } = renderScreen(
       leaveState({
         from: '2026-10-05',
@@ -173,7 +200,11 @@ describe('the mockup Frame A anatomy (spec D2)', () => {
     );
     const texts = textsInOrder(root);
     const header = firstIndexOf(texts, 'Apply for leave');
-    const type = firstIndexOf(texts, 'Type');
+    const leaveType = firstIndexOf(texts, 'Leave type');
+    // The picker collapsed into a trigger row: the mock's first (and only)
+    // catalog type is the default selection shown there.
+    const selectedType = firstIndexOf(texts, 'Casual leave');
+    const type = firstIndexOf(texts, 'Day part');
     const fullDay = firstIndexOf(texts, 'Full day');
     const dates = firstIndexOf(texts, 'Dates');
     const from = firstIndexOf(texts, 'From');
@@ -183,7 +214,9 @@ describe('the mockup Frame A anatomy (spec D2)', () => {
     const counter = texts.findIndex(t => t === '0 / 500');
     const submit = firstIndexOf(texts, SUBMIT_LABEL);
 
-    expect(header).toBeLessThan(type);
+    expect(header).toBeLessThan(leaveType);
+    expect(leaveType).toBeLessThan(selectedType);
+    expect(selectedType).toBeLessThan(type);
     expect(type).toBeLessThan(fullDay);
     expect(fullDay).toBeLessThan(dates);
     expect(dates).toBeLessThan(from);
@@ -223,6 +256,51 @@ describe('the mockup Frame A anatomy (spec D2)', () => {
     expect(toRows).toHaveLength(1);
     expect(fromRows[0].props.accessibilityState).toEqual({ disabled: false });
     expect(toRows[0].props.accessibilityState).toEqual({ disabled: true });
+  });
+});
+
+describe('the Leave type trigger fallbacks (Sally F6)', () => {
+  it('a catalog with types but NONE pickable renders the neutral notice — never a disabled type dressed up as the selection', () => {
+    const { root } = renderScreen(
+      leaveState({
+        // Every accrual type used up, no Comp-Off/allow-over type: the hook
+        // resolves selectedTypeId null and flags leaveTypeUnavailable.
+        leaveTypePickerOptions: [
+          { id: 'lt_earned', name: 'Earned leave', caption: '0 days left', disabled: true },
+          { id: 'lt_sick', name: 'Sick leave', caption: '0 days left', disabled: true },
+        ],
+        leaveTypeUnavailable: true,
+        selectedTypeId: null,
+      }),
+    );
+    expect(textsInOrder(root)).toContain(
+      'No leave type is available to pick right now. Leave applies without a type.',
+    );
+    // The trigger never renders — no "Leave type: …" pressable exists
+    // (its old fallback showed options[0] as if the user had picked it).
+    expect(
+      root.findAll(
+        node =>
+          typeof node.props.accessibilityLabel === 'string' &&
+          node.props.accessibilityLabel.startsWith('Leave type:'),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('the reason preset chips top up to the touch minimum with hitSlop (Sally F3)', () => {
+    const { root } = renderScreen();
+    const preset = root.findAll(
+      node =>
+        node.props.accessibilityLabel === 'Use Sick leave as the reason' &&
+        typeof node.props.onPress === 'function',
+    )[0];
+    expect(preset).toBeDefined();
+    expect(preset!.props.hitSlop).toEqual({
+      top: 6,
+      bottom: 6,
+      left: 4,
+      right: 4,
+    });
   });
 });
 
@@ -293,7 +371,7 @@ describe('the count chip (spec D4)', () => {
   });
 });
 
-describe('the Type block and its reset note (spec D3)', () => {
+describe('the Day part block and its reset note (spec D3)', () => {
   it('a range collapses the control to a single Full day segment', () => {
     const { root } = renderScreen(
       leaveState({
@@ -309,12 +387,12 @@ describe('the Type block and its reset note (spec D3)', () => {
     ]);
   });
 
-  it('the reset note renders UNDER the Type control, before the Dates section', () => {
+  it('the reset note renders UNDER the Day part control, before the Dates section', () => {
     const { root } = renderScreen(leaveState({ resetNote: true }));
     const texts = textsInOrder(root);
     const note = firstIndexOf(
       texts,
-      'Leave type reset to Full day — half day applies to a single date only.',
+      'Day part reset to Full day — half day applies to a single date only.',
     );
     expect(firstIndexOf(texts, 'Full day')).toBeLessThan(note);
     expect(note).toBeLessThan(firstIndexOf(texts, 'Dates'));

@@ -63,6 +63,9 @@ export interface EnrolmentOverview {
   employeeId: string;
   employeeName: string;
   avatarUrl?: string | null;
+  /** The human-readable EMP code (CAP on memberships; null for a legacy
+   *  row) — the pickers search/display it (search-by-id). */
+  employeeCode?: string | null;
   phone: string;
   /** TENANT module flag — see the interface docblock; not per-employee. */
   attendanceEnabled: boolean;
@@ -91,6 +94,7 @@ function normalizeRow(row: Partial<EnrolmentOverview> | null | undefined): Enrol
     employeeId: row?.employeeId ?? '',
     employeeName: row?.employeeName ?? '',
     avatarUrl: row?.avatarUrl ?? null,
+    employeeCode: row?.employeeCode ?? null,
     phone: row?.phone ?? '',
     attendanceEnabled: row?.attendanceEnabled === true,
     attendanceAccess: row?.attendanceAccess ?? 'none',

@@ -28,6 +28,8 @@ jest.mock('../../../services', () => ({
     rejectLeave: jest.fn(),
     previewRevoke: jest.fn(),
     revokeLeave: jest.fn(),
+    // 23-14 — the detail sheet's balances slot (host-fetched).
+    getEmployeeBalances: jest.fn().mockResolvedValue([]),
   },
 }));
 
