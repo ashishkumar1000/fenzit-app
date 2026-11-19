@@ -20,6 +20,8 @@ import { AttendanceIntroScreen } from '../features/attendance/me';
 import { AttendanceMyMonthScreen } from '../features/attendance/me';
 import DatePickerScreen from '../features/attendance/enrolments/DatePickerScreen';
 import LeaveApplyScreen from '../features/attendance/leave/LeaveApplyScreen';
+import PayslipsScreen from '../features/payslips';
+import { PayslipDetailScreen } from '../features/payslips';
 import SelectSkillsScreen from '../features/newJob/SelectSkillsScreen';
 import SelectCustomersScreen from '../features/newJob/SelectCustomersScreen';
 import { AddCustomerScreen } from '../features/customers';
@@ -68,6 +70,11 @@ export default function TechnicianRootNavigator() {
       {/* 17-5 — the date picker's second registration (the owner stack has it
           since 15-9); the leave form's From/To rows push it on THIS stack. */}
       <Stack.Screen name="DatePicker" component={DatePickerScreen} options={{ headerShown: false }} />
+      {/* 23-12 — the employee's payslip history + detail (entry: the Profile
+          tab's Payslips row). Month-keyed detail; own-payslip-only is the
+          API's enforcement. */}
+      <Stack.Screen name="MyPayslips" component={PayslipsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="MyPayslipDetail" component={PayslipDetailScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

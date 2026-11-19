@@ -30,10 +30,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   LogOut,
   Pencil,
   Phone,
+  Receipt,
   ScrollText,
   ShieldCheck,
   Trash2,
@@ -48,6 +51,7 @@ import { useAuth } from '../auth';
 import { EditNameSheet, formatPhone, useMyProfile } from '../profile';
 import { DeleteAccountConfirm } from '../more/components/DeleteAccountConfirm';
 import { useAvatarUpload } from '../editProfile/useAvatarUpload';
+import type { TechnicianRootStackParamList } from '../../navigation/types';
 import MyJobsSummaryCard from './components/MyJobsSummaryCard';
 import { ProfileActionRow } from './components/ProfileActionRow';
 
@@ -60,6 +64,8 @@ function statusPill(status: string | undefined): { label: string; danger: boolea
 }
 
 export default function ProfileScreen() {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<TechnicianRootStackParamList>>();
   const { reset } = useAuth();
   const { profile, isLoading } = useMyProfile();
   const [editNameOpen, setEditNameOpen] = useState(false);
@@ -184,6 +190,18 @@ export default function ProfileScreen() {
             GET /job-reports/employee. Sits above the account rows so the
             record is the first thing under the identity card. */}
         <MyJobsSummaryCard />
+
+        {/* Story 23-12 — the employee's payslip self-service: own history +
+            PDF, visible only after the month is locked (the BE answers
+            locked months only; the screen owns the empty state). Money
+            documents sit with the personal record, not the legal block. */}
+        <Card padding="none" style={styles.group}>
+          <ProfileActionRow
+            icon={<Receipt size={18} color={colors.textMuted} strokeWidth={2} />}
+            label="Payslips"
+            onPress={() => navigation.navigate('MyPayslips')}
+          />
+        </Card>
 
         {/* Play User Data policy — the privacy policy must be reachable
             inside the app from every role's settings surface, not only the
