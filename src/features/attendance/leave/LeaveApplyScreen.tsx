@@ -50,6 +50,8 @@ import ScreenHeader from '../offices/ScreenHeader';
 import { AttendanceSummaryView } from '../me/AttendanceSummaryView';
 import type { TechnicianRootStackParamList } from '../../../navigation/types';
 import { LeaveApplyFields } from './LeaveApplyFields';
+import { LeaveBalancesCard } from './LeaveBalancesCard';
+import { LeaveTypePickerSheet } from './LeaveTypePickerSheet';
 import { useLeaveApply } from './useLeaveApply';
 
 type Props = NativeStackScreenProps<TechnicianRootStackParamList, 'LeaveApply'>;
@@ -128,6 +130,21 @@ export default function LeaveApplyScreen({ navigation, route }: Props) {
             showEmptyHint={!leave.from}
             reason={leave.reason}
             onChangeReason={leave.setReason}
+            balancesSlot={
+              <LeaveBalancesCard
+                balances={leave.balances}
+                loading={leave.balancesLoading}
+                error={leave.balancesError}
+                highlightTypeId={leave.selectedTypeId}
+                compact
+              />
+            }
+            leaveTypeOptions={leave.leaveTypePickerOptions}
+            typesLoading={leave.typesLoading}
+            leaveTypeUnavailable={leave.leaveTypeUnavailable}
+            selectedLeaveTypeId={leave.selectedTypeId}
+            onChangeLeaveType={leave.pickLeaveType}
+            onOpenTypePicker={leave.openTypePicker}
           />
         </ScrollView>
 
@@ -160,6 +177,17 @@ export default function LeaveApplyScreen({ navigation, route }: Props) {
           onRetry={retryPolicy}
         />
       </Sheet>
+
+      <LeaveTypePickerSheet
+        visible={leave.typePickerVisible}
+        onClose={leave.closeTypePicker}
+        options={leave.leaveTypePickerOptions}
+        selectedId={leave.selectedTypeId}
+        onSelect={id => {
+          leave.pickLeaveType(id);
+          leave.closeTypePicker();
+        }}
+      />
     </SafeAreaView>
   );
 }

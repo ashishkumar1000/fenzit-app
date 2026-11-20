@@ -490,6 +490,18 @@ export type TechnicianRootStackParamList = {
    */
   DatePicker: DatePickerParams;
   /**
+   * Story 23-12 — the employee's payslip history (the Profile tab's row
+   * opens it). The BE answers locked months only; the screen owns the
+   * empty/failure states, so the route carries no params.
+   */
+  MyPayslips: undefined;
+  /**
+   * Story 23-12 — one payslip's detail + PDF, month-keyed (the client
+   * never keys anything off membershipId/runId — own-payslip-only is the
+   * API's enforcement, never assumed here).
+   */
+  MyPayslipDetail: { month: string };
+  /**
    * Epic 22 — the skill and customer browsers, dual-registered from the
    * owner stack (the Notifications precedent) so TechNewJob's picker
    * sections keep their "Browse all" links. The screens pop back to

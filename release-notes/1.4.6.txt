@@ -1,0 +1,3 @@
+Leave forms now show your leave types and balances, and check themselves as you fill in — a request that can't be approved (no balance, overlapping dates, locked month) says why before you submit.
+Types with no balance left are marked not available. Owners applying for a team member get the same checks and can search by name, code or phone.
+New for employees: Profile → Payslips lists your payslips with net pay and paid days; open one for the full breakup or to download the PDF.

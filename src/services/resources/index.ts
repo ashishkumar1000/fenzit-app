@@ -63,11 +63,24 @@ export type { EnrolmentOverview, EnrolmentWriteState } from './enrolments';
 export { attendanceLeaveService } from './attendanceLeave';
 export type {
   ApplyLeaveBody,
+  LeaveBalanceView,
   LeavePart,
   LeavePreview,
   LeavePreviewErrorCode,
   LeaveRequestView,
+  LeaveTypeView,
 } from './attendanceLeave';
+export { payslipsService } from './payrollPayslips';
+export type {
+  PayslipDeductionLine,
+  PayslipEarningLine,
+  PayslipLeaveBalance,
+  PayslipPdf,
+  PayslipPdfRequestView,
+  PayslipPdfRequestStatus,
+  PayslipPdfStatus,
+  PayslipView,
+} from './payrollPayslips';
 export { fetchDayStatuses, fetchMyDayStatuses, monthRange } from './attendanceDayStatus';
 export type {
   AttendanceSource,

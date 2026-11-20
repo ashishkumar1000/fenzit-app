@@ -16,7 +16,7 @@ import { useResendInviteSms } from './useResendInviteSms';
 import {
   RESEND_CONNECTION_COPY,
   RESEND_FORBIDDEN_COPY,
-  RESEND_GONE_COPY,
+  RESEND_NOT_FOUND_COPY,
   RESEND_UNKNOWN_COPY,
 } from './inviteSms';
 
@@ -112,17 +112,29 @@ describe('useResendInviteSms', () => {
     expect(ref.current!.errorCopy).toBe(RESEND_FORBIDDEN_COPY);
   });
 
-  it.each(['INVITE_NOT_FOUND', 'NOT_FOUND', 'INVITE_NOT_PENDING'])(
-    'on %s: hides the action because the invite can no longer be resent',
+  it.each(['INVITE_NOT_FOUND', 'NOT_FOUND'])(
+    'on %s: hides the action because no invite was found',
     async code => {
       resendMock.mockRejectedValue(apiError(code));
       const { ref } = renderResend();
       await tapResend(ref);
       expect(ref.current!.gone).toBe(true);
       expect(ref.current!.forbidden).toBe(false);
-      expect(ref.current!.errorCopy).toBe(RESEND_GONE_COPY);
+      expect(ref.current!.errorCopy).toBe(RESEND_NOT_FOUND_COPY);
     },
   );
+
+  it('on INVITE_NOT_PENDING: hides the action and says the person already joined', async () => {
+    resendMock.mockRejectedValue(apiError('INVITE_NOT_PENDING'));
+    const { ref } = renderResend();
+    await tapResend(ref);
+    expect(ref.current!.gone).toBe(true);
+    expect(ref.current!.forbidden).toBe(false);
+    expect(ref.current!.capReached).toBe(false);
+    expect(ref.current!.errorCopy).toBe(
+      'This person has already joined, so no invite SMS is needed.',
+    );
+  });
 
   it.each(['TIMEOUT', 'NETWORK_ERROR'])(
     'on %s: keeps the action usable and says to check the connection',

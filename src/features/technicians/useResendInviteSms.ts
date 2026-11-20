@@ -26,7 +26,8 @@ export function useResendInviteSms(
   const [capReached, setCapReached] = useState(false);
   /** A 403: the button is hidden and the copy says why. */
   const [forbidden, setForbidden] = useState(false);
-  /** A 404 or 409: the invite can no longer be resent, so the button is hidden. */
+  /** A 404 (no invite) or 409 (the person already joined): nothing to resend,
+   *  so the button is hidden and the copy says which. */
   const [gone, setGone] = useState(false);
   const [errorCopy, setErrorCopy] = useState('');
   const inFlightRef = useRef(false);
