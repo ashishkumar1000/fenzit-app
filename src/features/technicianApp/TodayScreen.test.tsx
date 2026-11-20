@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import ReactTestRenderer, { act } from 'react-test-renderer';
-import { Text } from 'react-native';
+import { SectionList, Text } from 'react-native';
 
 // Story 14-3: focus loads Today AND the bell's unread count — unforced,
 // both stores' TTLs decide.
@@ -185,6 +185,39 @@ it('the empty-day VARIANT follows attendance access (owner call 2026-11-10): act
   const big = await mountScreen();
   expect(big.root.findByType(EmptyState).props.title).toBe('No jobs assigned yet');
   expect(() => big.root.findByType(EmptyState)).not.toThrow();
+});
+
+describe('the empty-day gutter (Sally pass 2026-11-20)', () => {
+  // The list's contentContainerStyle composes listContent (+ the zero-pad
+  // posture for the BIG well alone). A `padding: 0` entry on a COMPACT day
+  // is what full-bled the punch circle and the fence verdict card — the
+  // pink "Too far from…" card touched both screen edges.
+  function listPaddingPosture(renderer: ReactTestRenderer.ReactTestRenderer): 'gutter' | 'zero-pad' {
+    const list = renderer.root.findAllByType(SectionList)[0];
+    const ccs = (list.props.contentContainerStyle ?? []) as Record<string, unknown>[];
+    const flat = Array.isArray(ccs) ? ccs : [ccs];
+    return flat.some(s => s && typeof s === 'object' && s.padding === 0)
+      ? 'zero-pad'
+      : 'gutter';
+  }
+
+  it('a COMPACT empty day keeps the list gutter — the punch zone stays aligned with the cards', async () => {
+    mockAccessSnapshot = {
+      status: 'ready',
+      access: { attendanceAccess: 'active' },
+    };
+    const renderer = await mountScreen();
+    expect(listPaddingPosture(renderer)).toBe('gutter');
+  });
+
+  it('only the BIG empty well (attendance off) drops the list padding — its EmptyState self-insets', async () => {
+    mockAccessSnapshot = {
+      status: 'ready',
+      access: { attendanceAccess: 'none' },
+    };
+    const renderer = await mountScreen();
+    expect(listPaddingPosture(renderer)).toBe('zero-pad');
+  });
 });
 
 // The urgency rail's caller-side wiring — the card and hook tests never

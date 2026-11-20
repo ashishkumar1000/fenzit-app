@@ -150,7 +150,9 @@ const styles = StyleSheet.create({
   },
   // ---- Compact variant (attendance enabled) ----
   compactCard: {
-    marginHorizontal: spacing.s4,
+    // No horizontal margin: the list keeps its 16dp gutter on compact
+    // days (only the big well's zero-padding posture drops it), so the
+    // card aligns with the punch zone and job cards above/below.
     marginBottom: spacing.s4,
     backgroundColor: colors.surfaceCard,
     borderWidth: 1,

@@ -216,7 +216,12 @@ export default function TodayScreen() {
           }
           contentContainerStyle={[
             styles.listContent,
-            sections.length === 0 && styles.listContentEmpty,
+            // The zero-padding empty posture is the BIG empty well's alone
+            // (its EmptyState self-insets). The compact day keeps the list
+            // gutter — stripping it here full-bled the punch circle and the
+            // fence verdict card (the pink "Too far from…" card touched
+            // both screen edges; Sally pass 2026-11-20).
+            sections.length === 0 && !punchEnabled && styles.listContentEmpty,
             pushCardShown && { paddingBottom: PUSH_CARD_CLEARANCE },
           ]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
