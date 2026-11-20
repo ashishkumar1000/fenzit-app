@@ -66,6 +66,19 @@ describe('the COMPACT variant (attendance enabled)', () => {
     expect(chips).toHaveLength(1);
     expect(chips[0].props.accessibilityRole).toBe('button');
   });
+
+  it('the card carries NO horizontal margin — the list gutter aligns it with the punch zone (Sally pass 2026-11-20)', () => {
+    const root = renderVariant({ compact: true });
+    // The variant's outermost View is the card.
+    const card = root.children[0] as unknown as ReactTestInstance;
+    const style = card.props.style as Record<string, unknown> | Record<string, unknown>[];
+    const flat = Array.isArray(style) ? style : [style];
+    const cardStyle = flat.find(
+      (s) => s && typeof s === 'object' && 'backgroundColor' in s,
+    );
+    expect(cardStyle).toBeDefined();
+    expect(cardStyle!.marginHorizontal).toBeUndefined();
+  });
 });
 
 describe('the BIG variant (attendance disabled) — the schedule is the whole day', () => {
