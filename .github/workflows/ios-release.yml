@@ -1,8 +1,11 @@
 name: iOS release build
 
 # Mirrors android-release.yml: every push to `release` produces a signed
-# App Store IPA and uploads it to TestFlight. Intended flow is main →
-# release via PR, same as Android.
+# App Store IPA. The build job runs automatically; the TestFlight upload
+# is a separate job gated by the `testflight` environment (required
+# reviewer set in GitHub → Settings → Environments), mirroring
+# play-production — nothing reaches TestFlight until it is approved.
+# Intended flow is main → release via PR, same as Android.
 on:
   push:
     branches: [release]
@@ -17,7 +20,7 @@ concurrency:
 
 jobs:
   ios-release-build:
-    name: Archive + TestFlight upload
+    name: Archive App Store IPA
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -70,8 +73,7 @@ jobs:
 
       # Signing uses an App Store Connect API key, NOT checked-in certs:
       # xcodebuild -allowProvisioningUpdates with the key creates/refreshes
-      # the App Store distribution profile on the fly, and fastlane pilot
-      # uses the same key for the TestFlight upload (altool is deprecated
+      # the App Store distribution profile on the fly (altool is deprecated
       # for uploads; pilot over the ASC API is Apple's supported CI path).
       # The .p8 lives only in secrets and is written to the runner's build
       # dir, discarded with the job. Role required: Admin or App Manager.
@@ -88,13 +90,6 @@ jobs:
           mkdir -p build
           printf '%s' "$ASC_KEY_P8" > "build/AuthKey_${ASC_KEY_ID}.p8"
           chmod 600 "build/AuthKey_${ASC_KEY_ID}.p8"
-          jq -n \
-            --arg key_id "$ASC_KEY_ID" \
-            --arg issuer_id "$ASC_ISSUER_ID" \
-            --arg key "$ASC_KEY_P8" \
-            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
-            > build/asc_key.json
-          chmod 600 build/asc_key.json
 
       # Podfile.lock pins pod versions — plain `pod install` is reproducible.
       # CocoaPods ships on the macOS runner image.
@@ -183,19 +178,6 @@ jobs:
           path: build/ipa/*.ipa
           if-no-files-found: error
 
-      # fastlane ships on the macOS runner image; install only as a fallback.
-      # skip_waiting_for_build_processing: Apple's processing queue runs
-      # 10-30 min — the runner must not bill minutes waiting on it.
-      - name: Upload to TestFlight
-        run: |
-          command -v fastlane >/dev/null 2>&1 || gem install fastlane --no-document
-          IPA_FILE="$(ls build/ipa/*.ipa | head -1)"
-          fastlane pilot upload \
-            --api_key_path build/asc_key.json \
-            --ipa "$IPA_FILE" \
-            --skip_waiting_for_build_processing \
-            --notify_external_testers false
-
       # Record-keeping parity with Android: attach the IPA to the same
       # v<version> GitHub Release (the store-signable IPA only installs via
       # TestFlight/App Store — the release asset is an audit artifact).
@@ -217,3 +199,56 @@ jobs:
             gh release create "$TAG" "$STAGE/fenzit-$VERSION.ipa" \
               --target "$GITHUB_SHA" --title "Fenzit $VERSION" --generate-notes
           fi
+
+  # TestFlight publish. Runs only after the build job passes, and waits for
+  # a required reviewer to approve the `testflight` environment (set in
+  # GitHub → Settings → Environments) — the iOS mirror of play-production.
+  # No repo checkout needed: the job downloads the IPA artifact, re-writes
+  # the ASC key from secrets, and uploads.
+  upload-testflight:
+    name: Publish to TestFlight (beta)
+    needs: ios-release-build
+    runs-on: macos-15
+    timeout-minutes: 30
+    environment:
+      name: testflight
+      url: https://appstoreconnect.apple.com/apps/6838286809/testflight
+    steps:
+      - name: Download release IPA
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: release-ipa
+          path: ipa
+
+      - name: Write App Store Connect key
+        env:
+          ASC_KEY_ID: ${{ secrets.FENZIT_ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.FENZIT_ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.FENZIT_ASC_KEY_P8 }}
+        run: |
+          for v in "$ASC_KEY_ID" "$ASC_ISSUER_ID" "$ASC_KEY_P8"; do
+            [ -n "$v" ] || { echo "::error::missing secret — need FENZIT_ASC_KEY_ID, FENZIT_ASC_ISSUER_ID, FENZIT_ASC_KEY_P8"; exit 1; }
+          done
+          mkdir -p build
+          printf '%s' "$ASC_KEY_P8" > "build/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "build/AuthKey_${ASC_KEY_ID}.p8"
+          jq -n \
+            --arg key_id "$ASC_KEY_ID" \
+            --arg issuer_id "$ASC_ISSUER_ID" \
+            --arg key "$ASC_KEY_P8" \
+            '{key_id: $key_id, issuer_id: $issuer_id, key: $key, in_house: false}' \
+            > build/asc_key.json
+          chmod 600 build/asc_key.json
+
+      # fastlane ships on the macOS runner image; install only as a fallback.
+      # skip_waiting_for_build_processing: Apple's processing queue runs
+      # 10-30 min — the runner must not bill minutes waiting on it.
+      - name: Upload to TestFlight
+        run: |
+          command -v fastlane >/dev/null 2>&1 || gem install fastlane --no-document
+          IPA_FILE="$(ls ipa/*.ipa | head -1)"
+          fastlane pilot upload \
+            --api_key_path build/asc_key.json \
+            --ipa "$IPA_FILE" \
+            --skip_waiting_for_build_processing \
+            --notify_external_testers false
