@@ -39,10 +39,29 @@
 	     Cloud (iOS bundle id com.fenzit, API = Maps SDK for iOS). -->
 	<key>GOOGLE_MAPS_API_KEY</key>
 	<string>AIzaSyDE0COs1sKwQRoW1lwBdi9uJmNHFhSp55U</string>
+	<!-- Only standard HTTPS/TLS + Apple crypto (FCM) = exempt; false answers
+	     the per-build export-compliance questionnaire up front, so builds
+	     never sit in "Missing Compliance". -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Take photos of completed work</string>
+	<!-- ITMS-90683: Apple's binary scan requires BOTH location keys because
+	     react-native-nitro-geolocation references requestAlwaysAuthorization
+	     in source, even though this app only ever punches in in the
+	     foreground (index.js pins authorizationLevel to whenInUse). -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Your location is used only while the app is open, to verify where you punch in and out. Fenzit never tracks you in the background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Fenzit uses your location to record where you complete jobs.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Fenzit does not collect motion or fitness data. A bundled location library references motion APIs for optional travel detection that Fenzit never enables.</string>
+	<!-- Preemptive ITMS-90683: react-native-image-picker references
+	     UIImageWriteToSavedPhotosAlbum in its compiled binary (saveToPhotos is
+	     never enabled in this app) — the scanner flags symbol references, not
+	     runtime calls, so declare the string before it emails us again. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save photos of completed work to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Attach photos of completed work</string>
 	<key>RCTNewArchEnabled</key>

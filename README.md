@@ -1,3 +1,12 @@
+# Fenzit
+
+<!-- ?branch=release pins the badge to the branch the pipelines actually run
+     on (both workflows trigger only on push to release + manual dispatch).
+     Without it, GitHub falls back to the latest run on ANY branch — an ad-hoc
+     dispatch from main would flip the badge on the repo landing page. -->
+[![iOS release build](https://github.com/ashishkumar1000/fenzit-app/actions/workflows/ios-release.yml/badge.svg?branch=release)](https://github.com/ashishkumar1000/fenzit-app/actions/workflows/ios-release.yml)
+[![Android release build](https://github.com/ashishkumar1000/fenzit-app/actions/workflows/android-release.yml/badge.svg?branch=release)](https://github.com/ashishkumar1000/fenzit-app/actions/workflows/android-release.yml)
+
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
 # Getting Started
