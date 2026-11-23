@@ -116,19 +116,30 @@ jobs:
           SENTRY_PROJECT: fenzit-app
         run: |
           set -o pipefail
+          # Full log goes to build/archive.log; stdout keeps the tail. On
+          # failure print the real error lines — plain `| tail -40` buries
+          # them under per-target notes.
           xcodebuild \
             -workspace ios/FenzitApp.xcworkspace \
             -scheme FenzitApp \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath build/FenzitApp.xcarchive \
+            -archivePath "$GITHUB_WORKSPACE/build/FenzitApp.xcarchive" \
             DEVELOPMENT_TEAM="$ASC_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
             -authenticationKeyPath "$GITHUB_WORKSPACE/build/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             -allowProvisioningUpdates \
-            archive | tail -40
+            archive 2>&1 | tee build/archive.log | tail -40 || {
+              echo "=== xcodebuild error summary ==="
+              grep -nE "error:|ERROR:|No signing|Provisioning|requires a development team|is invalid|ARCHIVE FAILED|The following build commands failed" build/archive.log | head -80
+              echo "=== context around first errors ==="
+              grep -n "error:" build/archive.log | head -3 | cut -d: -f1 | while read -r n; do
+                sed -n "$((n - 8)),$((n + 12))p" build/archive.log
+              done
+              exit 1
+            }
 
       - name: Export App Store IPA
         env:
@@ -158,7 +169,11 @@ jobs:
             -authenticationKeyPath "$GITHUB_WORKSPACE/build/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            -allowProvisioningUpdates | tail -20
+            -allowProvisioningUpdates 2>&1 | tee build/export.log | tail -20 || {
+              echo "=== export errors ==="
+              grep -nE "error:|ERROR:|No signing|Provisioning|is invalid|failed" build/export.log | head -60
+              exit 1
+            }
           ls -la build/ipa/
 
       - name: Upload IPA artifact
