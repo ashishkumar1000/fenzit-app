@@ -1,0 +1,1 @@
+Maintenance update — no new features. This release keeps the app compliant with current store requirements.
