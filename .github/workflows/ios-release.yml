@@ -124,7 +124,7 @@ jobs:
             -archivePath build/FenzitApp.xcarchive \
             DEVELOPMENT_TEAM="$ASC_TEAM_ID" \
             CODE_SIGN_STYLE=Automatic \
-            -authenticationKeyPath "build/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyPath "$GITHUB_WORKSPACE/build/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             -allowProvisioningUpdates \
@@ -152,10 +152,10 @@ jobs:
           </plist>
           PLIST
           xcodebuild -exportArchive \
-            -archivePath build/FenzitApp.xcarchive \
-            -exportOptionsPlist build/ExportOptions.plist \
-            -exportPath build/ipa \
-            -authenticationKeyPath "build/AuthKey_${ASC_KEY_ID}.p8" \
+            -archivePath "$GITHUB_WORKSPACE/build/FenzitApp.xcarchive" \
+            -exportOptionsPlist "$GITHUB_WORKSPACE/build/ExportOptions.plist" \
+            -exportPath "$GITHUB_WORKSPACE/build/ipa" \
+            -authenticationKeyPath "$GITHUB_WORKSPACE/build/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
             -allowProvisioningUpdates | tail -20
