@@ -6,6 +6,9 @@ name: iOS release build
 # reviewer set in GitHub → Settings → Environments), mirroring
 # play-production — nothing reaches TestFlight until it is approved.
 # Intended flow is main → release via PR, same as Android.
+# Structural asymmetry (intentional): Android uploads from a Linux runner
+# (Google ships a REST API); BOTH iOS jobs need macOS — Apple ships no
+# Linux uploader, so don't "optimize" the upload job back to ubuntu.
 on:
   push:
     branches: [release]
@@ -267,10 +270,18 @@ jobs:
   upload-testflight:
     name: Publish to TestFlight (beta)
     needs: ios-release-build
-    # Linux is enough: jq + fastlane + a network call — Android's
-    # play-publish runs on ubuntu-24.04 too, and macOS minutes bill at 10x.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # macOS is required, unlike Android's play-publish (ubuntu-24.04): Apple
+    # ships no Linux uploader — Xcode 14 removed the java iTMSTransporter that
+    # fastlane's pilot falls back to on Linux (itms_path resolves to "" →
+    # `dir_chdir ''` crash, run 45182377759), and altool is macOS-only
+    # (should_use_altool? requires Helper.mac?). Same image as the build job
+    # (proven there) so only one runner image matters; no fallback runner
+    # exists for uploads — bump the label if GitHub ever retires macos-26.
+    # macOS minutes bill at 10x — accepted cost; the upload step itself is short.
+    runs-on: macos-26
+    # Not 60: a hung upload bills 10x. This job is gate assert + 2 artifact
+    # downloads + upload (2 attempts) — comfortably inside 30 minutes.
+    timeout-minutes: 30
     # contents: read is the minimum grant that lets the gate assertion
     # below call the environments API with github.token.
     permissions:
@@ -329,19 +340,29 @@ jobs:
             > build/asc_key.json
           chmod 600 build/asc_key.json
 
-      # fastlane ships on the macOS runner image but not on ubuntu — the gem
-      # install always runs here. skip_waiting_for_build_processing: Apple's
-      # processing queue runs 10-30 min — the runner must not bill minutes
-      # waiting on it. (Upload via the ASC API is Apple's supported CI path;
-      # altool is deprecated for uploads.)
+      # fastlane ships preinstalled on macOS runner images; the gem install is
+      # only a fallback if an image ever drops it (sudo covers a system Ruby
+      # that rejects user installs). skip_waiting_for_build_processing:
+      # Apple's processing queue runs 10-30 min — don't bill minutes waiting
+      # on it. pilot's binary transfer needs a transporter that only exists
+      # on macOS (altool — the java iTMSTransporter it falls back to
+      # elsewhere was removed in Xcode 14; that's why this job can't run on
+      # Linux). Two attempts: a flaky transfer must not cost a full macOS
+      # re-run plus a fresh environment approval.
       - name: Upload to TestFlight
         run: |
-          command -v fastlane >/dev/null 2>&1 || gem install fastlane --no-document
+          command -v fastlane >/dev/null 2>&1 || gem install fastlane --no-document || sudo gem install fastlane --no-document
           IPA_FILE="$(ls ipa/*.ipa 2>/dev/null | head -1)"
           [ -n "$IPA_FILE" ] || { echo "::error::no .ipa in the release-ipa artifact"; exit 1; }
-          fastlane pilot upload \
+          ATTEMPT=1
+          until fastlane pilot upload \
             --api_key_path build/asc_key.json \
             --ipa "$IPA_FILE" \
             --changelog "$(cat changelog/whats-new.txt)" \
             --skip_waiting_for_build_processing \
-            --notify_external_testers false
+            --notify_external_testers false; do
+            [ "$ATTEMPT" -ge 2 ] && exit 1
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "::warning::pilot upload failed (attempt $ATTEMPT/2) — retrying in 15s"
+            sleep 15
+          done
