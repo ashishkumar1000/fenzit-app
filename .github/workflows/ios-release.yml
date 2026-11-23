@@ -21,7 +21,11 @@ concurrency:
 jobs:
   ios-release-build:
     name: Archive App Store IPA
-    runs-on: macos-15
+    # macos-26 ships Xcode 26 (Apple pairs one major Xcode per macOS release).
+    # ASC rejects uploads built with older SDKs: run 45175449322 archived fine
+    # on macos-15's Xcode 16.4 (iOS 18.5 SDK) and died at upload with
+    # "must be built with the iOS 26 SDK or later" (409 SDK version issue).
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       # fetch-depth: 0 — verify:store scans store-v* tags (same as Android).
