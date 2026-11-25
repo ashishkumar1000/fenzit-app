@@ -202,6 +202,17 @@ describe('MoreScreen wiring', () => {
       attendanceRow?.props.onPress();
     });
     expect(mockNavigate).toHaveBeenCalledWith('AttendanceHome');
+
+    // The Leave row is the redesigned surface's only manual entry point —
+    // its silent removal used to ship no failure (the review's
+    // verification gap, 2026-11-26).
+    const leaveRow = root
+      .findAllByType(MoreRow)
+      .find(t => t.props.title === 'Leave');
+    act(() => {
+      leaveRow?.props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('OwnerLeave');
   });
 
   it('logs out only through the ConfirmDialog, running the forced-logout flow after the confirm', () => {
@@ -259,7 +270,7 @@ describe('MoreScreen — a viewer (read-only)', () => {
     const root = renderScreen();
     const titles = [...root.findAllByType(MoreTile), ...root.findAllByType(MoreRow)].map(n => n.props.title);
 
-    for (const expected of ['Employees', 'Notifications', 'Customers', 'Reports', 'Attendance', 'Log out']) {
+    for (const expected of ['Employees', 'Notifications', 'Customers', 'Reports', 'Attendance', 'Log out', 'Leave']) {
       expect(titles).toContain(expected);
     }
   });

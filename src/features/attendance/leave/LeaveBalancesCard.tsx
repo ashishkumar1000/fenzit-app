@@ -32,19 +32,30 @@ type Props = {
   highlightTypeId?: string | null;
   /** The detail-sheet's compact mode: name + remaining only. */
   compact?: boolean;
+  /** Title override — the owner's detail sheet names the employee the
+   *  balances belong to (the admin is reading someone else's numbers;
+   *  "Your" misattributed them, the review P2). Defaults to "Your". */
+  title?: string;
 };
 
-export function LeaveBalancesCard({ balances, loading, error, highlightTypeId = null, compact = false }: Props) {
+export function LeaveBalancesCard({
+  balances,
+  loading,
+  error,
+  highlightTypeId = null,
+  compact = false,
+  title = 'Your leave balances',
+}: Props) {
   if (loading) {
     return (
-      <CardShell title="Your leave balances">
+      <CardShell title={title}>
         <Skeleton rows={2} height={44} />
       </CardShell>
     );
   }
   if (error) {
     return (
-      <CardShell title="Your leave balances">
+      <CardShell title={title}>
         <InlineNotice message={error} tone="neutral" />
       </CardShell>
     );
@@ -53,7 +64,7 @@ export function LeaveBalancesCard({ balances, loading, error, highlightTypeId = 
     return null; // nothing accrual-bearing configured — omit, don't tease
   }
   return (
-    <CardShell title="Your leave balances">
+    <CardShell title={title}>
       {balances.map(balance => {
         const muted = !balance.enabled;
         const highlighted = highlightTypeId === balance.typeId && !muted;
@@ -77,16 +88,20 @@ export function LeaveBalancesCard({ balances, loading, error, highlightTypeId = 
                 </Badge>
               ) : null}
             </View>
-            <Text
-              style={[
-                styles.remaining,
-                muted ? styles.remainingMuted : null,
-                balance.remaining < 0 && !muted ? styles.remainingOverdrawn : null,
-              ]}>
-              {balanceRemainingCopy(balance.remaining)}
-            </Text>
-            {!compact ? (
-              <Text style={[styles.caption, muted ? styles.nameMuted : null]}>
+            {/* A disabled type's remaining is history, not usable balance —
+                printing "Not available" beside "9 days left" cancelled
+                itself out (the review P3). The badge alone carries it. */}
+            {!muted ? (
+              <Text
+                style={[
+                  styles.remaining,
+                  balance.remaining < 0 ? styles.remainingOverdrawn : null,
+                ]}>
+                {balanceRemainingCopy(balance.remaining)}
+              </Text>
+            ) : null}
+            {!compact && !muted ? (
+              <Text style={styles.caption}>
                 {balanceCaption(balance.accrued, balance.consumed, balance.carryForward)}
               </Text>
             ) : null}

@@ -67,7 +67,10 @@ export type {
   LeavePart,
   LeavePreview,
   LeavePreviewErrorCode,
+  LeaveRequestRow,
   LeaveRequestView,
+  LeaveSummary,
+  LeaveTypePatch,
   LeaveTypeView,
 } from './attendanceLeave';
 export { payslipsService } from './payrollPayslips';

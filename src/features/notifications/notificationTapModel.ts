@@ -19,8 +19,8 @@
  *     never open a route that is not registered), via the nested-delegate
  *     form (device-found bug #2: a plain `navigate('Attendance')` from the
  *     root stack is not handled);
- *   - leave owner taps → OwnerLeave's Pending queue (applied / pending
- *     reminder) or All (every other owner event);
+ *   - leave owner taps → OwnerLeave's Requests pane (`owner-pending` opens
+ *     the Needs-review filter; every other owner event opens All);
  *   - a blocked guard or an unknown event type yields `null` — the caller
  *     does nothing (no navigation AND no read-mark).
  *
@@ -57,7 +57,7 @@ export type NotificationTapTarget =
   | { readonly route: 'Reports' }
   | { readonly route: 'AttendanceDashboard' }
   | { readonly route: 'TechnicianTabsAttendance' }
-  | { readonly route: 'OwnerLeave'; readonly params: { readonly tab: 'pending' | 'all' } };
+  | { readonly route: 'OwnerLeave'; readonly params: { readonly tab: 'requests'; readonly filter?: 'pending' | 'all' } };
 
 /**
  * The navigation call the executor needs — structural, so both the screen's
@@ -120,8 +120,8 @@ export function tapTargetForAttendance(
  * The leave cards' decision (the screen's `handleLeaveCardPress`): the
  * employee-side `attendance-guarded` tap consults the same guard (lazily —
  * an owner tap never reads the seam); owner taps land on the Leave
- * surface's right segment (`owner-pending` → Pending — the actionable
- * queue; `owner-all` → All).
+ * surface's Requests pane with the right filter (`owner-pending` →
+ * Needs-review — the actionable queue; `owner-all` → All).
  */
 export function tapTargetForLeave(
   tap: 'owner-pending' | 'owner-all' | 'attendance-guarded',
@@ -131,7 +131,10 @@ export function tapTargetForLeave(
     if (!attendanceReachable()) return null;
     return { route: 'TechnicianTabsAttendance' };
   }
-  return { route: 'OwnerLeave', params: { tab: tap === 'owner-pending' ? 'pending' : 'all' } };
+  return {
+    route: 'OwnerLeave',
+    params: { tab: 'requests', filter: tap === 'owner-pending' ? 'pending' : 'all' },
+  };
 }
 
 /** True only for the two report-engine terminal events. */
@@ -280,7 +283,7 @@ export function openTapTarget(
       navigate('TechnicianTabs', { screen: 'Attendance' });
       return;
     case 'OwnerLeave':
-      navigate('OwnerLeave', { tab: target.params.tab });
+      navigate('OwnerLeave', { tab: target.params.tab, filter: target.params.filter });
       return;
   }
 }

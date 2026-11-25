@@ -316,13 +316,20 @@ export type RootStackParamList = {
    */
   AttendanceSetupWizard: undefined;
   /**
-   * Story 17-6 — the owner's Leave surface (pending queue + history).
-   * `tab` deep-links a segment: the leave.applied card lands on `pending`,
-   * every other entry point omits it (defaults `pending`) or passes `all`
-   * (the on-behalf landing — a born-approved request is invisible in the
-   * Pending filter). Consumed read-once-then-cleared on merge.
+   * Story 17-6 — the owner's Leave surface, two-tab since the 2026-11-25
+   * redesign (segments ordered Requests first; the `types` value renders
+   * under the label "Config" — the leave-type catalog's editor). `tab`
+   * deep-links a pane (`requests` default; `types` opens Config).
+   * `filter` scopes the Requests pane's entry filter when `tab` is
+   * `requests`: the leave.applied card lands on `pending` (the pill's
+   * "Needs review"), every other entry point omits it (defaults
+   * `pending`) or passes `all` (the on-behalf landing — a born-approved
+   * request is invisible in Needs review). Consumed read-once-then-
+   * cleared on merge.
    */
-  OwnerLeave: { tab?: 'pending' | 'all' } | undefined;
+  OwnerLeave:
+    | { tab?: 'requests' | 'types'; filter?: 'pending' | 'all' }
+    | undefined;
   /**
    * Story 17-6 — apply on behalf (FR-16). The identity trio is absent when
    * the CTA opens the screen cold (the EmployeePickerSheet fills it);

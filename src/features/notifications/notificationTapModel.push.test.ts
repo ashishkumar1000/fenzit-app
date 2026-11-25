@@ -5,7 +5,7 @@
  * a real user can reach from a notification tap.
  */
 import type { UserRole } from '../../services';
-import { pushTapTargetForEvent } from './notificationTapModel';
+import { openTapTarget, pushTapTargetForEvent } from './notificationTapModel';
 
 let mockReachable = true;
 
@@ -131,23 +131,29 @@ describe('pushTapTargetForEvent — push tap routing matrix', () => {
   });
 
   describe('leave events', () => {
-    it('leave.applied lands the owner on the Pending queue', () => {
+    it('leave.applied lands the owner on the Needs-review filter of the Requests pane', () => {
       expect(pushTapTargetForEvent('leave.applied', null, OWNER)).toEqual({
         route: 'OwnerLeave',
-        params: { tab: 'pending' },
+        params: { tab: 'requests', filter: 'pending' },
       });
     });
 
-    it('leave.pending_reminder lands the owner on the Pending queue', () => {
+    it('leave.pending_reminder lands the owner on the Needs-review filter of the Requests pane', () => {
       expect(
         pushTapTargetForEvent('leave.pending_reminder', null, OWNER),
-      ).toEqual({ route: 'OwnerLeave', params: { tab: 'pending' } });
+      ).toEqual({
+        route: 'OwnerLeave',
+        params: { tab: 'requests', filter: 'pending' },
+      });
     });
 
-    it('an owner review event (leave.employee_cancelled) lands the owner on the All list', () => {
+    it('an owner review event (leave.employee_cancelled) lands the owner on the All filter', () => {
       expect(
         pushTapTargetForEvent('leave.employee_cancelled', null, OWNER),
-      ).toEqual({ route: 'OwnerLeave', params: { tab: 'all' } });
+      ).toEqual({
+        route: 'OwnerLeave',
+        params: { tab: 'requests', filter: 'all' },
+      });
     });
 
     it('an employee decision event is not an owner event: the owner gets no navigation', () => {
@@ -192,5 +198,46 @@ describe('pushTapTargetForEvent — push tap routing matrix', () => {
         params: { jobId: JOB },
       });
     });
+  });
+});
+
+describe('openTapTarget — the executor composes the OwnerLeave navigate params', () => {
+  // The executor used to be unobserved for the OwnerLeave branch: dropping
+  // the `filter` param shipped no failure, and a push tap for an owner-all
+  // event landed on Needs review with the relevant request hidden (the
+  // landing-visibility rule — the review's verification gap, 2026-11-26).
+  it('the owner-pending target navigates with BOTH tab and filter', () => {
+    const navigate = jest.fn();
+    openTapTarget(
+      navigate,
+      { route: 'OwnerLeave', params: { tab: 'requests', filter: 'pending' } },
+      'inbox',
+    );
+    expect(navigate).toHaveBeenCalledWith('OwnerLeave', {
+      tab: 'requests',
+      filter: 'pending',
+    });
+  });
+
+  it('the push tap for an owner-all event lands on the All filter through the executor', () => {
+    const navigate = jest.fn();
+    // employee_cancelled is an OWNER event (the owner-all branch);
+    // leave.approved is the employee's own decision event.
+    const target = pushTapTargetForEvent('leave.employee_cancelled', LEAVE_ID, OWNER);
+    expect(target).toEqual({
+      route: 'OwnerLeave',
+      params: { tab: 'requests', filter: 'all' },
+    });
+    openTapTarget(navigate, target, 'push');
+    expect(navigate).toHaveBeenCalledWith('OwnerLeave', {
+      tab: 'requests',
+      filter: 'all',
+    });
+  });
+
+  it('a null target is a no-op', () => {
+    const navigate = jest.fn();
+    openTapTarget(navigate, null, 'push');
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
