@@ -342,7 +342,8 @@ describe('the born-approved submit (spec D4)', () => {
     expect(key).toMatch(/^[0-9a-f-]{36}$/); // one fresh UUID v4 per tap
     expect(announce).toHaveBeenCalledWith('Leave applied for Arya');
     expect(ctx.navigation.navigate).toHaveBeenCalledWith('OwnerLeave', {
-      tab: 'all',
+      tab: 'requests',
+      filter: 'all',
     });
   });
 
@@ -426,7 +427,7 @@ describe('the live preview (23-14 — one server truth)', () => {
 
   it('the preview carries the effective leaveTypeId once the catalog loads', async () => {
     listCompanyLeaveTypes.mockResolvedValue([makeType('lt-1', 'Sick')]);
-    const { root } = await pickedWithDate();
+    await pickedWithDate();
     expect(previewOnBehalf).toHaveBeenLastCalledWith({
       employeeId: 'e1',
       startDate: '2026-10-05',

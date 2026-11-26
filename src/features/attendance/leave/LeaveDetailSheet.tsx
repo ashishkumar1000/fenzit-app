@@ -167,6 +167,18 @@ export function LeaveDetailSheet(input: {
           ) : null}
 
           <View style={styles.kvRows}>
+            {/* The request's catalog type leads the facts — it is WHAT is
+                being consumed (the review P2: the balances card lists
+                unrelated types and nothing named the request's own).
+                Legacy rows predate the catalog — absent → no row. */}
+            {request.leaveTypeName ? (
+              <View style={styles.kvRow}>
+                <Text style={styles.kvLabel}>Leave type</Text>
+                <Text style={styles.kvValue} numberOfLines={1}>
+                  {request.leaveTypeName}
+                </Text>
+              </View>
+            ) : null}
             {/* 23-14 — "Day part" now: the apply form has a real "Leave
                 type" section, so a bare "Type" here read as that picker
                 (the copy fix rides the same review round). */}
@@ -197,6 +209,7 @@ export function LeaveDetailSheet(input: {
 
           {request.reason.trim() !== '' ? (
             <View style={styles.reasonBox}>
+              <Text style={styles.reasonLabel}>Reason</Text>
               <Text style={styles.reasonText}>{`“${request.reason}”`}</Text>
             </View>
           ) : null}
@@ -274,6 +287,14 @@ const styles = StyleSheet.create({
     borderColor: colors.borderSubtle,
     borderRadius: radius.md,
     padding: spacing.s3,
+    gap: spacing.s1,
+  },
+  reasonLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
   },
   reasonText: {
     ...typography.body,

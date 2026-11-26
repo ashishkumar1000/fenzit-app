@@ -22,8 +22,9 @@
  * `ATTENDANCE_NOT_TRACKED` on-behalf means the TARGET employee is untracked
  * — inline server message only, NO access-store refresh, form stays;
  * `ATTENDANCE_EMPLOYEE_NOT_FOUND` gets the FE-owned line. Success:
- * announce "Leave applied for {name}" and land on OwnerLeave `all` (a
- * born-approved request is invisible in the Pending filter).
+ * announce "Leave applied for {name}" and land on OwnerLeave's Requests
+ * pane, All filter (a born-approved request is invisible in the
+ * Needs-review filter).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
@@ -458,9 +459,10 @@ export function useApplyOnBehalf(input: {
         AccessibilityInfo.announceForAccessibility(
           `${APPLIED_ANNOUNCEMENT_PREFIX} ${employee.employeeName}`,
         );
-        // Param merge pops back to the owner's Leave screen, landing on All
-        // so the born-approved request is visible immediately (spec D4).
-        navigation.navigate('OwnerLeave', { tab: 'all' });
+        // Param merge pops back to the owner's Leave screen, landing on the
+        // Requests pane's All filter so the born-approved request is visible
+        // immediately (spec D4).
+        navigation.navigate('OwnerLeave', { tab: 'requests', filter: 'all' });
       })
       .catch((err: ApiError) => {
         if (!mounted.current) return;

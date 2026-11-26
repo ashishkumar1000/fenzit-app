@@ -140,6 +140,32 @@ export interface LeaveBalanceView {
   remaining: number;
 }
 
+// --- The owner Types surface (27-x) — the values-only PATCH + summary. ----
+
+/**
+ * The five values the PATCH accepts. The catalog is fixed — names, codes
+ * and accrual modes are inherent, and unknown keys are stripped server-side.
+ */
+export type LeaveTypePatch = Partial<{
+  accrualDays: number;
+  carryForward: boolean;
+  allowOverBalance: boolean;
+  paid: boolean;
+  enabled: boolean;
+}>;
+
+/** The derived-status keys the summary answers (the D5 vocabulary). */
+export interface LeaveSummary {
+  activeEmployees: number;
+  counts: {
+    pending: number;
+    approved: number;
+    revoked: number;
+    cancelled: number;
+    rejected: number;
+  };
+}
+
 // --- Story 17-7 — the revoke/cancel split preview + write shapes -----------
 
 /** One `keepDates[]` entry — a day the action will NOT touch (wire-exact:
@@ -181,6 +207,9 @@ export interface LeaveActionView extends LeaveRequestRow {
  * The list/write row — the request view plus `employeeName` (and its
  * `employeeCode` companion), which the owner list adds and write responses
  * never carry (wire-truth F5: the envelope is the house `Paginated<T>`).
+ * The owner list rows also carry the request's catalog typing and the
+ * person's office line (27-1/27-2 wire truth, optional — absent on legacy
+ * rows created before the fixed catalog).
  */
 export type LeaveRequestRow = LeaveRequestView & {
   employeeName?: string;
@@ -188,6 +217,12 @@ export type LeaveRequestRow = LeaveRequestView & {
   employeeAvatarUrl?: string | null;
   /** Per-tenant human reference (`'EMP-004'`); owner list reads only. */
   employeeCode?: string;
+  /** The request's catalog type (owner list rows); absent on legacy rows. */
+  leaveTypeId?: string;
+  leaveTypeCode?: string;
+  leaveTypeName?: string;
+  /** The person's office assignment covering today; owner list reads only. */
+  officeName?: string;
 };
 
 /** The request view (list adds `employeeName`; never this shape). */
@@ -269,12 +304,16 @@ export const attendanceLeaveService = {
    * status (`'pending'` is the queue; the unfiltered list is the All tab) —
    * cursors are endpoint-scoped (`leave-owner-list`), so a pending cursor
    * replayed against the unfiltered list would answer garbage: the FE keeps
-   * per-tab state and never crosses them (spec D1).
+   * per-tab state and never crosses them (spec D1). `q` is the 27-1
+   * server-side needle (name / employee code / reason, case-insensitive
+   * contains) — the client trims and caps it at 100 chars (the BE 422s
+   * longer); a cursor minted under one `q` is never replayed under another.
    */
   listOwnerLeave(
     params: {
       status?: string;
       employeeId?: string;
+      q?: string;
       cursor?: string;
       limit?: number;
     } = {},
@@ -434,6 +473,42 @@ export const attendanceLeaveService = {
       .get<LeaveBalanceView[]>(
         `/attendance/leave/${encodeURIComponent(employeeId)}/balances`,
       )
+      .then(res => res.data);
+  },
+
+  // --- The owner Types surface (27-x catalog config; web parity). ----------
+
+  /**
+   * `PATCH /attendance/leave/types/:id` — values-only edit (the catalog is
+   * FIXED: names, codes and accrual modes are inherent; unknown keys are
+   * stripped server-side). The body carries CHANGED fields only. The BE
+   * answers 200 with the stored view (an unchanged answer carries no audit
+   * entry), 409 `LEAVE_TYPE_NOT_CONFIGURABLE` for a legacy remnant, 422
+   * for bad values (accrualDays bounds/decimals, a rate on comp_off,
+   * carryForward/allowOverBalance on a non-monthly type), 404 cross-tenant.
+   */
+  patchLeaveType(
+    id: string,
+    values: LeaveTypePatch,
+  ): Promise<LeaveTypeView> {
+    return apiClient
+      .patch<LeaveTypeView>(
+        `/attendance/leave/types/${encodeURIComponent(id)}`,
+        values,
+      )
+      .then(res => res.data);
+  },
+
+  /**
+   * `GET /attendance/leave/summary` — the requests tab's pill counts in one
+   * read: the whole tenant's request counts by derived status (the same
+   * CASE the list filters with — a pill's number can never disagree with
+   * its filter). `activeEmployees` is the console's team-size fact; the
+   * mobile surface reads only `counts`.
+   */
+  leaveSummary(): Promise<LeaveSummary> {
+    return apiClient
+      .get<LeaveSummary>('/attendance/leave/summary')
       .then(res => res.data);
   },
 };

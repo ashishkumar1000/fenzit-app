@@ -149,7 +149,6 @@ describe('the compact rows (spec D3)', () => {
     const { root } = await renderSection();
     const row = root.findAllByType(Row);
     expect(row).toHaveLength(1);
-    expect(row[0].props.variant).toBe('compact');
     expect(texts(root)).toContain('5 Oct 2026');
     expect(texts(root)).toContain('1 working day · First half');
   });

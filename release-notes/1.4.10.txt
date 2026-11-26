@@ -1,0 +1,1 @@
+New: the Leave screen, rebuilt. Owners get a two-tab view — Requests and Config. Review, approve or decline time-off requests in one queue with live counts and search; edit leave-type rules (rates, carry-forward, paid/unpaid) with a Save bar that follows you. Clearer status dots, better screen-reader labels, and a soft fade hint while lists continue.

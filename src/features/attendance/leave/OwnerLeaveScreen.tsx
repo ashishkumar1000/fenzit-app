@@ -1,47 +1,51 @@
 /**
- * OwnerLeaveScreen — the owner's Leave surface (Story 17-6, spec D1/D2):
- * a full-width "Apply on behalf" CTA card (the OfficesScreen "Add new
- * office" idiom — visible on both tabs, above the list), a Pending | All
- * SegmentedControl, and the request list. The data side (per-tab
- * pagination, cursor isolation, stale marks, focus/foreground refreshes)
- * lives in `useOwnerLeaveQueue`.
- *
- * The row tap opens LeaveDetailSheet; the decision writes live here so the
- * outcome can drive the list branches: approve/reject success REMOVES the
- * row from Pending (a filtered list) / REPLACES it in All, marks both tabs
- * stale, announces, and closes the sheet; a revoke success (17-7) does the
- * list work the same way but morphs the sheet back to the REFRESHED detail
- * view; 409 already-handled leaves the sheet open on the notice and
- * refetches the row's truth.
+ * OwnerLeaveScreen — the owner's Leave surface, rewritten to the two-tab
+ * interior (the Stitch "Two-Tab Screen UX Redesign" mobile screens, 2026-
+ * 11): Requests | Config SegmentedControl over the LeaveRequestsPane
+ * (search, filter pills, cards) and the LeaveTypesPane (the catalog chips
+ * + rules editor). The data orchestration (useLeaveRequests) and every
+ * WRITE live here — the sheet's decline/revoke and the card's inline
+ * Approve both dispatch into the same per-filter reducer, so a decided
+ * row leaves every loaded list and all filters mark stale. Approve is the
+ * one INLINE direct write (input-less, state-guarded); its 409 already-
+ * handled becomes the notice above the list plus a first-page refetch.
+ * Decline and Revoke stay sheet-hosted via LeaveDetailSheet (the reason
+ * opportunity lives there) with the shipped write posture.
  *
  * Dual-hosting (CAP-1): the screen stays a pushed root-stack route AND
  * embeds as the Attendance tab page's Leave pane. `embedded` drops the
- * pushed-screen chrome the pane host already provides (back header, top
- * SafeArea), starts the queue at the host's `initialTab` (always 'pending'
- * today) and makes the `{ tab }` param consume PUSHED-MODE ONLY — embedded,
- * `route.params` (when a host ever passes one) is the tab PAGE's param and
- * must never be read or cleared here.
+ * pushed-screen chrome and makes the `{ tab, filter }` params consume
+ * PUSHED-MODE ONLY — embedded, `route.params` (when a host ever passes
+ * one) belongs to the tab page and must never be read or cleared here.
+ *
+ * Post-write bookkeeping (found on device): every decided row also
+ * refreshes the pills' /summary snapshot and bumps the detail-balances
+ * version — the badge moved via the /users/me mirror, and stale pills or
+ * a stale in-sheet figure beside it contradict it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { CalendarOff, Users } from 'lucide-react-native';
+import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { CalendarOff } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button, EmptyState, InlineError, SegmentedControl, Skeleton } from '../../../components/ui';
+import { EmptyState, SegmentedControl } from '../../../components/ui';
 import { LeaveEmptyArt } from './LeaveEmptyArt';
-import { colors, radius, spacing, typography } from '../../../theme';
+import { colors, spacing, typography } from '../../../theme';
 import { attendanceLeaveService } from '../../../services';
 import type { ApiError } from '../../../services/api/apiError';
-import type { LeaveBalanceView, LeaveRequestRow } from '../../../services/resources/attendanceLeave';
+import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import type { RootStackParamList } from '../../../navigation/types';
 import { VIEW_ONLY_REASON, useCanWrite } from '../../auth';
 import { loadMyProfile } from '../../profile';
 import ScreenHeader from '../offices/ScreenHeader';
-import { LeaveRequestRow as LeaveRequestRowView } from './LeaveRequestRow';
 import { LeaveBalancesCard } from './LeaveBalancesCard';
 import { LeaveDetailSheet, type LeaveDetailActionState } from './LeaveDetailSheet';
-import { classifyLeaveWriteFailure, type LeaveTab } from './ownerLeaveModel';
-import { useOwnerLeaveQueue } from './useOwnerLeaveQueue';
+import { classifyLeaveWriteFailure } from './ownerLeaveModel';
+import { LeaveRequestsPane, type RequestsWriteNotice } from './LeaveRequestsPane';
+import { LeaveTypesPane } from './LeaveTypesPane';
+import { useDetailBalances } from './useDetailBalances';
+import { useLeaveRequests } from './useLeaveRequests';
+import { keepRowEnrichments, type LeaveFilter } from './requestsModel';
 
 type StackProps = NativeStackScreenProps<RootStackParamList, 'OwnerLeave'>;
 
@@ -50,23 +54,29 @@ type Props = Omit<StackProps, 'route'> & {
    *  owns the route; embedded panes never read its params). */
   route?: StackProps['route'];
   /** Tab-pane hosting: no pushed-screen header, no top SafeArea inset,
-   *  and the `{ tab }` param consume is pushed-mode only. */
+   *  and the `{ tab, filter }` param consume is pushed-mode only. */
   embedded?: boolean;
-  /** Pane hosting's entry tab (the pushed mode reads the `{ tab }` route
-   *  param instead); defaults to 'pending'. */
-  initialTab?: LeaveTab;
+  /** Pane hosting's entry filter (the pushed mode reads the `{ filter }`
+   *  route param instead); defaults to 'pending'. */
+  initialFilter?: LeaveFilter;
 };
 
-const SEGMENTS = [
-  { value: 'pending' as const, label: 'Pending' },
-  { value: 'all' as const, label: 'All' },
+/** Requests first (the owner's order, 2026-11-26); the rules editor's
+ *  tab reads "Config" (the leave-type configuration pane). */
+const PANE_SEGMENTS = [
+  { value: 'requests' as const, label: 'Requests' },
+  { value: 'types' as const, label: 'Config' },
 ];
+
+/** The design's framing line — one sentence under the pane switch. */
+const PANE_TAGLINE =
+  "The leave your team can take, and the requests waiting on you — set each type's rules once, decide requests as they come.";
 
 /**
  * Leave review is for company admins. A viewer cannot read leave requests
  * (they can carry medical reasons), so they get one plain explanation
- * instead of a list that would only fail. The wrapper keeps the queue hook
- * (and its fetches) from ever running for a viewer.
+ * instead of a list that would only fail. The wrapper keeps the hook (and
+ * its fetches) from ever running for a viewer.
  */
 export default function OwnerLeaveScreen(props: Props) {
   const { navigation, embedded } = props;
@@ -91,19 +101,21 @@ export default function OwnerLeaveScreen(props: Props) {
   return <OwnerLeaveContent {...props} />;
 }
 
-function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
-  // Entry tab: pushed mode reads the merged `{ tab }` deep-link param; pane
-  // mode takes the host's prop (the page-level param is the TAB PAGE's —
-  // the Review landing — never this pane's).
-  const queue = useOwnerLeaveQueue(
+function OwnerLeaveContent({ navigation, route, embedded, initialFilter }: Props) {
+  // Entry pane + filter: pushed mode reads the merged `{ tab, filter }`
+  // deep-link params; pane mode takes the host's prop (the page-level
+  // params are the TAB PAGE's — this pane must never read them).
+  const [pane, setPane] = useState<'requests' | 'types'>(
+    !embedded && route?.params?.tab === 'types' ? 'types' : 'requests',
+  );
+  const requests = useLeaveRequests(
     navigation,
     embedded
-      ? (initialTab ?? 'pending')
-      : route?.params?.tab === 'all'
+      ? (initialFilter ?? 'pending')
+      : route?.params?.filter === 'all'
         ? 'all'
         : 'pending',
   );
-  const { state, activeTab, refreshing, refreshFailedTab } = queue;
 
   // The detail sheet's request + the host-owned write state.
   const [detail, setDetail] = useState<LeaveRequestRow | null>(null);
@@ -119,54 +131,93 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
     };
   }, []);
 
-  // --- 23-14 — the opened request's balances (the sheet renders the slot;
-  // the SHEET never calls the API itself — its own docblock contract).
-  const balancesSeq = useRef(0);
-  const [detailBalances, setDetailBalances] = useState<LeaveBalanceView[]>([]);
-  const [detailBalancesLoading, setDetailBalancesLoading] = useState(false);
-  const [detailBalancesError, setDetailBalancesError] = useState<string | null>(null);
-  useEffect(() => {
-    const employeeId = detail?.employeeId ?? null;
-    if (employeeId == null) {
-      setDetailBalances([]);
-      setDetailBalancesError(null);
-      setDetailBalancesLoading(false);
-      return;
-    }
-    const requestSeq = ++balancesSeq.current;
-    setDetailBalancesLoading(true);
-    setDetailBalancesError(null);
-    attendanceLeaveService
-      .getEmployeeBalances(employeeId)
-      .then(rows => {
-        if (!mounted.current || requestSeq !== balancesSeq.current) return;
-        setDetailBalances(rows);
-        setDetailBalancesError(null);
-      })
-      .catch(() => {
-        if (!mounted.current || requestSeq !== balancesSeq.current) return;
-        // Includes the 404 for a since-removed employee — a quiet
-        // notice, never a blocking failure of the decision surface.
-        setDetailBalancesError("Couldn't load balances.");
-      })
-      .finally(() => {
-        if (requestSeq === balancesSeq.current) setDetailBalancesLoading(false);
-      });
-  }, [detail]);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [approveNotice, setApproveNotice] = useState<RequestsWriteNotice | null>(null);
+  // The inline write's latch — a ref, not state: a double-tap in the same
+  // frame sees the state's stale closure, never the ref's sync set.
+  const approveLatch = useRef(false);
 
-  // Deep link / on-behalf landing: consume the merged `{ tab }` param —
-  // pushed mode ONLY. Embedded, the route belongs to the tab PAGE (its
-  // `tab` is this story's Review landing: 'leave'), which this pane must
-  // never read or clear.
+  // --- 23-14 — the opened request's balances (the sheet renders the slot).
+  // The version bumps after every successful write: the revoke success morph
+  // swaps the refreshed view in without changing the employeeId, and the
+  // employeeId-keyed effect would otherwise keep the pre-write figure.
+  const [balancesVersion, setBalancesVersion] = useState(0);
+  const detailBalances = useDetailBalances(detail?.employeeId ?? null, balancesVersion);
+  /** The card title names whose balances these are — an admin is reading
+   *  someone else's numbers (the review P2: "Your" reads as the admin's). */
+  const balancesTitle = detail?.employeeName
+    ? `${detail.employeeName.split(' ')[0]}'s leave balances`
+    : undefined;
+
+  // Deep link / on-behalf landing: consume the merged `{ tab, filter }`
+  // params — pushed mode ONLY. Embedded, the route belongs to the tab
+  // page, which this pane must never read or clear. A Requests landing is
+  // always an intent to see fresh data — the target filter fetches
+  // unconditionally (the 17-6 landing rule); a Types landing just opens
+  // the tab.
   const navTab = route?.params?.tab;
+  const navFilter = route?.params?.filter;
   useEffect(() => {
     if (embedded) return;
-    if (navTab !== 'pending' && navTab !== 'all') return;
-    queue.consumeTabParam(navTab, () => navigation.setParams({ tab: undefined }));
+    if (navTab !== 'requests' && navTab !== 'types') return;
+    setPane(navTab);
+    if (navTab === 'requests') {
+      requests.consumeFilter(navFilter === 'all' ? 'all' : 'pending');
+    }
+    navigation.setParams({ tab: undefined, filter: undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navTab, embedded]);
+  }, [navTab, navFilter, embedded]);
 
-  // --- The decision write (D2 lifecycle; 17-7 D3 adds the revoke). --------
+  // --- The inline Approve (the one direct write; input-less). --------------
+  const approve = useCallback(
+    (row: LeaveRequestRow) => {
+      if (approveLatch.current) return; // double-tap no-op
+      approveLatch.current = true;
+      setApprovingId(row.id);
+      setApproveNotice(null);
+      attendanceLeaveService
+        .approveLeave(row.id)
+        .then(view => {
+          if (!mounted.current) return;
+          // Own-retry answers 200 here too — one success path (BE D7).
+          AccessibilityInfo.announceForAccessibility('Leave approved');
+          requests.dispatch({ type: 'decideRow', row: view });
+          requests.dispatch({ type: 'markStale' });
+          // The pills' snapshot refreshes NOW, not on the next focus — the
+          // badge already moved; stale pills beside it contradict it (found
+          // on device).
+          requests.refreshCounts();
+          setBalancesVersion(v => v + 1);
+          // The decision must reach the shared /users/me mirror too — the
+          // Attendance tab's badge and Home's banner read it (forced past
+          // the focus throttle).
+          void loadMyProfile({ force: true });
+          setApprovingId(null);
+        })
+        .catch((err: ApiError) => {
+          if (!mounted.current) return;
+          setApprovingId(null);
+          const failure = classifyLeaveWriteFailure(err, 'approve');
+          if (failure.kind === 'already-handled') {
+            setApproveNotice({ kind: 'handled', message: 'This request was already handled' });
+            requests.dispatch({ type: 'markStale' });
+            requests.fetchFirst(requests.activeFilter);
+            requests.refreshCounts();
+            void loadMyProfile({ force: true });
+            return;
+          }
+          setApproveNotice({ kind: 'error', message: failure.message });
+        })
+        .finally(() => {
+          approveLatch.current = false;
+        });
+    },
+    [requests],
+  );
+
+  // --- The sheet-hosted writes (Approve; Decline: optional reason;
+  // Revoke: the reason is REQUIRED on the wire). Same dispatches as the
+  // inline write.
   const runWrite = useCallback(
     (action: 'approve' | 'reject' | 'revoke', reason?: string) => {
       if (detail == null || writeLatch.current) return; // double-tap no-op
@@ -189,20 +240,20 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
                 ? 'Leave rejected'
                 : 'Leave revoked',
           );
-          queue.dispatch({ type: 'removeRow', id: view.id }); // Pending: filtered
-          queue.dispatch({ type: 'replaceRow', row: view }); // All: in place
-          queue.dispatch({ type: 'markStale', tabs: ['pending', 'all'] });
-          // The decision must reach the shared /users/me mirror too — the
-          // Attendance tab's badge and Home's banner read it (forced past
-          // the focus throttle).
+          requests.dispatch({ type: 'decideRow', row: view });
+          requests.dispatch({ type: 'markStale' });
+          requests.refreshCounts();
+          setBalancesVersion(v => v + 1);
           void loadMyProfile({ force: true });
           if (action === 'revoke') {
-            // D3: the stage morphs back to the REFRESHED detail view (the
+            // The stage morphs back to the REFRESHED detail view (the
             // write response is authoritative — divergence is absorbed;
             // the optional split arrays are never required). The write
-            // view carries no employeeName (list-only wire truth) — keep
-            // the row's list-earned name (the replaceRow discipline).
-            setDetail({ ...view, employeeName: view.employeeName ?? detail.employeeName });
+            // view carries none of the list-only enrichments — keep the
+            // opened row's list-earned fields (the replaceRow discipline;
+            // dropping leaveTypeName made the sheet's Leave-type row
+            // vanish right after the decision — the review, 2026-11-26).
+            setDetail(keepRowEnrichments(view, detail));
           } else {
             setDetail(null);
           }
@@ -214,9 +265,11 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
           if (failure.kind === 'already-handled') {
             // No auto-close timer — the owner reads the notice; OK closes.
             setActionState({ kind: 'handled' });
-            queue.dispatch({ type: 'markStale', tabs: ['pending', 'all'] });
-            // The row refetches to its true state (the visible tab now).
-            queue.fetchFirst(activeTab);
+            requests.dispatch({ type: 'markStale' });
+            // The row refetches to its true state (the visible filter now).
+            requests.fetchFirst(requests.activeFilter);
+            requests.refreshCounts();
+            void loadMyProfile({ force: true });
             return;
           }
           // offline | failed — both carry the verbatim message.
@@ -226,10 +279,13 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
           writeLatch.current = false;
         });
     },
-    [detail, queue, activeTab],
+    [detail, requests],
   );
 
-  const page = state[activeTab];
+  const openRequest = useCallback((request: LeaveRequestRow) => {
+    setDetail(request);
+    setActionState({ kind: 'idle' });
+  }, []);
 
   return (
     <SafeAreaView style={styles.root} edges={embedded ? [] : ['top']}>
@@ -237,91 +293,33 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
         <ScreenHeader title="Leave" onBack={() => navigation.goBack()} />
       )}
 
-      <FlatList
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        data={page.items}
-        keyExtractor={request => request.id}
-        renderItem={({ item }) => (
-          <LeaveRequestRowView
-            request={item}
-            variant="owner"
-            showStatus={activeTab === 'all'}
-            onPress={() => {
-              setDetail(item);
-              setActionState({ kind: 'idle' });
-            }}
-          />
-        )}
-        onEndReached={() => void queue.loadMore()}
-        onEndReachedThreshold={0.4}
-        ListHeaderComponent={
-          <View style={styles.listHeader}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Apply on behalf"
-              onPress={() => navigation.navigate('ApplyOnBehalf', undefined)}
-              style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
-              <View style={styles.ctaIcon}>
-                <Users size={20} color={colors.primary} strokeWidth={2.2} />
-              </View>
-              <View style={styles.ctaTexts}>
-                <Text style={styles.ctaTitle}>Apply on behalf</Text>
-                <Text style={styles.ctaSubtitle}>
-                  Apply leave for a team member
-                </Text>
-              </View>
-            </Pressable>
-            <SegmentedControl
-              options={SEGMENTS}
-              value={activeTab}
-              onChange={queue.switchTab}
-            />
-            {refreshFailedTab === activeTab && page.loaded ? (
-              <InlineError message="Couldn't refresh. Showing the last loaded list." />
-            ) : null}
-          </View>
-        }
-        ListEmptyComponent={
-          !page.loaded && page.loading ? (
-            // First load: a list-shaped shimmer, labelled (the 19-5
-            // idiom); the load-more footer keeps its inline spinner.
-            <View style={styles.skeletonBlock} accessibilityLabel="Loading attendance">
-              <Skeleton rows={6} height={76} />
-            </View>
-          ) : !page.loaded ? (
-            <View style={styles.stateBlock} accessibilityLiveRegion="polite">
-              <InlineError message="Couldn't load leave requests. Check your connection and try again." />
-              <Button variant="secondary" onPress={() => queue.fetchFirst(activeTab)}>
-                Retry
-              </Button>
-            </View>
-          ) : page.items.length === 0 ? (
-            <View style={styles.emptyWrap}>
-              <EmptyState
-                illustration={<LeaveEmptyArt />}
-                icon={<CalendarOff size={24} color={colors.primary} strokeWidth={1.5} />}
-                title={activeTab === 'pending' ? 'No pending requests' : 'No leave requests yet'}
-                description={
-                  activeTab === 'pending'
-                    ? "You're all caught up. New leave requests will show up here."
-                    : 'When your team applies for leave, it will show up here.'
-                }
-              />
-            </View>
-          ) : undefined
-        }
-        ListFooterComponent={
-          page.loading && page.loaded && !refreshing ? (
-            <View style={styles.footerSpinner}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : undefined
-        }
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={queue.onRefresh} />
-        }
-      />
+      <View style={styles.paneSwitch}>
+        <SegmentedControl
+          options={PANE_SEGMENTS}
+          value={pane}
+          onChange={setPane}
+        />
+        {/* The framing line explains the Rules editor — the Requests pane
+            keeps its stack short (the review P2: five stacked elements
+            pushed the first card past half the screen). */}
+        {pane === 'types' ? <Text style={styles.tagline}>{PANE_TAGLINE}</Text> : null}
+      </View>
+
+      {pane === 'requests' ? (
+        <LeaveRequestsPane
+          requests={requests}
+          approvingId={approvingId}
+          writeNotice={approveNotice}
+          onDismissNotice={() => setApproveNotice(null)}
+          onApplyOnBehalf={() => navigation.navigate('ApplyOnBehalf', undefined)}
+          onOpenRequest={openRequest}
+          onApprove={approve}
+        />
+      ) : (
+        <View style={styles.typesPane}>
+          <LeaveTypesPane />
+        </View>
+      )}
 
       <LeaveDetailSheet
         visible={detail != null}
@@ -330,9 +328,10 @@ function OwnerLeaveContent({ navigation, route, embedded, initialTab }: Props) {
         balancesSlot={
           detail ? (
             <LeaveBalancesCard
-              balances={detailBalances}
-              loading={detailBalancesLoading}
-              error={detailBalancesError}
+              balances={detailBalances.balances}
+              loading={detailBalances.loading}
+              error={detailBalances.error}
+              title={balancesTitle}
               compact
             />
           ) : null
@@ -359,66 +358,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surfacePage,
   },
-  content: {
-    paddingTop: spacing.s4,
+  paneSwitch: {
     paddingHorizontal: spacing.s4,
-    gap: spacing.s3,
-    // The empty posture centers in the pane (owner mockup 2026-10-23):
-    // flexGrow lets emptyWrap's flex centering own the viewport height.
-    flexGrow: 1,
+    paddingTop: spacing.s2,
   },
-  listHeader: {
-    gap: spacing.s3,
+  tagline: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    marginTop: spacing.s2,
+    marginHorizontal: spacing.s1,
   },
-  footerSpinner: {
-    paddingVertical: spacing.s3,
-  },
-  stateBlock: {
-    gap: spacing.s3,
-    paddingVertical: spacing.s10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  skeletonBlock: {
-    gap: spacing.s3,
-    paddingVertical: spacing.s10,
+  typesPane: {
+    flex: 1,
+    paddingHorizontal: spacing.s4,
+    paddingTop: spacing.s3,
   },
   emptyWrap: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  cta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.s3,
-    backgroundColor: colors.primary,
-    borderRadius: radius.lg,
-    padding: spacing.s4,
-    marginTop: spacing.s2,
-  },
-  ctaPressed: {
-    opacity: 0.9,
-  },
-  ctaIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ctaTexts: {
     flex: 1,
-    minWidth: 0,
-    gap: 1,
-  },
-  ctaTitle: {
-    ...typography.heading,
-    color: colors.onPrimary,
-  },
-  ctaSubtitle: {
-    ...typography.caption,
-    color: colors.onPrimary,
-    opacity: 0.8,
+    justifyContent: 'center',
   },
 });

@@ -19,7 +19,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Bell, Building2, FileText, HardHat, LogOut, Pencil, Phone, ScrollText, ShieldCheck, Trash2, Users } from 'lucide-react-native';
+import { Bell, Building2, CalendarOff, FileText, HardHat, LogOut, Pencil, Phone, ScrollText, ShieldCheck, Trash2, Users } from 'lucide-react-native';
 import { Avatar, Badge, Card, ConfirmDialog, IconButton } from '../../components/ui';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../../config';
 import { colors, radius, spacing, typography } from '../../theme';
@@ -223,6 +223,17 @@ export default function MoreScreen({ navigation }: Props) {
           title="Attendance"
           subtitle="Offices, team, weekly off & holidays"
           onPress={() => navigation.navigate('AttendanceHome')}
+        />
+
+        {/* 2026-11-25 — the Leave surface (two-tab: Requests | Config). The
+            viewer guard lives inside the screen (a viewer taps into the
+            plain explanation, same as the attendance rows above). */}
+        <MoreRow
+          icon={<CalendarOff size={20} color={colors.status.leave.solid} strokeWidth={1.5} />}
+          iconBg={colors.status.leave.bg}
+          title="Leave"
+          subtitle="Requests & leave types"
+          onPress={() => navigation.navigate('OwnerLeave')}
         />
 
         {/* Play User Data policy — the privacy policy must be reachable inside

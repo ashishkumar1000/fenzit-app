@@ -141,7 +141,6 @@ export function LeaveHistorySection({
         <LeaveRequestRowView
           key={request.id}
           request={request}
-          variant="compact"
           onPress={() => setDetail(request)}
         />
       ))}
