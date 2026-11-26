@@ -8,7 +8,7 @@
 import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
-import { Button } from '../../../components/ui';
+import { Badge, Button } from '../../../components/ui';
 import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import { LeaveRequestCard } from './LeaveRequestCard';
 
@@ -138,5 +138,13 @@ describe('LeaveRequestCard — the per-status annotations', () => {
     expect(label).toContain('Pending');
     expect(label).toContain('EMP-001');
     expect(label).toContain('reason: Family function');
+  });
+
+  it('the status chip is the design dot chip — one Badge carrying the leading status dot', () => {
+    const root = renderCard(row());
+    const badges = root.findAllByType(Badge);
+    expect(badges).toHaveLength(1);
+    expect(badges[0]!.props.dot).toBe(true);
+    expect(badges[0]!.props.tone).toBe('soft');
   });
 });

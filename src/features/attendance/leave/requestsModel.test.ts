@@ -12,6 +12,7 @@ import type { LeaveRequestRow } from '../../../services/resources/attendanceLeav
 import {
   countsTotal,
   initialRequestsState,
+  keepRowEnrichments,
   requestsReducer,
 } from './requestsModel';
 
@@ -276,5 +277,57 @@ describe('countsTotal (the All pill + the totals line)', () => {
     expect(
       countsTotal({ pending: 2, approved: 3, revoked: 1, cancelled: 4, rejected: 0 }),
     ).toBe(10);
+  });
+});
+
+describe('keepRowEnrichments (the shared write-morph helper)', () => {
+  const prior: LeaveRequestRow = {
+    ...row('a1', 'approved'),
+    employeeAvatarUrl: 'https://cdn/a1.png',
+    employeeCode: 'EMP-001',
+    leaveTypeName: 'Earned',
+    officeName: 'HQ',
+  };
+  /** A write-path view: the server answers writes without the list-only
+   *  enrichments (employeeName/employeeAvatarUrl/employeeCode/
+   *  leaveTypeName/officeName). */
+  const nameless = Object.fromEntries(
+    Object.entries(prior).filter(
+      ([key]) =>
+        ![
+          'employeeName',
+          'employeeAvatarUrl',
+          'employeeCode',
+          'leaveTypeName',
+          'officeName',
+        ].includes(key),
+    ),
+  ) as unknown as LeaveRequestRow;
+
+  it('no prior → the view passes through untouched (identity, not a copy)', () => {
+    const view = row('a1', 'approved');
+    expect(keepRowEnrichments(view, null)).toBe(view);
+    expect(keepRowEnrichments(view, undefined)).toBe(view);
+  });
+
+  it('a nameless write view keeps EVERY list-earned enrichment from its prior', () => {
+    const view = keepRowEnrichments(nameless, prior);
+    expect(view.employeeName).toBe('Employee a1');
+    expect(view.employeeAvatarUrl).toBe('https://cdn/a1.png');
+    expect(view.employeeCode).toBe('EMP-001');
+    expect(view.leaveTypeName).toBe('Earned');
+    expect(view.officeName).toBe('HQ');
+    // The write truth itself is kept, not the prior's.
+    expect(view.status).toBe('approved');
+  });
+
+  it("the write view's own values win over the prior's", () => {
+    const view = keepRowEnrichments(
+      { ...nameless, employeeName: 'Server Answered', officeName: undefined },
+      prior,
+    );
+    expect(view.employeeName).toBe('Server Answered');
+    // An absent field on the view is still "absent" — the prior fills it.
+    expect(view.officeName).toBe('HQ');
   });
 });

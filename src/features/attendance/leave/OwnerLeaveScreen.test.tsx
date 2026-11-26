@@ -143,16 +143,17 @@ function sheetInput(root: ReactTestRenderer.ReactTestInstance) {
   return inputs[inputs.length - 1];
 }
 
-/** The filter pill: a button-role node with NO label whose first Text is
- *  the pill's word (the optional count Text trails it) — the CTA and the
- *  cards carry explicit labels, the segments name their views. */
+/** The filter pill: a button-role node whose screen-reader label IS the
+ *  pill's word — with the count suffix ("All, 18 requests", "Approved, 3")
+ *  whenever counts are loaded and no needle narrows the list (the review's
+ *  a11y labels). Count-quiet needles fall back to the bare word. */
 function findPill(root: ReactTestRenderer.ReactTestInstance, label: string) {
   return root.findAll(
     node =>
       typeof node.props.onPress === 'function' &&
       node.props.accessibilityRole === 'button' &&
-      node.props.accessibilityLabel === undefined &&
-      (node.findAll(n => n.type === Text).map(flatText)[0] ?? '') === label,
+      (node.props.accessibilityLabel === label ||
+        String(node.props.accessibilityLabel ?? '').startsWith(`${label},`)),
   );
 }
 
@@ -1226,10 +1227,19 @@ describe('post-write bookkeeping (found on device, 2026-11-26)', () => {
     expect(textsInOrder(root)).toContain('15 total · 4 need review');
     expect(findPill(root, 'Needs review')[0].findAll(n => n.type === Text).map(flatText)).toContain('4');
     expect(findPill(root, 'Approved')[0].findAll(n => n.type === Text).map(flatText)).toContain('11');
+    // The pills' screen-reader labels carry the composed word + count (the
+    // review's a11y defer) — findPill matches the bare word too, so the
+    // composed VALUE is pinned, not just findability.
+    expect(findPill(root, 'Needs review')[0].props.accessibilityLabel).toBe('Needs review, 4');
+    expect(findPill(root, 'Approved')[0].props.accessibilityLabel).toBe('Approved, 11');
+    // The sixth pill is the REVOKED one — the design's word (the chip/card
+    // vocabulary), not the retired "Self-cancelled".
+    expect(findPill(root, 'Revoked')[0].props.accessibilityLabel).toBe('Revoked, 0');
 
     // A committed needle narrows the list — the whole-tenant numbers would
     // contradict it, so they quiet down with the totals line (the pane's
-    // `narrowed` read; used to be unasserted).
+    // `narrowed` read; used to be unasserted). The labels drop the counts
+    // WITH the visible numbers.
     jest.useFakeTimers();
     try {
       await act(async () => {
@@ -1242,6 +1252,7 @@ describe('post-write bookkeeping (found on device, 2026-11-26)', () => {
       expect(
         findPill(root, 'Approved')[0].findAll(n => n.type === Text).map(flatText),
       ).not.toContain('11');
+      expect(findPill(root, 'Approved')[0].props.accessibilityLabel).toBe('Approved');
     } finally {
       jest.useRealTimers();
     }

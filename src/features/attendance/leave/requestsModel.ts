@@ -28,14 +28,14 @@ export const LEAVE_FILTERS = [
 
 export type LeaveFilter = (typeof LEAVE_FILTERS)[number];
 
-/** The pills' words — the design's own, shipped verbatim on the web
- *  console (PILL_LABELS). The wire's raw words only ever reach the cards'
- *  status chips (humanized, the shared requestStatusChip table). */
+/** The pills' words — the design's own, shared with the web console
+ *  (PILL_LABELS). The wire's raw words only ever reach the cards' status
+ *  chips (humanized, the shared requestStatusChip table). */
 export const PILL_LABELS: Record<LeaveFilter, string> = {
   all: 'All',
   pending: 'Needs review',
   approved: 'Approved',
-  revoked: 'Self-cancelled',
+  revoked: 'Revoked',
   cancelled: 'Cancelled',
   rejected: 'Rejected',
 };
@@ -147,6 +147,30 @@ type PageResult = {
   hasMore: boolean;
 };
 
+/**
+ * A write view is authoritative for its own fields but carries NONE of the
+ * list-only enrichments (employeeName and its companions, the type/office
+ * names — attendanceLeave.ts). Every place a write response replaces a
+ * row/detail keeps the prior copy's list-earned fields with this helper —
+ * or the card falls back ("Team member", no type/office) until the stale
+ * refetch (17-6 P1; shared after the same keep-list shipped twice, the
+ * review's duplication note, 2026-11-26).
+ */
+export function keepRowEnrichments(
+  view: LeaveRequestRow,
+  prior: LeaveRequestRow | null | undefined,
+): LeaveRequestRow {
+  if (!prior) return view;
+  return {
+    ...view,
+    employeeName: view.employeeName ?? prior.employeeName,
+    employeeAvatarUrl: view.employeeAvatarUrl ?? prior.employeeAvatarUrl,
+    employeeCode: view.employeeCode ?? prior.employeeCode,
+    leaveTypeName: view.leaveTypeName ?? prior.leaveTypeName,
+    officeName: view.officeName ?? prior.officeName,
+  };
+}
+
 function withResult(page: LeaveFilterPage, result: PageResult): LeaveFilterPage {
   return {
     items: result.items,
@@ -246,22 +270,7 @@ export function requestsReducer(
               items: page.items
                 .filter(item => item.id !== action.row.id || belongs)
                 .map(item =>
-                  item.id === action.row.id
-                    ? // The WRITE response carries none of the list-only
-                      // enrichments (employeeName and its companions, the
-                      // type/office names — attendanceLeave.ts) — keep the
-                      // row's list-earned fields or the card falls back
-                      // until the stale refetch (17-6 P1; the generalized
-                      // keep-list — the review, 2026-11-26).
-                      {
-                        ...action.row,
-                        employeeName: action.row.employeeName ?? item.employeeName,
-                        employeeAvatarUrl: action.row.employeeAvatarUrl ?? item.employeeAvatarUrl,
-                        employeeCode: action.row.employeeCode ?? item.employeeCode,
-                        leaveTypeName: action.row.leaveTypeName ?? item.leaveTypeName,
-                        officeName: action.row.officeName ?? item.officeName,
-                      }
-                    : item,
+                  item.id === action.row.id ? keepRowEnrichments(action.row, item) : item,
                 ),
             },
           ];

@@ -61,12 +61,15 @@ function ToggleRow(input: {
   glyph: ComponentType<{ size?: number; color?: string }>;
   title: string;
   chip?: string;
+  /** The design's leading state dot on the enable row — green when on,
+   *  quiet grey when off (rendered only where passed). */
+  stateDot?: boolean;
   description: string;
   checked: boolean;
   disabled: boolean;
   onChange: (next: boolean) => void;
 }) {
-  const { glyph: Glyph, title, chip, description, checked, disabled, onChange } = input;
+  const { glyph: Glyph, title, chip, stateDot = false, description, checked, disabled, onChange } = input;
   const body = (
     <>
       <View style={styles.rowGlyph}>
@@ -75,6 +78,14 @@ function ToggleRow(input: {
       <View style={styles.rowTexts}>
         <View style={styles.titleRow}>
           <Text style={styles.rowTitle}>{title}</Text>
+          {stateDot ? (
+            <View
+              style={[
+                styles.stateDot,
+                { backgroundColor: checked ? colors.status.done.solid : colors.borderSubtle },
+              ]}
+            />
+          ) : null}
           {chip ? <Text style={styles.rowChip}>{chip}</Text> : null}
         </View>
         <Text style={styles.rowDesc}>{description}</Text>
@@ -141,6 +152,9 @@ export function LeaveTypeEditorCard(input: {
             <Text style={styles.headerTitle} numberOfLines={1}>
               {type.name}
             </Text>
+            {/* The design's "Inactive" state tag — an asleep type must be
+                nameable at a glance even with the rules dimmed below. */}
+            {asleep && !locked ? <Text style={styles.offChip}>Turned off</Text> : null}
             <Text style={styles.modeChip}>{locked ? 'Read-only' : modeChipLabel(type)}</Text>
           </View>
           <Text style={styles.headerSub} numberOfLines={1}>
@@ -159,6 +173,7 @@ export function LeaveTypeEditorCard(input: {
         <ToggleRow
           glyph={Umbrella}
           title="Turn on this leave type"
+          stateDot
           description="Disabled types hide from the apply screen; days already taken still count."
           checked={draft.enabled}
           disabled={locked || busy}
@@ -347,6 +362,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.s2,
     paddingVertical: 2,
     overflow: 'hidden',
+  },
+  offChip: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textMuted,
+    backgroundColor: colors.surfaceSunken,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.s2,
+    paddingVertical: 2,
+    overflow: 'hidden',
+  },
+  stateDot: {
+    width: 8,
+    height: 8,
+    borderRadius: radius.pill,
   },
   lockedNote: {
     ...typography.bodySm,

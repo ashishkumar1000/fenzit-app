@@ -45,7 +45,7 @@ import { LeaveRequestsPane, type RequestsWriteNotice } from './LeaveRequestsPane
 import { LeaveTypesPane } from './LeaveTypesPane';
 import { useDetailBalances } from './useDetailBalances';
 import { useLeaveRequests } from './useLeaveRequests';
-import type { LeaveFilter } from './requestsModel';
+import { keepRowEnrichments, type LeaveFilter } from './requestsModel';
 
 type StackProps = NativeStackScreenProps<RootStackParamList, 'OwnerLeave'>;
 
@@ -249,19 +249,11 @@ function OwnerLeaveContent({ navigation, route, embedded, initialFilter }: Props
             // The stage morphs back to the REFRESHED detail view (the
             // write response is authoritative — divergence is absorbed;
             // the optional split arrays are never required). The write
-            // view carries none of the list-only enrichments (employee-
-            // Name and its companions, the type/office names) — keep the
+            // view carries none of the list-only enrichments — keep the
             // opened row's list-earned fields (the replaceRow discipline;
             // dropping leaveTypeName made the sheet's Leave-type row
             // vanish right after the decision — the review, 2026-11-26).
-            setDetail({
-              ...view,
-              employeeName: view.employeeName ?? detail.employeeName,
-              employeeAvatarUrl: view.employeeAvatarUrl ?? detail.employeeAvatarUrl,
-              employeeCode: view.employeeCode ?? detail.employeeCode,
-              leaveTypeName: view.leaveTypeName ?? detail.leaveTypeName,
-              officeName: view.officeName ?? detail.officeName,
-            });
+            setDetail(keepRowEnrichments(view, detail));
           } else {
             setDetail(null);
           }

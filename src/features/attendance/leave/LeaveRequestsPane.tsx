@@ -27,6 +27,7 @@ import {
 import { CalendarOff, ChevronRight, Search, Users } from 'lucide-react-native';
 import { Button, EmptyState, InlineError, InlineNotice, Input, Skeleton } from '../../../components/ui';
 import { LeaveEmptyArt } from './LeaveEmptyArt';
+import { ScrollFade } from './ScrollFade';
 import { colors, radius, spacing, typography } from '../../../theme';
 import type { LeaveRequestRow } from '../../../services/resources/attendanceLeave';
 import { LeaveRequestCard } from './LeaveRequestCard';
@@ -71,92 +72,104 @@ export function LeaveRequestsPane(input: {
     return filter === 'all' ? countsTotal(counts) : counts[filter];
   };
 
+  /** The pill's screen-reader label: the word + its count ("All, 18
+   *  requests", "Needs review, 3") — without it the two Texts read as one
+   *  glued "Needs review3". The counts go quiet under a needle, with the
+   *  visible numbers. */
+  const pillA11yLabel = (filter: LeaveFilter): string => {
+    const word = PILL_LABELS[filter];
+    const count = pillCount(filter);
+    if (count == null || narrowed) return word;
+    return filter === 'all' ? `${word}, ${count} requests` : `${word}, ${count}`;
+  };
+
   return (
-    <FlatList
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      data={page.items}
-      keyExtractor={request => request.id}
-      renderItem={({ item }) => (
-        <LeaveRequestCard
-          request={item}
-          approving={approvingId === item.id}
-          onPress={() => onOpenRequest(item)}
-          onApprove={() => onApprove(item)}
-          onDecline={() => onOpenRequest(item)}
-          onRevoke={() => onOpenRequest(item)}
-        />
-      )}
-      onEndReached={() => void requests.loadMore()}
-      onEndReachedThreshold={0.4}
-      ListHeaderComponent={
-        <View style={styles.listHeader}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Apply on behalf"
-            onPress={onApplyOnBehalf}
-            style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
-            <View style={styles.ctaIcon}>
-              <Users size={18} color={colors.primary} strokeWidth={2.2} />
-            </View>
-            {/* One compact row — the CTA is parity, not the hero; the daily
-                job is the queue below it (the review P2). */}
-            <Text style={styles.ctaTitle}>Apply on behalf</Text>
-            <ChevronRight size={18} color={colors.onPrimary} style={styles.ctaChevron} />
-          </Pressable>
-          <Input
-            value={searchText}
-            onChangeText={raw => {
-              setSearchText(raw);
-              requests.searchInput(raw);
-            }}
-            placeholder="Search name, code, or reason"
-            leadingIcon={<Search size={18} color={colors.textMuted} />}
-            clearable
-            maxLength={100}
-            accessibilityLabel="Search leave requests"
+    <View style={styles.pane}>
+      <FlatList
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        data={page.items}
+        keyExtractor={request => request.id}
+        renderItem={({ item }) => (
+          <LeaveRequestCard
+            request={item}
+            approving={approvingId === item.id}
+            onPress={() => onOpenRequest(item)}
+            onApprove={() => onApprove(item)}
+            onDecline={() => onOpenRequest(item)}
+            onRevoke={() => onOpenRequest(item)}
           />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.pillRow}>
-            {(
-              Object.keys(PILL_LABELS) as LeaveFilter[]
-            ).map(filter => {
-              const active = filter === activeFilter;
-              const count = pillCount(filter);
-              return (
-                <Pressable
-                  key={filter}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => {
-                    // The write notice belongs to the list being left — an
-                    // 'already handled' line must not sit above an
-                    // unrelated filter's list (the review, 2026-11-26).
-                    onDismissNotice();
-                    requests.switchFilter(filter);
-                  }}
-                  style={({ pressed }) => [
-                    styles.pill,
-                    active ? styles.pillActive : styles.pillIdle,
-                    pressed && styles.pillPressed,
-                  ]}>
-                  <Text style={active ? styles.pillLabelActive : styles.pillLabelIdle}>
-                    {PILL_LABELS[filter]}
-                  </Text>
-                  {/* The numbers are whole-tenant counts — under an active
-                      needle they'd contradict the narrowed list, so they
-                      go quiet with the totals line (the review P3). */}
-                  {count != null && !narrowed ? (
-                    <Text style={active ? styles.pillCountActive : styles.pillCountIdle}>
-                      {count}
+        )}
+        onEndReached={() => void requests.loadMore()}
+        onEndReachedThreshold={0.4}
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Apply on behalf"
+              onPress={onApplyOnBehalf}
+              style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
+              <View style={styles.ctaIcon}>
+                <Users size={18} color={colors.primary} strokeWidth={2.2} />
+              </View>
+              {/* One compact row — the CTA is parity, not the hero; the daily
+                  job is the queue below it (the review P2). */}
+              <Text style={styles.ctaTitle}>Apply on behalf</Text>
+              <ChevronRight size={18} color={colors.onPrimary} style={styles.ctaChevron} />
+            </Pressable>
+            <Input
+              value={searchText}
+              onChangeText={raw => {
+                setSearchText(raw);
+                requests.searchInput(raw);
+              }}
+              placeholder="Search name, code, or reason"
+              leadingIcon={<Search size={18} color={colors.textMuted} />}
+              clearable
+              maxLength={100}
+              accessibilityLabel="Search leave requests"
+            />
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.pillRow}>
+              {(
+                Object.keys(PILL_LABELS) as LeaveFilter[]
+              ).map(filter => {
+                const active = filter === activeFilter;
+                return (
+                  <Pressable
+                    key={filter}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={pillA11yLabel(filter)}
+                    onPress={() => {
+                      // The write notice belongs to the list being left — an
+                      // 'already handled' line must not sit above an
+                      // unrelated filter's list (the review, 2026-11-26).
+                      onDismissNotice();
+                      requests.switchFilter(filter);
+                    }}
+                    style={({ pressed }) => [
+                      styles.pill,
+                      active ? styles.pillActive : styles.pillIdle,
+                      pressed && styles.pillPressed,
+                    ]}>
+                    <Text style={active ? styles.pillLabelActive : styles.pillLabelIdle}>
+                      {PILL_LABELS[filter]}
                     </Text>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+                    {/* The numbers are whole-tenant counts — under an active
+                        needle they'd contradict the narrowed list, so they
+                        go quiet with the totals line (the review P3). */}
+                    {pillCount(filter) != null && !narrowed ? (
+                      <Text style={active ? styles.pillCountActive : styles.pillCountIdle}>
+                        {pillCount(filter)}
+                      </Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           {counts && !narrowed ? (
             <Text style={styles.totalsLine}>
               {countsTotal(counts)} total · {counts.pending} need review
@@ -222,14 +235,19 @@ export function LeaveRequestsPane(input: {
           </View>
         ) : undefined
       }
-      refreshControl={
-        <RefreshControl refreshing={requests.refreshing} onRefresh={requests.onRefresh} />
-      }
-    />
+        refreshControl={
+          <RefreshControl refreshing={requests.refreshing} onRefresh={requests.onRefresh} />
+        }
+      />
+      <ScrollFade />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  pane: {
+    flex: 1,
+  },
   content: {
     paddingTop: spacing.s4,
     paddingHorizontal: spacing.s4,

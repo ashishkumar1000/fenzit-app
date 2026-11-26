@@ -20,6 +20,7 @@ import type ReactTestRenderer from 'react-test-renderer';
 import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
 import { Button } from '../../../components/ui';
+import { colors } from '../../../theme';
 import { attendanceLeaveService } from '../../../services';
 import type { LeaveTypeView } from '../../../services/resources/attendanceLeave';
 import { LeaveTypesPane } from './LeaveTypesPane';
@@ -71,6 +72,18 @@ function findByLabel(root: ReactTestRenderer.ReactTestInstance, label: string) {
   return root.findAll(
     node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
   );
+}
+
+/** A node's style flattened (arrays, falsy slots and all) — Pressable
+ *  styles are FUNCTIONS of the pressed state; resolve them at rest. */
+function flatStyles(node: ReactTestRenderer.ReactTestInstance): Record<string, unknown>[] {
+  const raw =
+    typeof node.props.style === 'function'
+      ? node.props.style({ pressed: false })
+      : node.props.style;
+  const walk = (style: unknown): Record<string, unknown>[] =>
+    Array.isArray(style) ? style.flatMap(walk) : style ? [style as Record<string, unknown>] : [];
+  return walk(raw);
 }
 
 function saveButton(root: ReactTestRenderer.ReactTestInstance) {
@@ -172,6 +185,9 @@ describe('LeaveTypesPane — the save orchestration', () => {
     expect(textsInOrder(root)).toContain('Rule changes hold while the type is off.');
     const button = saveButton(root)[0];
     expect(button.props.disabled).toBe(true);
+    // The sticky bar (raised while dirty) mirrors the card's exact gate —
+    // the held draft posts nothing, so the bar's Save is disabled too.
+    expect(saveButton(root)[1].props.disabled).toBe(true);
     // ...and the held rate ships with the next AWAKE save.
     await act(async () => {
       findByLabel(root, 'Turn on this leave type: off. Double-tap to turn on.')[0].props.onPress();
@@ -230,6 +246,144 @@ describe('LeaveTypesPane — the save orchestration', () => {
     // Without the savingElsewhere gate this Save sits enabled while the
     // pane's latch would silently swallow the press.
     expect(saveButton(root)[0].props.disabled).toBe(true);
+    // B is dirty, so the sticky bar is up — it mirrors the same gate.
+    expect(saveButton(root)[1].props.disabled).toBe(true);
     await settle(root);
+  });
+
+  it('a dirty draft raises the sticky Save bar; a clean pane has none', async () => {
+    const root = await renderPane();
+    // Clean: only the card's own Save exists (tree order — the bar joins
+    // AFTER it, so the card's Save stays [0] for the older assertions).
+    expect(saveButton(root)).toHaveLength(1);
+    expect(textsInOrder(root)).not.toContain('Unsaved changes');
+    await act(async () => {
+      findByLabel(root, 'Increase days')[0].props.onPress();
+    });
+    expect(saveButton(root)).toHaveLength(2);
+    expect(textsInOrder(root)).toContain('Unsaved changes');
+    // The bar names what it would save.
+    expect(textsInOrder(root)).toContain('Earned Leave');
+  });
+
+  it("the sticky bar's Save posts the same PATCH as the card's and lowers once clean", async () => {
+    const root = await renderPane();
+    await act(async () => {
+      findByLabel(root, 'Increase days')[0].props.onPress();
+    });
+    patchLeaveType.mockResolvedValueOnce(typeRow({ accrualDays: 1.5 }));
+    const saves = saveButton(root);
+    expect(saves).toHaveLength(2);
+    await act(async () => {
+      // The LAST Button is the sticky bar's — a save the owner can reach
+      // without scrolling back up to the card.
+      saves[saves.length - 1]!.props.onPress();
+    });
+    expect(patchLeaveType).toHaveBeenCalledWith('t1', { accrualDays: 1.5 });
+    // The bar lowers with the draft clean.
+    expect(saveButton(root)).toHaveLength(1);
+  });
+
+  it('a turned-off type renders the muted off-chip and the "Turned off" card', async () => {
+    listCompanyLeaveTypes.mockResolvedValue([
+      typeRow(),
+      typeRow({
+        id: 't2',
+        code: 'sick',
+        name: 'Sick Leave',
+        accrualMode: 'annual',
+        accrualDays: 6,
+        enabled: false,
+      }),
+    ]);
+    const root = await renderPane();
+    // The OFF type's idle chip is sunken with a muted glyph (distinct
+    // labels — the chip's label mirrors onto its host views ×3).
+    const offChip = root
+      .findAll(
+        n =>
+          typeof n.props.accessibilityLabel === 'string' &&
+          n.props.accessibilityLabel.startsWith('Sick Leave') &&
+          n.props.accessibilityLabel.includes('· Off'),
+      )
+      .filter(n => typeof n.props.onPress === 'function')[0];
+    expect(offChip).toBeDefined();
+    expect(flatStyles(offChip!).some(s => s.backgroundColor === colors.surfaceSunken)).toBe(true);
+    expect(offChip!.findAll(n => n.props.color === colors.textMuted).length).toBeGreaterThan(0);
+    // The awake idle chip stays the plain card surface (the contrast).
+    const idleChip = root
+      .findAll(
+        n =>
+          typeof n.props.accessibilityLabel === 'string' &&
+          n.props.accessibilityLabel.startsWith('Earned Leave') &&
+          n.props.accessibilityLabel.includes('· Active'),
+      )
+      .filter(n => typeof n.props.onPress === 'function')[0];
+    expect(flatStyles(idleChip!).some(s => s.backgroundColor === colors.surfaceSunken)).toBe(
+      false,
+    );
+    // Selecting it opens the asleep card, which names the state.
+    await act(async () => {
+      offChip!.props.onPress();
+    });
+    expect(textsInOrder(root)).toContain('Turned off');
+    // The now-ACTIVE off chip takes the primary selection style again.
+    expect(flatStyles(offChip!).some(s => s.backgroundColor === colors.primary)).toBe(true);
+  });
+
+  it('an empty catalog offers the Try again re-fetch instead of a dead end', async () => {
+    listCompanyLeaveTypes.mockResolvedValue([]);
+    const root = await renderPane();
+    expect(textsInOrder(root)).toContain('No leave types yet');
+    expect(textsInOrder(root)).toContain(
+      "Your leave-type catalog hasn't been set up yet. If this looks wrong, try again.",
+    );
+    const retry = root.findAllByType(Button).find(b => b.props.children === 'Try again');
+    expect(retry).toBeDefined();
+    listCompanyLeaveTypes.mockResolvedValue(CATALOG);
+    await act(async () => {
+      retry!.props.onPress();
+    });
+    expect(listCompanyLeaveTypes).toHaveBeenCalledTimes(2);
+    expect(textsInOrder(root)).toContain('2 configured');
+  });
+
+  it('a failed catalog load shows the wire message with its own retry', async () => {
+    listCompanyLeaveTypes.mockRejectedValueOnce({ message: 'Network down' });
+    const root = await renderPane();
+    expect(textsInOrder(root)).toContain('Network down');
+    const retry = root.findAllByType(Button).find(b => b.props.children === 'Try again');
+    expect(retry).toBeDefined();
+    await act(async () => {
+      retry!.props.onPress();
+    });
+    // The retry re-asks the wire and seats the catalog.
+    expect(listCompanyLeaveTypes).toHaveBeenCalledTimes(2);
+    expect(textsInOrder(root)).toContain('2 configured');
+  });
+
+  it('a second Try again while the first is in flight does not stack a second fetch', async () => {
+    listCompanyLeaveTypes.mockResolvedValue([]);
+    const root = await renderPane();
+    let release!: (rows: LeaveTypeView[]) => void;
+    listCompanyLeaveTypes.mockImplementationOnce(
+      () =>
+        new Promise<LeaveTypeView[]>(resolve => {
+          release = resolve;
+        }),
+    );
+    await act(async () => {
+      const retry = root.findAllByType(Button).find(b => b.props.children === 'Try again')!;
+      retry.props.onPress();
+      // The in-flight latch swallows the double-tap — an out-of-order
+      // resolution could otherwise seat a stale catalog (the review's
+      // edge-case note, 2026-11-26).
+      retry.props.onPress();
+    });
+    expect(listCompanyLeaveTypes).toHaveBeenCalledTimes(2); // mount + ONE retry
+    await act(async () => {
+      release(CATALOG);
+    });
+    expect(textsInOrder(root)).toContain('2 configured');
   });
 });

@@ -114,7 +114,10 @@ export function LeaveRequestCard(input: {
             {request.officeName ?? ''}
           </Text>
         </View>
-        <Badge status={chip.badge} tone="soft" size="sm">
+        {/* The design's chip: a leading status dot + the word — the dot is
+            the color story (amber/green/red/grey per the status family),
+            the avatar's glyph badge carries the shape story. */}
+        <Badge status={chip.badge} tone="soft" size="sm" dot>
           {chip.label}
         </Badge>
       </View>

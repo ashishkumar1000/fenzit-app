@@ -18,6 +18,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AlarmClockCheck,
   Heart,
@@ -26,7 +27,7 @@ import {
 } from 'lucide-react-native';
 import type { ComponentType } from 'react';
 import { Button, EmptyState, InlineError, Skeleton } from '../../../components/ui';
-import { colors, radius, spacing, typography } from '../../../theme';
+import { colors, radius, shadow, spacing, typography } from '../../../theme';
 import type { ApiError } from '../../../services/api/apiError';
 import { FALLBACK_ERROR_MESSAGE } from '../../../services/api/apiError';
 import { attendanceLeaveService, type LeaveTypeView } from '../../../services';
@@ -34,13 +35,16 @@ import {
   classifyTypeSaveFailure,
   chipSubLabel,
   configuredCount,
+  daysOk,
   draftFromType,
+  hasRate,
   orderLeaveTypes,
   patchBody,
   typeDirty,
   type LeaveTypeDraft,
 } from './leaveTypesModel';
 import { LeaveTypeEditorCard } from './LeaveTypeEditorCard';
+import { ScrollFade } from './ScrollFade';
 
 /** The chip + header tile's glyph — web's CODE_GLYPH; the umbrella is the
  *  fallback for a legacy row. */
@@ -60,6 +64,7 @@ export function LeaveTypesPane() {
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<{ id: string; message: string } | null>(null);
   const mounted = useRef(true);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -85,6 +90,11 @@ export function LeaveTypesPane() {
   }, []);
 
   const loadCatalog = useCallback(() => {
+    // One fetch at a time — a double-tapped retry must not stack a second
+    // call whose out-of-order resolution could seat a stale catalog (the
+    // review's edge-case note, 2026-11-26).
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoadError(null);
     attendanceLeaveService
       .listCompanyLeaveTypes()
@@ -94,6 +104,9 @@ export function LeaveTypesPane() {
       .catch((err: ApiError) => {
         if (!mounted.current || err.code === 'CANCELLED') return;
         setLoadError(err.message || FALLBACK_ERROR_MESSAGE);
+      })
+      .finally(() => {
+        loadingRef.current = false;
       });
   }, [applyCatalog]);
 
@@ -175,12 +188,20 @@ export function LeaveTypesPane() {
     );
   }
   if (types !== null && types.length === 0) {
+    // The catalog is a fixed four-type set seeded by migration — a present-
+    // but-empty answer is abnormal data, and the state must not be a dead
+    // end: the retry re-asks the wire (the review's empty-catalog note).
     return (
-      <EmptyState
-        icon={<Umbrella size={22} color={colors.primary} />}
-        title="No leave types yet"
-        description="Your leave-type catalog hasn't been set up."
-      />
+      <View style={styles.centerBlock}>
+        <EmptyState
+          icon={<Umbrella size={22} color={colors.primary} />}
+          title="No leave types yet"
+          description="Your leave-type catalog hasn't been set up yet. If this looks wrong, try again."
+        />
+        <Button variant="secondary" onPress={loadCatalog}>
+          Try again
+        </Button>
+      </View>
     );
   }
   if (types === null || selected === null || drafts[selected.id] === undefined) {
@@ -189,79 +210,129 @@ export function LeaveTypesPane() {
 
   // The pane body scrolls (the editor card is taller than most phones —
   // the Save button must always be reachable); the chip row stays the one
-  // horizontal scroll inside it.
+  // horizontal scroll inside it. While the selected draft is dirty (or its
+  // save is in flight) a STICKY Save bar pins to the pane's bottom edge —
+  // the editor card's own Save scrolls out of view mid-card, and a save
+  // the owner can't reach is a save that never happens (the UX review's
+  // sticky-save note, 2026-11-26).
+  const selectedDraft = drafts[selected.id];
+  const selectedDirty = typeDirty(selected, selectedDraft);
+  const savingSelected = savingId === selected.id;
+  const stickyVisible = selectedDirty || savingSelected;
+  // The sticky bar mirrors the card's exact Save gate — one rule, two
+  // renders (a bar that would post what the card refuses is a trap).
+  const rate = hasRate(selected);
+  const validDays = rate && daysOk(selectedDraft.days);
+  const postable = Object.keys(patchBody(selected, selectedDraft)).length > 0;
+  const stickyDisabled =
+    savingId != null || !postable || (selectedDraft.enabled && rate && !validDays);
+
   return (
-    <ScrollView
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}>
-      <View style={styles.configuredRow}>
-        <Text style={styles.sectionLabel}>Leave categories</Text>
-        <Text style={styles.configuredLine}>{configuredCount(types)} configured</Text>
-      </View>
+    <View style={styles.pane}>
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipRow}>
-        {types.map(type => {
-          const active = type.id === selectedId;
-          const Glyph = CODE_GLYPH[type.code ?? ''] ?? Umbrella;
-          // The unsaved-edit marker: a dirty chip carries the dot so an
-          // admin who flips a rule and switches chip/tab can still SEE
-          // that a save is pending (the editor's own Save button is below
-          // the fold; the review P2). Inactive on a locked remnant.
-          const dirty =
-            drafts[type.id] != null && typeDirty(type, drafts[type.id]);
-          return (
-            <Pressable
-              key={type.id}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`${type.name}, ${chipSubLabel(type)}${dirty ? ', unsaved changes' : ''}`}
-              onPress={() => setSelectedId(type.id)}
-              style={({ pressed }) => [
-                styles.chip,
-                active ? styles.chipActive : styles.chipIdle,
-                pressed && styles.chipPressed,
-              ]}>
-              <Glyph
-                size={15}
-                color={active ? colors.surfaceCard : colors.primary}
-              />
-              <View style={styles.chipTexts}>
-                <Text
-                  numberOfLines={1}
-                  style={active ? styles.chipNameActive : styles.chipNameIdle}>
-                  {type.name}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={active ? styles.chipSubActive : styles.chipSubIdle}>
-                  {chipSubLabel(type)}
-                </Text>
-              </View>
-              {dirty ? <View style={active ? styles.chipDotActive : styles.chipDotIdle} /> : null}
-            </Pressable>
-          );
-        })}
+        contentContainerStyle={[styles.content, stickyVisible && styles.contentWithBar]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.configuredRow}>
+          <Text style={styles.sectionLabel}>Leave categories</Text>
+          <Text style={styles.configuredLine}>{configuredCount(types)} configured</Text>
+        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}>
+          {types.map(type => {
+            const active = type.id === selectedId;
+            const off = !type.enabled;
+            const Glyph = CODE_GLYPH[type.code ?? ''] ?? Umbrella;
+            // The unsaved-edit marker: a dirty chip carries the dot so an
+            // admin who flips a rule and switches chip/tab can still SEE
+            // that a save is pending (the editor's own Save button is below
+            // the fold; the review P2). Inactive on a locked remnant.
+            const dirty =
+              drafts[type.id] != null && typeDirty(type, drafts[type.id]);
+            return (
+              <Pressable
+                key={type.id}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${type.name}, ${chipSubLabel(type)}${dirty ? ', unsaved changes' : ''}`}
+                onPress={() => setSelectedId(type.id)}
+                style={({ pressed }) => [
+                  styles.chip,
+                  active ? styles.chipActive : styles.chipIdle,
+                  // A turned-off type's chip reads muted (the design's
+                  // inactive cards) — the "· Off" sub-label names it, the
+                  // styling agrees.
+                  !active && off && styles.chipOff,
+                  pressed && styles.chipPressed,
+                ]}>
+                <Glyph
+                  size={15}
+                  color={active ? colors.surfaceCard : off ? colors.textMuted : colors.primary}
+                />
+                <View style={styles.chipTexts}>
+                  <Text
+                    numberOfLines={1}
+                    style={
+                      active ? styles.chipNameActive : off ? styles.chipNameOff : styles.chipNameIdle
+                    }>
+                    {type.name}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={active ? styles.chipSubActive : styles.chipSubIdle}>
+                    {chipSubLabel(type)}
+                  </Text>
+                </View>
+                {dirty ? <View style={active ? styles.chipDotActive : styles.chipDotIdle} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <View style={styles.editorWrap}>
+          <LeaveTypeEditorCard
+            type={selected}
+            draft={selectedDraft}
+            busy={savingSelected}
+            // Another type's save in flight: THIS Save must not stack a
+            // second PATCH (the pane's latch silently swallowed the press —
+            // an enabled button that does nothing — found in the review,
+            // 2026-11-26). Disabled, so the button explains itself.
+            savingElsewhere={savingId != null && savingId !== selected.id}
+            saved={savedId === selected.id}
+            error={saveError?.id === selected.id ? saveError.message : null}
+            onChange={patch => changeDraft(selected.id, patch)}
+            onSave={() => save(selected)}
+          />
+        </View>
       </ScrollView>
-      <View style={styles.editorWrap}>
-        <LeaveTypeEditorCard
-          type={selected}
-          draft={drafts[selected.id]}
-          busy={savingId === selected.id}
-          // Another type's save in flight: THIS Save must not stack a
-          // second PATCH (the pane's latch silently swallowed the press —
-          // an enabled button that does nothing — found in the review,
-          // 2026-11-26). Disabled, so the button explains itself.
-          savingElsewhere={savingId != null && savingId !== selected.id}
-          saved={savedId === selected.id}
-          error={saveError?.id === selected.id ? saveError.message : null}
-          onChange={patch => changeDraft(selected.id, patch)}
-          onSave={() => save(selected)}
-        />
-      </View>
-    </ScrollView>
+      <ScrollFade />
+      {stickyVisible ? (
+        <SafeAreaView edges={['bottom']} style={styles.stickyBar} pointerEvents="box-none">
+          <View style={styles.stickyCard}>
+            <View style={styles.stickyTexts}>
+              <Text numberOfLines={1} style={styles.stickyName}>
+                {selected.name}
+              </Text>
+              <Text numberOfLines={1} style={styles.stickyHint}>
+                {selectedDirty && !postable && !savingSelected
+                  ? 'Rule changes hold while the type is off.'
+                  : 'Unsaved changes'}
+              </Text>
+            </View>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={savingSelected}
+              disabled={stickyDisabled}
+              onPress={() => save(selected)}>
+              Save
+            </Button>
+          </View>
+        </SafeAreaView>
+      ) : null}
+    </View>
   );
 }
 
@@ -270,8 +341,49 @@ const styles = StyleSheet.create({
     gap: spacing.s3,
     alignItems: 'stretch',
   },
+  pane: {
+    flex: 1,
+  },
   content: {
     paddingBottom: spacing.s8,
+  },
+  // The sticky bar covers the scroll's last ~60px — the content clears it
+  // so the card's own Save is never hidden beneath the bar.
+  contentWithBar: {
+    paddingBottom: spacing.s8 + 68,
+  },
+  stickyBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  stickyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s3,
+    marginHorizontal: spacing.s4,
+    marginBottom: spacing.s3,
+    paddingHorizontal: spacing.s3,
+    paddingVertical: spacing.s2,
+    backgroundColor: colors.surfaceCard,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    ...shadow.sm,
+  },
+  stickyTexts: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  stickyName: {
+    ...typography.bodyStrong,
+    color: colors.textStrong,
+  },
+  stickyHint: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   configuredRow: {
     flexDirection: 'row',
@@ -313,6 +425,16 @@ const styles = StyleSheet.create({
   chipIdle: {
     backgroundColor: colors.surfaceCard,
     borderColor: colors.borderSubtle,
+  },
+  // A turned-off type's chip: sunken, muted glyph and name (the sub-label
+  // already reads "· Off").
+  chipOff: {
+    backgroundColor: colors.surfaceSunken,
+  },
+  chipNameOff: {
+    ...typography.caption,
+    fontWeight: '600',
+    color: colors.textMuted,
   },
   chipPressed: {
     opacity: 0.8,
