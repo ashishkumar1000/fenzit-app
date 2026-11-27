@@ -58,6 +58,12 @@ type Props = {
    * affordance (AC 6). Absent → the tile renders without the affordance.
    */
   onRecaptureSignature?: () => void;
+  /**
+   * Epic 24 — the caller owns this job. A manager reading a report's job
+   * gets the record only: the photo capture slot and the signature
+   * Re-capture are write affordances and stay off.
+   */
+  canAct?: boolean;
 };
 
 export function TechJobDetailContent({
@@ -66,6 +72,7 @@ export function TechJobDetailContent({
   pendingStep,
   onPhotosConfirmed,
   onRecaptureSignature,
+  canAct = true,
 }: Props) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   // 9-1 — the open viewer session. Captured ONCE per open (items + the
@@ -227,7 +234,7 @@ export function TechJobDetailContent({
           <PhotoSection
             jobId={detail.id}
             photos={photos}
-            readOnly={isTerminal}
+            readOnly={isTerminal || !canAct}
             onConfirmed={onPhotosConfirmed}
             onViewPhoto={handleViewPhoto}
             viewerTotal={viewerItems.length}
@@ -252,7 +259,7 @@ export function TechJobDetailContent({
                 attachment={signature}
                 onView={() => setViewer({ items: viewerItems, initialIndex: viewerItems.length - 1 })}
               />
-              {onRecaptureSignature ? (
+              {onRecaptureSignature && canAct ? (
                 <Button
                   variant="ghost"
                   size="sm"

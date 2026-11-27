@@ -17,7 +17,28 @@ import { apiClient } from '../api/apiClient';
 /** A membership role. `viewer` reads; only employees work jobs. */
 export type MemberRole = 'company_admin' | 'employee' | 'viewer';
 
-export interface CompanyMember {
+/** One step up the reporting tree: the manager's id and their name. */
+export interface MemberChainLink {
+  userId: string;
+  name: string;
+}
+
+/**
+ * Epic 24 — the hierarchy fields every `GET /members` row carries (fenzit-be
+ * `MemberHierarchy`). `chain` is nearest-first ("Reports to Priya → Arjun
+ * (Owner)"); `headcount` counts everyone strictly below the member;
+ * `directReports` the immediate count. Removed memberships and disabled
+ * accounts are not counted.
+ */
+export interface MemberHierarchy {
+  managerId: string | null;
+  managerName: string | null;
+  chain: MemberChainLink[];
+  headcount: number;
+  directReports: number;
+}
+
+export interface CompanyMember extends MemberHierarchy {
   /** The USER id — the same id the roster (`GET /users/me`) rides, and the
    *  path key of the job-settings PATCH. */
   userId: string;
@@ -27,7 +48,7 @@ export interface CompanyMember {
   /** Per-tenant human reference (`EMP-004`). */
   employeeCode: string;
   role: MemberRole;
-  status: 'invited' | 'active' | 'removed';
+  status: 'invited' | 'active' | 'deactivated' | 'removed';
   createdAt: string;
   /** Short-lived photo link, or null. */
   avatarUrl: string | null;
@@ -61,4 +82,26 @@ async function setJobSettings(
   return res.data;
 }
 
-export const membersService = { listMembers, setJobSettings };
+/**
+ * `PATCH /members/:userId/manager` — the owner sets "Reports to". `managerId`
+ * is REQUIRED in the body: `null` clears it, an omitted key is a malformed
+ * request. The updated member (chain + headcount included) comes back, so the
+ * sheet can swap the row in without a second read.
+ *
+ * Documented failures: 400 body not a UUID/null · 403 not a company admin ·
+ * 404 person/manager not in the company · 409 `MEMBER_IS_ADMIN` /
+ * `HIERARCHY_CYCLE` / `HIERARCHY_DEPTH` · 422 `MANAGER_NOT_ACTIVE` or
+ * `VALIDATION_ERROR` (self).
+ */
+async function setManager(
+  userId: string,
+  managerId: string | null,
+): Promise<CompanyMember> {
+  const res = await apiClient.patch<CompanyMember>(
+    `/members/${userId}/manager`,
+    { managerId },
+  );
+  return res.data;
+}
+
+export const membersService = { listMembers, setJobSettings, setManager };

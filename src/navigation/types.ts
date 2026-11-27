@@ -337,6 +337,13 @@ export type RootStackParamList = {
    * read-once-clear contract as `LeaveApplyParams` (wire-truth F4).
    */
   ApplyOnBehalf: ApplyOnBehalfParams | undefined;
+  /**
+   * Epic 24 (24-5/CAP-5) — the manager's team surface, pushed from the
+   * Account tab's "Your team" row (a viewer manager) and from approval
+   * notification taps. Same screen as the technician stack's registration.
+   * `segment` deep-links a pane and is consumed read-once-then-cleared.
+   */
+  YourTeam: { segment?: 'leave' | 'jobs' | 'people' } | undefined;
 };
 
 /**
@@ -554,6 +561,20 @@ export type TechnicianRootStackParamList = {
     initialLongitude?: number;
     radiusM?: number;
   } | undefined;
+  /**
+   * Epic 24 (24-5/CAP-5) — the employee manager's team surface (Leave / Jobs
+   * / People), pushed from the Profile tab's "Your team" row and from
+   * approval notification taps. Same screen as the owner stack's
+   * registration; `segment` is consumed read-once-then-cleared.
+   */
+  YourTeam: { segment?: 'leave' | 'jobs' | 'people' } | undefined;
+  /**
+   * Epic 24 — the shipped apply-on-behalf flow's second registration: an
+   * employee manager lacks `attendance.read` (so no enrolment roster) but
+   * may file for an active report from `team.members`. Same params as the
+   * owner route.
+   */
+  ApplyOnBehalf: ApplyOnBehalfParams | undefined;
 };
 
 /**

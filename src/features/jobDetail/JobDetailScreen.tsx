@@ -67,6 +67,7 @@ import {
   lastKnownTechnicianLocation,
 } from './locationMetadata';
 import { formatTimeLabel, statusToBadge } from '../jobs/format';
+import { jobDetailDecisionNote } from '../team/teamModel';
 import { formatPhone } from '../profile';
 import { isAbort, openMaps, openTel } from '../../utils';
 
@@ -648,8 +649,12 @@ export default function JobDetailScreen() {
         {/* Epic 22 — the pending job's decision bar: sticky, loud (the amber
             family the Pending badge wears, lifted off the page by the sheet
             shadow), and bottom safe-area inset so the buttons clear the
-            gesture bar. */}
-        {detail.status === 'pending_approval' && canWrite ? (
+            gesture bar. Epic 24 (24-5): the bar is gated on the row's own
+            `decision` when the caller is not an admin — a viewer manager
+            decides their subtree's jobs, and a row somebody closer owns
+            shows the quiet reason instead of a button that would 403. */}
+        {detail.status === 'pending_approval' &&
+        (canWrite || detail.decision?.canDecide === true) ? (
           <SafeAreaView edges={['bottom']} style={styles.decisionFooter}>
             <Text style={styles.decisionNote}>
               {detail.technician?.name?.trim()
@@ -677,6 +682,12 @@ export default function JobDetailScreen() {
                 Approve
               </Button>
             </View>
+          </SafeAreaView>
+        ) : detail.status === 'pending_approval' && detail.decision != null ? (
+          <SafeAreaView edges={['bottom']} style={styles.decisionFooter}>
+            <Text style={styles.decisionNote}>
+              {jobDetailDecisionNote(detail.decision, detail.technician?.name) ?? ''}
+            </Text>
           </SafeAreaView>
         ) : null}
 
@@ -707,6 +718,20 @@ export default function JobDetailScreen() {
               onConfirm={reason => void handleDecision('reject', reason || undefined)}
             />
           </>
+        ) : null}
+
+        {/* Epic 24 — a non-admin manager's reject sheet (the owner's copy
+            above stays inside the canWrite block, so the edit sheet and
+            every write affordance remain admin-only). */}
+        {detail && !canWrite && detail.decision?.canDecide === true ? (
+          <RejectJobSheet
+            visible={isRejectOpen}
+            jobNumber={detail.jobNumber}
+            employeeName={detail.technician?.name ?? null}
+            submitting={deciding}
+            onClose={() => setIsRejectOpen(false)}
+            onConfirm={reason => void handleDecision('reject', reason || undefined)}
+          />
         ) : null}
 
         <ConfirmDialog

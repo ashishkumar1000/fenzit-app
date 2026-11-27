@@ -33,6 +33,7 @@ import { loadCustomers, useCustomers } from '../customers';
 import { MoreTile } from './components/MoreTile';
 import { MoreRow } from './components/MoreRow';
 import { DeleteAccountConfirm } from './components/DeleteAccountConfirm';
+import { hasTeam } from '../team/teamModel';
 import type { MainTabParamList, RootStackParamList } from '../../navigation/types';
 
 /**
@@ -235,6 +236,19 @@ export default function MoreScreen({ navigation }: Props) {
           subtitle="Requests & leave types"
           onPress={() => navigation.navigate('OwnerLeave')}
         />
+
+        {/* Epic 24 (24-5/CAP-5) — a viewer who manages people gets the team
+            surface. The gate is `team.headcount > 0` and non-admin, so the
+            owner's console never grows a second, narrower team view. */}
+        {hasTeam(profile) ? (
+          <MoreRow
+            icon={<Users size={20} color={colors.status.progress.solid} strokeWidth={1.5} />}
+            iconBg={colors.status.progress.bg}
+            title="Your team"
+            subtitle="Leave & job requests from your team"
+            onPress={() => navigation.navigate('YourTeam')}
+          />
+        ) : null}
 
         {/* Play User Data policy — the privacy policy must be reachable inside
             the app. Both rows open fenzit.com in the device browser. */}

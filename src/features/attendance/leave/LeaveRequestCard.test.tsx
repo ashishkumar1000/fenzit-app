@@ -148,3 +148,33 @@ describe('LeaveRequestCard — the per-status annotations', () => {
     expect(badges[0]!.props.tone).toBe('soft');
   });
 });
+
+describe('LeaveRequestCard — the manager queue read-only note (24-5)', () => {
+  it('a read-only row suppresses the action row and states why, verbatim', () => {
+    const onApprove = jest.fn();
+    const onDecline = jest.fn();
+    const root = renderCard(
+      row(),
+      { onApprove, onDecline },
+    );
+    // Re-render with the note so the same handlers provably render nothing.
+    let withNote!: ReactTestRenderer.ReactTestRenderer;
+    act(() => {
+      withNote = create(
+        <LeaveRequestCard
+          request={row()}
+          onApprove={onApprove}
+          onDecline={onDecline}
+          readOnlyNote="Someone closer to Arya decides this."
+        />,
+      );
+    });
+
+    expect(
+      withNote.root.findAll(n => n.type === Button && n.props.onPress === onApprove),
+    ).toHaveLength(0);
+    expect(textsInOrder(withNote.root)).toContain('Someone closer to Arya decides this.');
+    // The owner's card (no note) keeps its buttons — unchanged render.
+    expect(root.findAll(n => n.type === Button && n.props.onPress === onApprove)).toHaveLength(1);
+  });
+});

@@ -18,13 +18,16 @@
  */
 import type { ApiNotification } from '../../services';
 
-/** The five approval-lifecycle event types (fenzit-be PENDING_JOB_EVENT). */
+/** The approval-lifecycle event types (fenzit-be PENDING_JOB_EVENT), plus
+ *  Epic 24's tree-change notices (`job.approver_added` / `_removed`). */
 export const JOB_APPROVAL_EVENTS = [
   'job.submitted',
   'job.approved',
   'job.rejected',
   'job.cancelled',
   'job.edited',
+  'job.approver_added',
+  'job.approver_removed',
 ] as const;
 
 export type JobApprovalEventType = (typeof JOB_APPROVAL_EVENTS)[number];
@@ -40,6 +43,8 @@ const TITLES: Record<JobApprovalEventType, string> = {
   'job.rejected': 'Your job was rejected',
   'job.cancelled': 'Your pending job was cancelled',
   'job.edited': 'Your pending job was changed',
+  'job.approver_added': 'Now waiting for your approval',
+  'job.approver_removed': 'No longer yours to approve',
 };
 
 export interface JobApprovalNotificationCardData {
@@ -50,6 +55,12 @@ export interface JobApprovalNotificationCardData {
   jobId: string;
   title: string;
   message: string | null;
+  /**
+   * Epic 24 — `job.approver_removed` is informational: a re-parent may have
+   * moved the job out of the reader's branch, so a tap would 404. The card
+   * still sits in the inbox and marks read.
+   */
+  tappable: boolean;
   latestCreatedAt: string;
   isUnread: boolean;
   unreadIds: string[];
@@ -122,6 +133,7 @@ export function buildJobApprovalCards(
         jobId: n.jobId,
         title: TITLES[n.eventType],
         message,
+        tappable: n.eventType !== 'job.approver_removed',
         latestCreatedAt: n.createdAt,
         isUnread: n.readAt === null,
         unreadIds: n.readAt === null ? [n.id] : [],

@@ -346,12 +346,12 @@ export default function NotificationsScreen({ navigation }: Props) {
   // no-ops — the tab no longer exists for them.
   const handleLeaveCardPress = useCallback(
     (card: LeaveNotificationCardData) => {
-      const target = tapTargetForLeave(card.tap, isAttendanceReachable);
+      const target = tapTargetForLeave(card.tap, role, isAttendanceReachable);
       if (target === null) return;
       for (const id of card.unreadIds) void markNotificationRead(id);
       openTapTarget(navigate, target, 'inbox');
     },
-    [markNotificationRead, navigate],
+    [markNotificationRead, navigate, role],
   );
 
   // Firebase plan (user decision 2026-11-07): an assignment card's tap is
@@ -369,9 +369,16 @@ export default function NotificationsScreen({ navigation }: Props) {
 
   // Epic 22 — an approval card's tap is the SAME shared job-card decision:
   // the owner lands on JobDetail (the decision bar sits there), the creator
-  // on TechJobDetail. Same one mapping the push tap uses.
+  // on TechJobDetail. Same one mapping the push tap uses. Epic 24: the
+  // `job.approver_removed` card is deliberately inert (the job may have left
+  // the reader's branch — a 404 is worse than no door), but it still marks
+  // read.
   const handleJobApprovalCardPress = useCallback(
     (card: JobApprovalNotificationCardData) => {
+      if (!card.tappable) {
+        for (const id of card.unreadIds) void markNotificationRead(id);
+        return;
+      }
       const target = tapTargetForJobCard(role, card.jobId);
       if (target === null) return;
       for (const id of card.unreadIds) void markNotificationRead(id);

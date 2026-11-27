@@ -40,6 +40,7 @@ import {
   ScrollText,
   ShieldCheck,
   Trash2,
+  Users,
 } from 'lucide-react-native';
 import { Avatar, Card, ConfirmDialog, InlineError } from '../../components/ui';
 import { PRIVACY_POLICY_URL, TERMS_URL } from '../../config';
@@ -54,6 +55,7 @@ import { useAvatarUpload } from '../editProfile/useAvatarUpload';
 import type { TechnicianRootStackParamList } from '../../navigation/types';
 import MyJobsSummaryCard from './components/MyJobsSummaryCard';
 import { ProfileActionRow } from './components/ProfileActionRow';
+import { hasTeam } from '../team/teamModel';
 
 /** The account-status pill's words and pairing. A server that omits the
  *  field (an older backend) reads as active — the common case. */
@@ -190,6 +192,24 @@ export default function ProfileScreen() {
             GET /job-reports/employee. Sits above the account rows so the
             record is the first thing under the identity card. */}
         <MyJobsSummaryCard />
+
+        {/* Epic 24 (24-5/CAP-5) — the manager's door into their team. Gated
+            on the server's headcount: someone with no reports sees no row at
+            all (no disabled state to explain). */}
+        {hasTeam(profile) ? (
+          <Card padding="none" style={styles.group}>
+            <ProfileActionRow
+              icon={<Users size={18} color={colors.textMuted} strokeWidth={2} />}
+              label="Your team"
+              accessibilityLabel={`Your team, ${
+                (profile.team?.headcount ?? 0) === 1
+                  ? '1 person'
+                  : `${profile.team?.headcount ?? 0} people`
+              }`}
+              onPress={() => navigation.navigate('YourTeam')}
+            />
+          </Card>
+        ) : null}
 
         {/* Story 23-12 — the employee's payslip self-service: own history +
             PDF, visible only after the month is locked (the BE answers

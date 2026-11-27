@@ -875,6 +875,55 @@ describe('the pending decision bar', () => {
   });
 });
 
+describe('the viewer-manager decision bar (Epic 24)', () => {
+  it('a viewer the server says can decide gets both buttons', async () => {
+    mockCanWrite = false;
+    getById.mockResolvedValue(
+      makeDetail({
+        status: 'pending_approval',
+        currentStep: null,
+        decision: { canDecide: true, reason: null },
+      }),
+    );
+    const renderer = await mountScreen();
+    const { approve, reject } = decisionButtons(renderer.root);
+    expect(approve).toBeDefined();
+    expect(reject).toBeDefined();
+  });
+
+  it('a row somebody closer owns shows the quiet reason and no buttons', async () => {
+    mockCanWrite = false;
+    getById.mockResolvedValue(
+      makeDetail({
+        status: 'pending_approval',
+        currentStep: null,
+        decision: { canDecide: false, reason: 'higher_manager' },
+      }),
+    );
+    const renderer = await mountScreen();
+    expect(decisionButtons(renderer.root).approve).toBeUndefined();
+    expect(renderedText(renderer)).toContain(
+      'Someone closer to Anil decides this job.',
+    );
+  });
+
+  it('an unresolved chain names the missing approver instead', async () => {
+    mockCanWrite = false;
+    getById.mockResolvedValue(
+      makeDetail({
+        status: 'pending_approval',
+        currentStep: null,
+        decision: { canDecide: false, reason: 'unresolved' },
+      }),
+    );
+    const renderer = await mountScreen();
+    expect(decisionButtons(renderer.root).approve).toBeUndefined();
+    expect(renderedText(renderer)).toContain(
+      'No approver is set up for this job. Ask your admin.',
+    );
+  });
+});
+
 beforeEach(() => {
   mockCanWrite = true;
 });

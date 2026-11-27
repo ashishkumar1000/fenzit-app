@@ -22,6 +22,9 @@ import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
 import { Button, Input, MultiSelect } from '../../../components/ui';
 import { loadSkills, useSkills } from '../../skills';
+import { membersService } from '../../../services';
+import type { CompanyMember } from '../../../services';
+import { ManagerPickerStage } from './ManagerPickerStage';
 import { AddTechnicianSheet } from './AddTechnicianSheet';
 
 const loadSkillsMock = loadSkills as jest.Mock;
@@ -352,4 +355,124 @@ it('allows 20 skills and blocks the 21st', () => {
 
   act(() => root.findByType(MultiSelect).props.onChange(skills.map(s => s.id)));
   expect(root.findByType(Button).props.disabled).toBe(true);
+});
+
+// --- Epic 24 (24-5): the optional "Reports to" -------------------------------
+
+describe('AddTechnicianSheet — the optional Reports to (24-5)', () => {
+  const meena: CompanyMember = {
+    userId: 'u-meena',
+    name: 'PQA Viewer Meena Iyer',
+    countryCode: '+91',
+    phoneNumber: '7700099001',
+    employeeCode: 'EMP-002',
+    role: 'viewer',
+    status: 'active',
+    createdAt: '2026-11-20T00:00:00Z',
+    avatarUrl: null,
+    canCreateJobs: false,
+    jobApprovalRequired: false,
+    managerId: null,
+    managerName: null,
+    chain: [],
+    headcount: 0,
+    directReports: 0,
+  };
+
+  beforeEach(() => {
+    mockStore({ skills: [{ id: 's1', name: 'AC repair' }] });
+  });
+
+  it('starts unset and omits managerId from the invite when never picked', async () => {
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    const root = renderSheet({ visible: true, onSubmit });
+
+    expect(root.findAll(n => n.props.accessibilityLabel === 'Reports to not set').length).toBeGreaterThan(0);
+
+    fillValidForm(root);
+    await act(async () => {
+      root.findByType(Button).props.onPress();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'Vel Murugan',
+      phone: '9123456780',
+      skillIds: ['s1'],
+    });
+  });
+
+  it('opens the picker when the row is tapped, loads the directory once, and sends the picked id', async () => {
+    const listMembers = jest
+      .spyOn(membersService, 'listMembers')
+      .mockResolvedValue([meena]);
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    const root = renderSheet({ visible: true, onSubmit });
+
+    await act(async () => {
+      root.findAll(n => n.props.accessibilityLabel === 'Reports to not set')[0]!.props.onPress();
+    });
+    // The picker stage renders inside the same sheet (no nested native sheet).
+    expect(listMembers).toHaveBeenCalledTimes(1);
+    const stage = root.findByType(ManagerPickerStage);
+    expect(stage.props.memberId).toBeNull();
+    expect(stage.props.members).toEqual([meena]);
+
+    act(() => {
+      stage.props.onSelect(meena);
+    });
+    act(() => {
+      root.findByType(ManagerPickerStage).props.onSave();
+    });
+
+    // Back on the form, with the choice visible.
+    expect(root.findAllByProps({ accessibilityLabel: 'Reports to PQA Viewer Meena Iyer' }).length).toBeGreaterThan(0);
+
+    fillValidForm(root);
+    await act(async () => {
+      root.findByType(Button).props.onPress();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'Vel Murugan',
+      phone: '9123456780',
+      skillIds: ['s1'],
+      managerId: 'u-meena',
+    });
+  });
+
+  it('a cleared pick sends no managerId (never null on the wire)', async () => {
+    jest.spyOn(membersService, 'listMembers').mockResolvedValue([meena]);
+    const onSubmit = jest.fn().mockResolvedValue(undefined);
+    const root = renderSheet({ visible: true, onSubmit });
+
+    await act(async () => {
+      root.findAll(n => n.props.accessibilityLabel === 'Reports to not set')[0]!.props.onPress();
+    });
+    act(() => {
+      root.findByType(ManagerPickerStage).props.onSelect(meena);
+    });
+    act(() => {
+      root.findByType(ManagerPickerStage).props.onSave();
+    });
+    act(() => {
+      root.findAllByProps({ accessibilityLabel: 'Reports to PQA Viewer Meena Iyer' })[0]!.props.onPress();
+    });
+    act(() => {
+      root.findByType(ManagerPickerStage).props.onSelect(null);
+    });
+    act(() => {
+      root.findByType(ManagerPickerStage).props.onSave();
+    });
+
+    fillValidForm(root);
+    await act(async () => {
+      root.findByType(Button).props.onPress();
+    });
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: 'Vel Murugan',
+      phone: '9123456780',
+      skillIds: ['s1'],
+    });
+  });
 });

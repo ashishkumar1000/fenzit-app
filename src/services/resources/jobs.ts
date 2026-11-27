@@ -17,6 +17,7 @@
  */
 import { apiClient } from '../api/apiClient';
 import type { Paginated } from '../api/pagination';
+import type { DecisionView } from './decision';
 
 /**
  * The job service-type enum the API's job rows still spell out in
@@ -256,6 +257,12 @@ export interface ApiJob {
   createdBy?: string | null;
   decidedAt?: string | null;
   rejectionReason?: string | null;
+  /**
+   * Epic 24 (24-5/CAP-5) — the caller's decision answer for this row, from
+   * the same walk the approval POST runs. Optional: a backend older than
+   * 24-5 omits it, so readers show no bar and no note (fail hidden).
+   */
+  decision?: DecisionView;
   createdAt: string;
   updatedAt: string;
   /**
@@ -389,6 +396,13 @@ export interface ListJobsQuery {
   status?: JobStatusApi[];
   /** Owner-only filter; silently ignored for a technician role. */
   technicianId?: string;
+  /**
+   * 24-5b — narrows the list to the people strictly below the caller, for
+   * any role. An empty team answers an empty page (never the caller's own
+   * rows). The manager's Jobs queue sets it so the company-wide grants
+   * (viewer) cannot leak the whole tenant.
+   */
+  teamOnly?: boolean;
   /** Opaque cursor from the previous page — pass back verbatim. */
   cursor?: string;
   /** 1–50; server default 50. */
@@ -447,6 +461,7 @@ async function list(query: ListJobsQuery = {}): Promise<Paginated<ApiJob>> {
   if (query.date) params.date = query.date;
   if (query.status?.length) params.status = query.status; // array passed through as-is — the axios instance serializes arrays repeat-style (?status=a&status=b), which is what the backend's query parser expects (bracket style is silently ignored there)
   if (query.technicianId) params.technicianId = query.technicianId;
+  if (query.teamOnly) params.teamOnly = true;
   if (query.cursor) params.cursor = query.cursor;
   if (query.limit) params.limit = query.limit;
   const res = await apiClient.get<Paginated<ApiJob>>('/jobs', { params });

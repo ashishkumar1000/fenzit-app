@@ -163,6 +163,49 @@ export type ProfileJob = Omit<ApiJob, 'technician' | 'customer'> & {
 };
 
 /**
+ * Story 24-5 — one person in the caller's team directory (`team.members` on
+ * `/users/me`). This is the ACTIONABLE subtree the team reads are scoped to,
+ * so it is the manager's only directory (an employee JWT cannot read
+ * `GET /members`). `status` is `active` | `invited` | `deactivated`; an
+ * apply/decision picker takes an active person only.
+ */
+export interface TeamMember {
+  /** The USER id — the same id the roster and the leave rows ride. */
+  userId: string;
+  name: string | null;
+  /** Per-tenant human reference (`EMP-004`), or null on legacy rows. */
+  employeeCode?: string | null;
+  status: string;
+  /** Short-lived photo link, or null. */
+  avatarUrl: string | null;
+}
+
+/** One step up the reporting tree: the manager's id and their name. */
+export interface TeamChainLink {
+  userId: string;
+  name: string;
+}
+
+/**
+ * The caller's own place in the reporting tree plus the people below them
+ * (Epic 24, CAP-5). `headcount` counts everyone strictly below the caller and
+ * is the server-endorsed "you have a team" gate; `members` is the actionable
+ * subtree and can be smaller (a disabled member's reports are counted but
+ * pruned from the scope). Optional on `MyProfile` so an older backend fails
+ * hidden — no team row, no crash. Admins get an empty block (their roster is
+ * `GET /members`).
+ */
+export interface TeamSummary {
+  managerId: string | null;
+  managerName: string | null;
+  /** Nearest-first reporting chain ("Reports to Priya → Arjun (Owner)"). */
+  chain: TeamChainLink[];
+  headcount: number;
+  directReports: number;
+  members: TeamMember[];
+}
+
+/**
  * The `attendance` mirror embedded on the `/users/me` profile (AD-17):
  * `{ attendanceEnabled, attendanceAccess, attendanceStartDate, onboardedAt }`
  * — the same four facts `GET /attendance/me/access` serves, read from the
@@ -245,6 +288,13 @@ export interface MyProfile {
    * the tile just doesn't render — instead of crashing.
    */
   attendance?: ProfileAttendanceMirror;
+  /**
+   * Epic 24 (24-5/CAP-5) — the caller's reporting tree and actionable team.
+   * Present on employees and viewers; an admin's block is empty. Optional so
+   * an older backend fails hidden: `team.headcount > 0` gates every new
+   * surface, and an absent block never crashes.
+   */
+  team?: TeamSummary;
   /**
    * Company subscription (fenzit-be `/users/me`). `validUntil` is the company's
    * validity as a UTC ISO-8601 string, or null when no date is set. Optional so

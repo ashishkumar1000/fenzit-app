@@ -218,6 +218,7 @@ export function useTechnicians() {
       phoneNumber: input.phone.trim(),
       name: input.name.trim(),
       skillIds: input.skillIds,
+      ...(input.managerId ? { managerId: input.managerId } : {}),
     });
     const technician: Technician = {
       id: `invite_${inviteId}`,

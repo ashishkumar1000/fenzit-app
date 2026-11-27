@@ -24,6 +24,7 @@ import AttendanceMonthlyScreen from '../features/attendance/monthly/AttendanceMo
 import AttendanceEmployeeMonthScreen from '../features/attendance/month-detail/AttendanceEmployeeMonthScreen';
 import OwnerLeaveScreen from '../features/attendance/leave/OwnerLeaveScreen';
 import ApplyOnBehalfScreen from '../features/attendance/leave/ApplyOnBehalfScreen';
+import YourTeamScreen from '../features/team/YourTeamScreen';
 import {
   SettingsScreen,
   WeeklyOffScreen,
@@ -195,6 +196,13 @@ export default function RootNavigator() {
       <Stack.Screen
         name="ApplyOnBehalf"
         component={ApplyOnBehalfScreen}
+        options={{ headerShown: false }}
+      />
+      {/* Epic 24 (24-5) — the viewer manager's team surface. The employee
+          manager reaches the same screen through the technician stack. */}
+      <Stack.Screen
+        name="YourTeam"
+        component={YourTeamScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

@@ -40,6 +40,7 @@ import {
   REPORT_READY_EVENT,
 } from './reportNotificationModel';
 import {
+  LEAVE_APPROVER_EVENTS,
   LEAVE_EMPLOYEE_EVENTS,
   LEAVE_OWNER_EVENTS,
 } from './leaveNotificationModel';
@@ -57,6 +58,10 @@ export type NotificationTapTarget =
   | { readonly route: 'Reports' }
   | { readonly route: 'AttendanceDashboard' }
   | { readonly route: 'TechnicianTabsAttendance' }
+  | {
+      readonly route: 'YourTeam';
+      readonly params: { readonly segment: 'leave' };
+    }
   | { readonly route: 'OwnerLeave'; readonly params: { readonly tab: 'requests'; readonly filter?: 'pending' | 'all' } };
 
 /**
@@ -122,14 +127,32 @@ export function tapTargetForAttendance(
  * an owner tap never reads the seam); owner taps land on the Leave
  * surface's Requests pane with the right filter (`owner-pending` →
  * Needs-review — the actionable queue; `owner-all` → All).
+ *
+ * Epic 24 — a manager recipient (employee OR viewer) is not the owner: the
+ * review events and the team-pending taps land on **Your team · Leave**,
+ * the only surface that shows their subtree's queue. An admin keeps the
+ * owner's Leave screen.
  */
 export function tapTargetForLeave(
-  tap: 'owner-pending' | 'owner-all' | 'attendance-guarded',
+  tap: 'owner-pending' | 'owner-all' | 'attendance-guarded' | 'team-pending',
+  role: UserRole | null,
   attendanceReachable: () => boolean,
 ): NotificationTapTarget | null {
+  if (tap === 'team-pending') {
+    // An admin has no team surface (the gate is non-admin + headcount);
+    // the owner's pending queue is where their decisions live.
+    return isAdminRole(role)
+      ? { route: 'OwnerLeave', params: { tab: 'requests', filter: 'pending' } }
+      : { route: 'YourTeam', params: { segment: 'leave' } };
+  }
   if (tap === 'attendance-guarded') {
     if (!attendanceReachable()) return null;
     return { route: 'TechnicianTabsAttendance' };
+  }
+  if (!isAdminRole(role)) {
+    // A viewer or employee manager receiving an owner-style event decides it
+    // from their team queue, never from the owner console.
+    return { route: 'YourTeam', params: { segment: 'leave' } };
   }
   return {
     route: 'OwnerLeave',
@@ -201,17 +224,25 @@ export function pushTapTargetForEvent(
   if (isEmployeeRole(role) && isAttendanceEventType(eventType)) {
     return tapTargetForAttendance('attendance-guarded', isAttendanceReachable);
   }
-  // Leave — role-keyed (17-6): the owner's review events land on the Leave
-  // surface (applied / pending_reminder → the Pending queue, every other
-  // owner event → All), the employee's decision events ride the guarded
-  // tab (a disabled-tracking cancellation must no-op like the bell's card).
+  // Leave — Epic 24 widens the recipients to any manager (admin, employee or
+  // viewer). The two review events land on the owner's queue for an admin
+  // and on Your team for a manager; the approver-set cards always land on
+  // Your team; the employee decision events ride the guarded tab (a
+  // disabled-tracking cancellation must no-op like the bell's card).
+  if ((LEAVE_APPROVER_EVENTS as readonly string[]).includes(eventType)) {
+    // The owner can be the resolved approver; they keep the owner's queue
+    // (Your team deliberately never renders for an admin).
+    return isAdminRole(role)
+      ? tapTargetForLeave('owner-pending', role, isAttendanceReachable)
+      : { route: 'YourTeam', params: { segment: 'leave' } };
+  }
+  if (eventType === 'leave.applied' || eventType === 'leave.pending_reminder') {
+    return isAdminRole(role)
+      ? tapTargetForLeave('owner-pending', role, isAttendanceReachable)
+      : { route: 'YourTeam', params: { segment: 'leave' } };
+  }
   if (isAdminRole(role) && (LEAVE_OWNER_EVENTS as readonly string[]).includes(eventType)) {
-    return tapTargetForLeave(
-      eventType === 'leave.applied' || eventType === 'leave.pending_reminder'
-        ? 'owner-pending'
-        : 'owner-all',
-      isAttendanceReachable,
-    );
+    return tapTargetForLeave('owner-all', role, isAttendanceReachable);
   }
   if (isEmployeeRole(role) && (LEAVE_EMPLOYEE_EVENTS as readonly string[]).includes(eventType)) {
     return tapTargetForAttendance('attendance-guarded', isAttendanceReachable);
@@ -225,6 +256,12 @@ export function pushTapTargetForEvent(
   // Leave, attendance, reminder and report events carry an entity id, not a
   // job id, so they must never fall through to the job card.
   if (isNonJobEventType(eventType)) {
+    return null;
+  }
+  // The inbox card for this event is deliberately inert (a re-parent may
+  // have moved the job out of the reader's branch); the push must match,
+  // or the shade tap opens the job and 404s.
+  if (eventType === 'job.approver_removed') {
     return null;
   }
   if (id !== null && role !== null) {
@@ -246,6 +283,8 @@ function kindOfTarget(target: NotificationTapTarget): NotificationTapKind {
     case 'TechnicianTabsAttendance':
       return 'attendance';
     case 'OwnerLeave':
+      return 'leave';
+    case 'YourTeam':
       return 'leave';
     default:
       return 'job';
@@ -284,6 +323,9 @@ export function openTapTarget(
       return;
     case 'OwnerLeave':
       navigate('OwnerLeave', { tab: target.params.tab, filter: target.params.filter });
+      return;
+    case 'YourTeam':
+      navigate('YourTeam', { segment: target.params.segment });
       return;
   }
 }

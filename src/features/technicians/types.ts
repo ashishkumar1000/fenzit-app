@@ -60,6 +60,12 @@ export interface NewTechnicianInput {
   phone: string;
   /** 1–20 skill ids, must belong to the owner's tenant (from `GET /skills`). */
   skillIds: string[];
+  /**
+   * Epic 24 — optional "Reports to": the chosen manager's USER id. Omitted
+   * when the owner leaves it unset (an absent key on the invite wire, not
+   * an explicit null).
+   */
+  managerId?: string;
 }
 
 /** Payload sent to `POST /auth/invite`. */
@@ -71,6 +77,8 @@ export interface InviteTechnicianRequest {
   name: string;
   /** 1–20 UUIDs, unique, must belong to the owner's tenant. */
   skillIds: string[];
+  /** Epic 24 — optional reporting manager (a member of this company). */
+  managerId?: string;
 }
 
 /**

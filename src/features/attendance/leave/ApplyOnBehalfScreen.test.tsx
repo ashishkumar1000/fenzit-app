@@ -15,9 +15,18 @@
  * receives it: params merged on re-render (the popTo merge), consumed
  * read-once-then-cleared.
  */
+// Epic 24 — the hook branches on the caller's role. `null` keeps every
+// existing test on the admin path; the manager suite below sets it.
+let mockProfile: Record<string, unknown> | null = null;
+jest.mock('../../profile/useMyProfile', () => ({
+  useMyProfileSnapshot: () => mockProfile,
+}));
+
 jest.mock('../../../services', () => ({
   attendanceLeaveService: {
     applyOnBehalf: jest.fn(),
+    // A manager (employee role) reads the catalog from the `me` route.
+    listMyLeaveTypes: jest.fn().mockResolvedValue([]),
     // 23-14 — the picker (owner's catalog read) + the target's balances,
     // and the owner-route preview (the count chip + verdict on this form).
     listCompanyLeaveTypes: jest.fn().mockResolvedValue([]),
@@ -517,5 +526,106 @@ describe('the picker failure and reset postures (17-6 review P3)', () => {
       .find(i => i.props.placeholder === 'Search name, EMP code or phone...');
     expect(reopened!.props.value).toBe('');
     expect(texts(renderer.root)).toContain('Member 0');
+  });
+});
+
+// --- Epic 24 (24-5): the employee-manager branch --------------------------
+
+describe('the employee-manager branch (24-5)', () => {
+  const listMyLeaveTypes = attendanceLeaveService.listMyLeaveTypes as jest.Mock;
+
+  const TEAM = {
+    managerId: 'u-owner',
+    managerName: 'PQA Owner Ashok Rao',
+    chain: [],
+    headcount: 2,
+    directReports: 2,
+    members: [
+      { userId: 'u-priya', name: 'Priya Reddy', employeeCode: 'EMP-004', status: 'active', avatarUrl: null },
+      { userId: 'u-gone', name: 'Removed Person', employeeCode: 'EMP-009', status: 'removed', avatarUrl: null },
+    ],
+  };
+
+  beforeEach(() => {
+    mockProfile = { id: 'u-sanjay', role: 'employee', team: TEAM };
+  });
+
+  afterEach(() => {
+    mockProfile = null;
+  });
+
+  async function renderManagerScreen() {
+    const navigation = makeNavigation();
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    const element = (p: ApplyOnBehalfParams) => (
+      <ApplyOnBehalfScreen navigation={navigation as never} route={{ params: p } as never} />
+    );
+    await act(async () => {
+      renderer = create(element({}));
+    });
+    return {
+      renderer,
+      root: renderer.root,
+      navigation,
+      async pickDate(pickedDate: string, context: 'from' | 'to') {
+        await act(async () => {
+          renderer.update(element({ pickedDate, context } as ApplyOnBehalfParams));
+        });
+        await act(async () => {
+          renderer.update(element({ pickedDate: null, context: null } as ApplyOnBehalfParams));
+        });
+      },
+    };
+  }
+
+  it('offers the active teammates and reads the manager own catalog (never the admin one)', async () => {
+    const { root } = await renderManagerScreen();
+    const labels = texts(root);
+
+    expect(labels).toContain('Priya Reddy');
+    expect(labels.includes('Removed Person')).toBe(false);
+    // The enrolments roster is the ADMIN source — a manager never reads it.
+    expect(listEnrolments).not.toHaveBeenCalled();
+    expect(listMyLeaveTypes).toHaveBeenCalled();
+    expect(listCompanyLeaveTypes).not.toHaveBeenCalled();
+    expect(findButtons(root, 'Apply leave for Priya Reddy').length).toBeGreaterThan(0);
+  });
+
+  it('submits the pick as pending and lands back on Your team · Leave', async () => {
+    const ctx = await renderManagerScreen();
+
+    await act(async () => {
+      findButtons(ctx.root, 'Apply leave for Priya Reddy')[0]!.props.onPress();
+    });
+    await ctx.pickDate('2026-12-10', 'from');
+    const reason = ctx.root
+      .findAllByType(Input)
+      .find(i => i.props.accessibilityLabel === 'Reason (required)');
+    await act(async () => {
+      reason!.props.onChangeText('Family event');
+    });
+
+    const apply = ctx.root.findAllByType(Button).find(b => b.props.children === 'Apply leave');
+    expect(apply).toBeDefined();
+    expect(
+      ctx.root.findAllByType(Button).find(b => b.props.children === 'Approve'),
+    ).toBeUndefined();
+
+    await act(async () => {
+      apply!.props.onPress();
+    });
+
+    expect(applyOnBehalf).toHaveBeenCalledTimes(1);
+    const [body] = applyOnBehalf.mock.calls[0];
+    expect(body).toEqual({
+      employeeId: 'u-priya',
+      startDate: '2026-12-10',
+      reason: 'Family event',
+    });
+    expect(announce).toHaveBeenCalledWith(
+      "Leave applied for Priya Reddy. It's waiting for approval.",
+    );
+    expect(ctx.navigation.navigate).toHaveBeenCalledWith('YourTeam', { segment: 'leave' });
+    expect(ctx.navigation.navigate).not.toHaveBeenCalledWith('OwnerLeave', expect.anything());
   });
 });

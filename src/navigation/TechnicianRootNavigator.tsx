@@ -20,6 +20,8 @@ import { AttendanceIntroScreen } from '../features/attendance/me';
 import { AttendanceMyMonthScreen } from '../features/attendance/me';
 import DatePickerScreen from '../features/attendance/enrolments/DatePickerScreen';
 import LeaveApplyScreen from '../features/attendance/leave/LeaveApplyScreen';
+import ApplyOnBehalfScreen from '../features/attendance/leave/ApplyOnBehalfScreen';
+import YourTeamScreen from '../features/team/YourTeamScreen';
 import PayslipsScreen from '../features/payslips';
 import { PayslipDetailScreen } from '../features/payslips';
 import SelectSkillsScreen from '../features/newJob/SelectSkillsScreen';
@@ -75,6 +77,12 @@ export default function TechnicianRootNavigator() {
           API's enforcement. */}
       <Stack.Screen name="MyPayslips" component={PayslipsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="MyPayslipDetail" component={PayslipDetailScreen} options={{ headerShown: false }} />
+      {/* Epic 24 (24-5) — the employee manager's team surface (entry: the
+          Profile tab's "Your team" row, gated on team.headcount > 0). */}
+      <Stack.Screen name="YourTeam" component={YourTeamScreen} options={{ headerShown: false }} />
+      {/* Epic 24 (24-5) — apply on behalf's second registration: an employee
+          manager files for an active report from team.members. */}
+      <Stack.Screen name="ApplyOnBehalf" component={ApplyOnBehalfScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

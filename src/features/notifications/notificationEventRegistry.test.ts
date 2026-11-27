@@ -15,9 +15,11 @@ import {
 } from './notificationEventRegistry';
 import {
   buildLeaveCards,
+  LEAVE_APPROVER_EVENTS,
   LEAVE_EMPLOYEE_EVENTS,
   LEAVE_OWNER_EVENTS,
 } from './leaveNotificationModel';
+import { JOB_APPROVAL_EVENTS } from './jobApprovalNotificationModel';
 
 function makeNotification(
   id: string,
@@ -462,11 +464,15 @@ describe('notificationEventAction — viewer (read-only company view)', () => {
     expect(notificationEventAction(makeNotification('n1', { jobId: 'job-1' }), 'viewer')).toBe('job');
   });
 
-  it('leave events never become leave cards (a viewer cannot read leave requests)', () => {
-    for (const eventType of [...LEAVE_OWNER_EVENTS, ...LEAVE_EMPLOYEE_EVENTS]) {
+  it('leave events become leave cards for a viewer manager (Epic 24: tree-derived recipients)', () => {
+    for (const eventType of [
+      ...LEAVE_OWNER_EVENTS,
+      ...LEAVE_EMPLOYEE_EVENTS,
+      ...LEAVE_APPROVER_EVENTS,
+    ]) {
       expect(
         notificationEventAction(makeNotification('l1', { eventType }), 'viewer'),
-      ).not.toBe('leave');
+      ).toBe('leave');
     }
   });
 
@@ -474,5 +480,20 @@ describe('notificationEventAction — viewer (read-only company view)', () => {
     expect(
       notificationEventAction(makeNotification('a1', { eventType: 'attendance.access_enabled' }), 'viewer'),
     ).not.toBe('attendance');
+  });
+});
+
+describe('notificationEventAction — job approval events (Epic 22 + Epic 24 tree notices)', () => {
+  it('every approval-lifecycle row classifies as a job-approval card, for every role', () => {
+    for (const eventType of JOB_APPROVAL_EVENTS) {
+      for (const role of ['company_admin', 'employee', 'viewer'] as const) {
+        expect(
+          notificationEventAction(
+            makeNotification('j1', { eventType, jobId: 'job-1' }),
+            role,
+          ),
+        ).toBe('job-approval');
+      }
+    }
   });
 });

@@ -70,8 +70,15 @@ export function LeaveRequestCard(input: {
   onDecline?: () => void;
   /** Opens the detail sheet's revoke stage (the reason is required). */
   onRevoke?: () => void;
+  /**
+   * Epic 24 — the manager queue's read-only reason line ("Someone closer to
+   * Ravi decides this."). When set, the pending row's action row is
+   * suppressed and the quiet note renders instead. Absent on the owner's
+   * cards, so their render is unchanged.
+   */
+  readOnlyNote?: string | null;
 }) {
-  const { request, approving = false, onPress, onApprove, onDecline, onRevoke } = input;
+  const { request, approving = false, onPress, onApprove, onDecline, onRevoke, readOnlyNote } = input;
 
   const name = request.employeeName ?? 'Team member';
   const chip = requestStatusChip(request.status);
@@ -151,7 +158,7 @@ export function LeaveRequestCard(input: {
         {split ? <Text style={styles.splitNote}>{split.label}</Text> : null}
       </View>
 
-      {pending ? (
+      {pending && !readOnlyNote && (onApprove != null || onDecline != null) ? (
         <View style={styles.actionRow}>
           <Button
             variant="secondary"
@@ -171,6 +178,12 @@ export function LeaveRequestCard(input: {
             Approve
           </Button>
         </View>
+      ) : null}
+
+      {readOnlyNote ? (
+        <Text style={styles.decisionNote} accessibilityLiveRegion="polite">
+          {readOnlyNote}
+        </Text>
       ) : null}
 
       {approved ? (
@@ -313,5 +326,10 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.s3,
     fontStyle: 'italic',
+  },
+  decisionNote: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    marginTop: spacing.s3,
   },
 });

@@ -9,9 +9,11 @@
  */
 import type { ApiNotification } from '../../services';
 import {
+  LEAVE_APPROVER_EVENTS,
   LEAVE_EMPLOYEE_EVENTS,
   LEAVE_OWNER_EVENTS,
   buildLeaveCards,
+  isLeaveApproverEvent,
   isLeaveEmployeeEvent,
   isLeaveOwnerEvent,
 } from './leaveNotificationModel';
@@ -33,7 +35,7 @@ function notification(overrides: Partial<ApiNotification> & { eventType: string;
 const SPAN = { startDate: '2026-10-05', endDate: '2026-10-09' };
 
 describe('the enumerated classifiers (wire-truth F6)', () => {
-  it('classify exactly the 9 table events, role-keyed (8 from 17-6 + 19-4 adds pending_reminder)', () => {
+  it('classify exactly the shipped table events (9 from 17-6/19-4 + 2 Epic-24 approver notices)', () => {
     for (const event of LEAVE_OWNER_EVENTS) {
       expect(isLeaveOwnerEvent(event)).toBe(true);
       expect(isLeaveEmployeeEvent(event)).toBe(false);
@@ -42,28 +44,38 @@ describe('the enumerated classifiers (wire-truth F6)', () => {
       expect(isLeaveEmployeeEvent(event)).toBe(true);
       expect(isLeaveOwnerEvent(event)).toBe(false);
     }
-    // 19-4: 8 + the owner-side pending_reminder.
+    for (const event of LEAVE_APPROVER_EVENTS) {
+      expect(isLeaveApproverEvent(event)).toBe(true);
+      expect(isLeaveOwnerEvent(event)).toBe(false);
+      expect(isLeaveEmployeeEvent(event)).toBe(false);
+    }
     expect(LEAVE_OWNER_EVENTS.length + LEAVE_EMPLOYEE_EVENTS.length).toBe(9);
+    expect(LEAVE_APPROVER_EVENTS).toHaveLength(2);
   });
 
-  it('leave.pending_reminder is an OWNER leave event from 19-4 (composed copy retired the generic-card deferral)', () => {
+  it('leave.pending_reminder is an owner-style event, but a manager recipient gets a card too', () => {
     expect(isLeaveOwnerEvent('leave.pending_reminder')).toBe(true);
     expect(isLeaveEmployeeEvent('leave.pending_reminder')).toBe(false);
     const n = notification({ eventType: 'leave.pending_reminder', payload: { pendingCount: 2 } });
     expect(notificationEventAction(n, 'company_admin')).toBe('leave');
-    expect(notificationEventAction(n, 'employee')).toBe('generic');
+    // Epic 24: recipient sets are tree-derived — an employee/viewer manager
+    // receives the reminder and must see a real card.
+    expect(notificationEventAction(n, 'employee')).toBe('leave');
+    expect(notificationEventAction(n, 'viewer')).toBe('leave');
   });
 
-  it('the registry routes the 8 events to the leave card per role', () => {
-    expect(
-      notificationEventAction(notification({ eventType: 'leave.applied' }), 'company_admin'),
-    ).toBe('leave');
-    expect(
-      notificationEventAction(notification({ eventType: 'leave.applied' }), 'employee'),
-    ).not.toBe('leave'); // a technician never renders owner cards
-    expect(
-      notificationEventAction(notification({ eventType: 'leave.approved' }), 'employee'),
-    ).toBe('leave');
+  it('the registry routes every enumerated leave event to the leave card, for every role', () => {
+    for (const role of ['company_admin', 'employee', 'viewer'] as const) {
+      expect(
+        notificationEventAction(notification({ eventType: 'leave.applied' }), role),
+      ).toBe('leave');
+      expect(
+        notificationEventAction(notification({ eventType: 'leave.approved' }), role),
+      ).toBe('leave');
+      expect(
+        notificationEventAction(notification({ eventType: 'leave.approver_added' }), role),
+      ).toBe('leave');
+    }
   });
 });
 
@@ -280,11 +292,13 @@ describe('payload truths shared across events', () => {
 });
 
 describe('buildLeaveCards — viewer', () => {
-  it('builds no leave cards for any leave event (a viewer cannot read leave requests)', () => {
-    const rows = [...LEAVE_OWNER_EVENTS, ...LEAVE_EMPLOYEE_EVENTS].map(eventType =>
-      notification({ eventType }),
-    );
-    expect(buildLeaveCards(rows, 'viewer')).toEqual([]);
+  it('builds real cards for a viewer manager (Epic 24: recipients are tree-derived)', () => {
+    const rows = [
+      ...LEAVE_OWNER_EVENTS,
+      ...LEAVE_EMPLOYEE_EVENTS,
+      ...LEAVE_APPROVER_EVENTS,
+    ].map(eventType => notification({ eventType }));
+    expect(buildLeaveCards(rows, 'viewer')).toHaveLength(rows.length);
   });
 
   it('an empty list builds an empty list for every role', () => {

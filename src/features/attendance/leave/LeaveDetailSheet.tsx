@@ -75,8 +75,24 @@ export function LeaveDetailSheet(input: {
    *  rendered in compact mode; absent in the employee's readOnly mode
    *  for now — the own-history surface doesn't show balances). */
   balancesSlot?: ReactNode;
+  /**
+   * Epic 24 — the manager queue's read-only reason ("Someone closer to Ravi
+   * decides this."). When set, the action slot is replaced by the quiet
+   * note: a row the server will refuse must not offer buttons.
+   */
+  readOnlyNote?: string | null;
+  /**
+   * Epic 24 — the team card's Decline opens straight at the reason stage
+   * (EXPERIENCE Surface 1); a plain row tap opens the detail stage.
+   */
+  openStage?: 'detail' | 'reject';
+  /**
+   * Epic 24 — the "Also off on these days" glance (host-fetched; absent
+   * until the answer lands, so no spinner sits in a secondary strip).
+   */
+  teammatesOffLine?: string | null;
 }) {
-  const { visible, request, readOnly = false, actionState, onClose, onApprove, onReject, onRevoke, onCancelRequest, onDismissHandled, balancesSlot } = input;
+  const { visible, request, readOnly = false, actionState, onClose, onApprove, onReject, onRevoke, onCancelRequest, onDismissHandled, balancesSlot, openStage = 'detail', readOnlyNote, teammatesOffLine } = input;
 
   const [stage, setStage] = useState<DetailStage>('detail');
 
@@ -94,13 +110,13 @@ export function LeaveDetailSheet(input: {
   const split = splitDaySummary(request.dates);
   const submitting = actionState.kind === 'submitting';
   const settled = actionState.kind !== 'handled';
-  const canRevoke = !readOnly && request.status === 'approved' && settled && onRevoke != null;
+  const canRevoke =
+    !readOnly && readOnlyNote == null && request.status === 'approved' && settled && onRevoke != null;
   const canCancel =
     readOnly &&
     (request.status === 'pending' || request.status === 'approved') &&
     settled &&
     onCancelRequest != null;
-
   // The stage swaps the sheet's title/subtitle (announced via the header
   // semantics — the a11y floor, D6).
   const title =
@@ -162,6 +178,9 @@ export function LeaveDetailSheet(input: {
                 <Text style={styles.identityName}>
                   {request.employeeName ?? 'Team member'}
                 </Text>
+                {request.employeeCode ? (
+                  <Text style={styles.identitySub}>{request.employeeCode}</Text>
+                ) : null}
               </View>
             </View>
           ) : null}
@@ -202,6 +221,12 @@ export function LeaveDetailSheet(input: {
             </View>
           </View>
 
+          {/* Epic 24 — the "also off" glance sits under the facts, as a
+              plain sentence (never a colour cue). */}
+          {teammatesOffLine != null ? (
+            <Text style={styles.teammatesOff}>{teammatesOffLine}</Text>
+          ) : null}
+
           {/* 23-14 — the requesting employee's balances, in compact mode.
               The sheet never calls the API itself: the balances (loading
               included) arrive as a rendered slot from the host. */}
@@ -229,18 +254,25 @@ export function LeaveDetailSheet(input: {
             <InlineError message={actionState.message} />
           ) : null}
 
-          <LeaveDetailActions
-            request={request}
-            readOnly={readOnly}
-            visible={visible}
-            submitting={submitting}
-            approveInFlight={submitting && actionState.action === 'approve'}
-            rejectInFlight={submitting && actionState.action === 'reject'}
-            onApprove={onApprove}
-            onReject={onReject}
-            onEnterRevoke={canRevoke ? () => setStage('revoke') : undefined}
-            onEnterCancel={canCancel ? () => setStage('cancel') : undefined}
-          />
+          {readOnlyNote != null ? (
+            <Text style={styles.decisionNote} accessibilityLiveRegion="polite">
+              {readOnlyNote}
+            </Text>
+          ) : (
+            <LeaveDetailActions
+              request={request}
+              readOnly={readOnly}
+              visible={visible}
+              initialReject={openStage === 'reject'}
+              submitting={submitting}
+              approveInFlight={submitting && actionState.action === 'approve'}
+              rejectInFlight={submitting && actionState.action === 'reject'}
+              onApprove={onApprove}
+              onReject={onReject}
+              onEnterRevoke={canRevoke ? () => setStage('revoke') : undefined}
+              onEnterCancel={canCancel ? () => setStage('cancel') : undefined}
+            />
+          )}
         </>
       )}
     </Sheet>
@@ -260,6 +292,10 @@ const styles = StyleSheet.create({
   identityName: {
     ...typography.bodyStrong,
     color: colors.textStrong,
+  },
+  identitySub: {
+    ...typography.bodySm,
+    color: colors.textMuted,
   },
   kvRows: {
     gap: spacing.s2,
@@ -316,5 +352,13 @@ const styles = StyleSheet.create({
   splitDate: {
     ...typography.bodySm,
     color: colors.textBody,
+  },
+  teammatesOff: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  decisionNote: {
+    ...typography.bodySm,
+    color: colors.textMuted,
   },
 });

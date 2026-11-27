@@ -25,6 +25,7 @@
  */
 import { apiClient } from '../api/apiClient';
 import type { Paginated } from '../api/pagination';
+import type { DecisionView } from './decision';
 
 /** Full day | first half | second half — halves are single-date only. */
 export type LeavePart = 'full_day' | 'first_half' | 'second_half';
@@ -239,6 +240,12 @@ export interface LeaveRequestView {
   createdBy: string;
   createdAt: string;
   dates: { date: string; state: string }[];
+  /**
+   * Epic 24 (24-5/CAP-5) — the caller's decision answer for this row, from
+   * the same walk the decision POST runs. Optional: a backend older than
+   * 24-5 omits it, so readers show no buttons and no note (fail hidden).
+   */
+  decision?: DecisionView;
 }
 
 export const attendanceLeaveService = {
@@ -314,6 +321,10 @@ export const attendanceLeaveService = {
       status?: string;
       employeeId?: string;
       q?: string;
+      /** 27-1 overlap window start (YYYY-MM-DD, tenant-local, inclusive). */
+      from?: string;
+      /** 27-1 overlap window end (YYYY-MM-DD, tenant-local, inclusive). */
+      to?: string;
       cursor?: string;
       limit?: number;
     } = {},

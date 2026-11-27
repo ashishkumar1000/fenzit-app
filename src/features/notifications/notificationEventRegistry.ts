@@ -39,7 +39,7 @@
  * or the job card pipeline.
  */
 import type { ApiNotification, UserRole } from '../../services';
-import { isAdminRole, isCompanyWideRole, isEmployeeRole } from '../auth/roles';
+import { isCompanyWideRole, isEmployeeRole } from '../auth/roles';
 import { isAttendanceEventType } from '../../services/attendanceAccessEvents';
 import {
   ATTENDANCE_NOTIFICATION_EVENT,
@@ -47,6 +47,7 @@ import {
 import { formatLongDate } from '../../utils/formatLongDate';
 import { isReportNotification } from './reportNotificationModel';
 import {
+  isLeaveApproverEvent,
   isLeaveEmployeeEvent,
   isLeaveOwnerEvent,
 } from './leaveNotificationModel';
@@ -102,13 +103,18 @@ export function notificationEventAction(
   // tap-guarded deep link to the Attendance tab (the seam decides whether
   // that tab currently exists).
   if (isEmployeeRole(role) && isAttendanceEventType(n.eventType)) return 'attendance';
-  // Story 17-6: the leave cards — role-keyed ENUMERATED classifications of
-  // exactly the shipped events (wire-truth F6). 19-4 adds the 9th owner
-  // event, `leave.pending_reminder`, WITH its composed copy (the original
-  // generic-card deferral is retired — see leaveNotificationModel).
-  // Leave review is admin-only (a viewer cannot read leave requests).
-  if (isAdminRole(role) && isLeaveOwnerEvent(n.eventType)) return 'leave';
-  if (isEmployeeRole(role) && isLeaveEmployeeEvent(n.eventType)) return 'leave';
+  // Story 17-6: the leave cards — ENUMERATED classifications of exactly the
+  // shipped events. Epic 24 (24-5): the recipient set is tree-derived, not
+  // role-derived — a manager may be an admin, an employee OR a viewer — so
+  // every enumerated leave event classifies as a leave card for every role.
+  // The tap model splits the destination by role.
+  if (
+    isLeaveOwnerEvent(n.eventType) ||
+    isLeaveEmployeeEvent(n.eventType) ||
+    isLeaveApproverEvent(n.eventType)
+  ) {
+    return 'leave';
+  }
   if (n.jobId !== null) return 'job';
   return 'generic';
 }

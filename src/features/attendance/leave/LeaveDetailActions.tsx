@@ -29,6 +29,8 @@ export function LeaveDetailActions(input: {
   readOnly: boolean;
   /** true while the sheet is presented — resets the reject stage. */
   visible: boolean;
+  /** Open straight at the reason stage (the team card's Decline). */
+  initialReject?: boolean;
   /** Any host write in flight (buttons block + the sheet is pinned). */
   submitting: boolean;
   /** The approve write specifically (its button spins). */
@@ -43,7 +45,7 @@ export function LeaveDetailActions(input: {
   /** The cancel entry renders only when the host owns the write. */
   onEnterCancel?: () => void;
 }) {
-  const { request, readOnly, visible, submitting, approveInFlight, rejectInFlight, onApprove, onReject, onEnterRevoke, onEnterCancel } = input;
+  const { request, readOnly, visible, initialReject = false, submitting, approveInFlight, rejectInFlight, onApprove, onReject, onEnterRevoke, onEnterCancel } = input;
 
   // Stage 2 (reveal the reason input) is action-local state, reset per
   // presentation — a stale stage from the previous request must not ride
@@ -54,10 +56,10 @@ export function LeaveDetailActions(input: {
 
   useEffect(() => {
     if (visible) {
-      setRejectStage(1);
+      setRejectStage(initialReject ? 2 : 1);
       setReason('');
     }
-  }, [visible]);
+  }, [visible, initialReject]);
 
   useEffect(() => {
     if (rejectStage === 2) reasonRef.current?.focus();

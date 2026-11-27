@@ -21,14 +21,22 @@
  * Error posture (spec D4): server messages verbatim;
  * `ATTENDANCE_NOT_TRACKED` on-behalf means the TARGET employee is untracked
  * — inline server message only, NO access-store refresh, form stays;
- * `ATTENDANCE_EMPLOYEE_NOT_FOUND` gets the FE-owned line. Success:
- * announce "Leave applied for {name}" and land on OwnerLeave's Requests
- * pane, All filter (a born-approved request is invisible in the
- * Needs-review filter).
+ * `ATTENDANCE_EMPLOYEE_NOT_FOUND` gets the FE-owned line, and a manager's
+ * target that is no longer set up for leave gets `EMPLOYEE_NOT_SET_UP_MESSAGE`
+ * (never the false "isn't in your team anymore").
+ *
+ * Callers (Epic 24, 24-5): an ADMIN files a born-approved request and lands
+ * on OwnerLeave's Requests pane (All filter — it is invisible in
+ * Needs-review); an employee MANAGER files a PENDING request that routes to
+ * the nearest eligible manager above the subject, reads its catalog from
+ * `GET /attendance/me/leave/types`, picks from `team.members`, and lands
+ * back on Your team · Leave. A viewer manager never reaches this screen
+ * (the People segment hides the action) — there is no viewer branch here.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useMyProfileSnapshot } from '../../profile/useMyProfile';
 import { enrolmentsService } from '../../../services';
 import { attendanceLeaveService } from '../../../services';
 import type {
@@ -42,6 +50,7 @@ import { istTodayDate } from '../../../utils/istDate';
 import type {
   ApplyOnBehalfParams,
   RootStackParamList,
+  TechnicianRootStackParamList,
 } from '../../../navigation/types';
 import {
   buildApplyBody,
@@ -70,6 +79,9 @@ import {
 
 export const EMPLOYEE_NOT_FOUND_MESSAGE =
   "This person isn't in your team anymore.";
+/** A manager's non-tracked/non-employee target: neutral, not "removed". */
+export const EMPLOYEE_NOT_SET_UP_MESSAGE =
+  "This person isn't set up for leave requests.";
 export const APPLIED_ANNOUNCEMENT_PREFIX = 'Leave applied for';
 
 /** D4 — the picker keeps TRACKED rows only (`attendanceStartDate != null`),
@@ -108,13 +120,17 @@ export function trackedEmployees(
 }
 
 type Navigation = NativeStackNavigationProp<
-  RootStackParamList,
+  RootStackParamList & TechnicianRootStackParamList,
   'ApplyOnBehalf'
 >;
 
-function messageForSubmitError(err: ApiError): string {
+function messageForSubmitError(err: ApiError, isAdmin: boolean): string {
   if (err.code === 'ATTENDANCE_EMPLOYEE_NOT_FOUND') {
-    return EMPLOYEE_NOT_FOUND_MESSAGE;
+    // An admin's roster was filtered from the enrolments read, so the person
+    // really did leave the team; a manager's `team.members` can also hold a
+    // viewer or an untracked report, for whom "not in your team" would be a
+    // lie.
+    return isAdmin ? EMPLOYEE_NOT_FOUND_MESSAGE : EMPLOYEE_NOT_SET_UP_MESSAGE;
   }
   if (err.code === 'NETWORK_ERROR' || err.code === 'TIMEOUT') {
     return SUBMIT_OFFLINE_MESSAGE;
@@ -127,6 +143,22 @@ export function useApplyOnBehalf(input: {
   route: { params?: ApplyOnBehalfParams };
 }) {
   const { navigation, route } = input;
+  // Epic 24 — the picker source branches on the caller, not on the screen:
+  // an admin keeps the enrolment roster (tracked employees, office/phone
+  // captions); an employee manager has no `attendance.read` and picks from
+  // `team.members` (active rows only). A viewer manager never reaches this
+  // screen (the People segment hides the action).
+  //
+  // The store is read WITHOUT starting a load (the screen is always pushed
+  // after the shell loaded it); an unknown profile keeps the shipped admin
+  // behaviour, so a cold deep link never switches a manager onto the
+  // enrolment route by accident.
+  const profile = useMyProfileSnapshot();
+  const isAdmin = profile == null || profile.role === 'company_admin';
+  // The manager branch's source; a primitive-ish dep so a profile object
+  // identity change for an unrelated field does not reload the roster and
+  // flip the picker back to its loading state mid-use.
+  const teamMembers = profile?.team?.members;
 
   // The picked team member — from params (deep link) until the picker
   // replaces it; the CTA entry opens the picker immediately.
@@ -148,6 +180,24 @@ export function useApplyOnBehalf(input: {
   const loadRoster = useCallback(() => {
     setRosterLoading(true);
     setRosterError(false);
+    if (!isAdmin) {
+      // A manager's directory: `team.members`, active only. The rows carry
+      // no office or phone, so the picker's caption degrades to the EMP code
+      // (EmployeePickerSheet's documented fallback).
+      const members = (teamMembers ?? [])
+        .filter(member => member.status === 'active')
+        .map(member => ({
+          employeeId: member.userId,
+          employeeName: member.name?.trim() || 'Team member',
+          employeeCode: member.employeeCode ?? null,
+          phone: '',
+          officeName: null,
+          avatarUrl: member.avatarUrl ?? null,
+        }));
+      setRoster(members);
+      setRosterLoading(false);
+      return;
+    }
     enrolmentsService
       .list()
       .then(rows => {
@@ -162,7 +212,7 @@ export function useApplyOnBehalf(input: {
       .finally(() => {
         if (mounted.current) setRosterLoading(false);
       });
-  }, []);
+  }, [isAdmin, teamMembers]);
   useEffect(() => {
     mounted.current = true;
     loadRoster();
@@ -201,8 +251,15 @@ export function useApplyOnBehalf(input: {
   const [pickedTypeId, setPickedTypeId] = useState<string | null>(null);
 
   useEffect(() => {
-    attendanceLeaveService
-      .listCompanyLeaveTypes()
+    // Epic 24 — the catalog route follows the caller's rights. `GET
+    // /attendance/leave/types` is `leave.types` (admin only); an employee
+    // manager reads the same shape from `GET /attendance/me/leave/types`
+    // (`leave.own`). Without this branch the manager's form silently
+    // submitted untyped, balance-unchecked leave.
+    const catalog = isAdmin
+      ? attendanceLeaveService.listCompanyLeaveTypes()
+      : attendanceLeaveService.listMyLeaveTypes();
+    catalog
       .then(types => {
         if (!mounted.current) return;
         setLeaveTypes(types.filter(type => type.enabled));
@@ -214,7 +271,7 @@ export function useApplyOnBehalf(input: {
       .finally(() => {
         if (mounted.current) setTypesLoading(false);
       });
-  }, []);
+  }, [isAdmin]);
 
   /** Every form transition clears the message area (the 17-5 D6 rule). */
   const transition = useCallback(
@@ -369,10 +426,12 @@ export function useApplyOnBehalf(input: {
   const openTypePicker = useCallback(() => setTypePickerVisible(true), []);
   const closeTypePicker = useCallback(() => setTypePickerVisible(false), []);
 
-  // --- 23-14: the live preview via the OWNER route. ------------------------
+  // --- 23-14: the live preview via the on-behalf preview route. ----------
   // GET /attendance/leave/on-behalf/preview runs the on-behalf POST's
-  // validation read-only for the picked employee (the technician `me`
-  // preview still 403s an owner JWT). Same contract as the self-apply
+  // validation read-only for the picked employee. Both callers use it: the
+  // owner route answers an admin's JWT (the technician `me` preview 403s an
+  // owner JWT) and an employee manager's (the only actor that may file for a
+  // report). Same contract as the self-apply
   // form: latest-wins seq latch, dim-in-place previous count, `ok: false`
   // renders the server's message verbatim AND gates submit, transport
   // fails open (the BE re-verdicts at POST). NOT_TRACKED here means the
@@ -456,20 +515,30 @@ export function useApplyOnBehalf(input: {
       // discovered from the returned view (no live preview exists here).
       .then(() => {
         if (!mounted.current) return;
+        const name = employee.employeeName;
         AccessibilityInfo.announceForAccessibility(
-          `${APPLIED_ANNOUNCEMENT_PREFIX} ${employee.employeeName}`,
+          isAdmin
+            ? `${APPLIED_ANNOUNCEMENT_PREFIX} ${name}`
+            : `${APPLIED_ANNOUNCEMENT_PREFIX} ${name}. It's waiting for approval.`,
         );
-        // Param merge pops back to the owner's Leave screen, landing on the
-        // Requests pane's All filter so the born-approved request is visible
-        // immediately (spec D4).
-        navigation.navigate('OwnerLeave', { tab: 'requests', filter: 'all' });
+        if (isAdmin) {
+          // Param merge pops back to the owner's Leave screen, landing on the
+          // Requests pane's All filter so the born-approved request is visible
+          // immediately (spec D4).
+          navigation.navigate('OwnerLeave', { tab: 'requests', filter: 'all' });
+        } else {
+          // A manager's filing is PENDING and routes to the nearest eligible
+          // manager above the subject — not the actor. Land back on the team
+          // surface, Leave segment, where its fate will show.
+          navigation.navigate('YourTeam', { segment: 'leave' });
+        }
       })
       .catch((err: ApiError) => {
         if (!mounted.current) return;
         // NOT_TRACKED here = the TARGET employee is untracked — inline
         // server message only; deliberately NO access-store refresh (that
         // seam is the technician's own session, not this employee's).
-        const message = messageForSubmitError(err);
+        const message = messageForSubmitError(err, isAdmin);
         setFooterError(message);
         AccessibilityInfo.announceForAccessibility(message);
       })
@@ -477,10 +546,11 @@ export function useApplyOnBehalf(input: {
         submitLatch.current = false;
         if (mounted.current) setSubmitting(false);
       });
-  }, [employee, state, reason, selectedTypeId, navigation, preview.status]);
+  }, [employee, state, reason, selectedTypeId, navigation, preview.status, isAdmin]);
 
   return {
     employee,
+    isAdmin,
     roster,
     rosterLoading,
     rosterError,

@@ -19,9 +19,12 @@ type Props = {
   busy?: boolean;
   /** Danger action — danger-tinted icon tile and label. */
   danger?: boolean;
+  /** Spoken label when the visible one is too terse (e.g. "Your team" +
+   *  the count reads "Your team, 3 people"). Defaults to `label`. */
+  accessibilityLabel?: string;
 };
 
-export function ProfileActionRow({ icon, label, onPress, busy, danger }: Props) {
+export function ProfileActionRow({ icon, label, onPress, busy, danger, accessibilityLabel }: Props) {
   return (
     <Card
       padding="md"
@@ -31,7 +34,7 @@ export function ProfileActionRow({ icon, label, onPress, busy, danger }: Props) 
       disabled={busy}
       accessibilityRole="button"
       accessibilityState={{ busy: !!busy, disabled: !!busy }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       // Disabled because of an upload needs its reason spoken, not just
       // "disabled" (Sally review 2026-11-13).
       accessibilityHint={busy ? 'Working, try again in a moment' : undefined}

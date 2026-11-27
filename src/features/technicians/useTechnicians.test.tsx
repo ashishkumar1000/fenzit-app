@@ -105,8 +105,30 @@ it('commits the invited technician to the top of the list and persists it', asyn
   expect(persisted()).toEqual(list);
 });
 
-it('does not repopulate the cleared store when the session resets mid-invite', async () => {
-  let resolveInvite!: (response: { inviteId: string }) => void;
+it('forwards the chosen reporting manager onto the invite body (Epic 24)', async () => {
+  await act(async () => {
+    await addFn({ ...INPUT, managerId: 'u-meena' });
+  });
+
+  expect(invite).toHaveBeenCalledWith({
+    countryCode: DIAL_CODE,
+    phoneNumber: '9876500000',
+    name: 'Suresh Rao',
+    skillIds: ['skill-1'],
+    managerId: 'u-meena',
+  });
+});
+
+it('omits managerId from the invite body when no manager was chosen', async () => {
+  await act(async () => {
+    await addFn(INPUT);
+  });
+
+  const body = invite.mock.calls[0][0] as unknown as Record<string, unknown>;
+  expect(body).not.toHaveProperty('managerId');
+});
+
+it('does not repopulate the cleared store when the session resets mid-invite', async () => {  let resolveInvite!: (response: { inviteId: string }) => void;
   invite.mockReturnValueOnce(
     new Promise(resolve => {
       resolveInvite = resolve;

@@ -164,10 +164,13 @@ export type { ApprovalQueueItem } from './approvalQueue';
 export { membersService } from './members';
 export type {
   CompanyMember,
+  MemberChainLink,
+  MemberHierarchy,
   MemberJobSettings,
   MemberJobSettingsResponse,
   MemberRole,
 } from './members';
+export type { DecisionReason, DecisionView } from './decision';
 export { jobReportService } from './jobReports';
 export type {
   EmployeeReportOutcomes,
@@ -193,6 +196,9 @@ export type {
   ProfileCustomerSummary,
   ProfileJob,
   JobCounts,
+  TeamChainLink,
+  TeamMember,
+  TeamSummary,
   UserStatus,
 } from './users';
 export type {

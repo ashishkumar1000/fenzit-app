@@ -167,6 +167,55 @@ describe('pushTapTargetForEvent — push tap routing matrix', () => {
       mockReachable = false;
       expect(pushTapTargetForEvent('leave.approved', null, EMPLOYEE)).toBeNull();
     });
+
+    // --- Epic 24: the manager recipients --------------------------------
+    it('a manager (employee or viewer) lands a review push on Your team · Leave', () => {
+      for (const role of [EMPLOYEE, VIEWER]) {
+        expect(pushTapTargetForEvent('leave.applied', null, role)).toEqual({
+          route: 'YourTeam',
+          params: { segment: 'leave' },
+        });
+        expect(pushTapTargetForEvent('leave.pending_reminder', null, role)).toEqual({
+          route: 'YourTeam',
+          params: { segment: 'leave' },
+        });
+      }
+    });
+
+    it('the approver-set notices land on Your team · Leave for a manager', () => {
+      for (const event of ['leave.approver_added', 'leave.approver_removed']) {
+        for (const role of [EMPLOYEE, VIEWER]) {
+          expect(pushTapTargetForEvent(event, null, role)).toEqual({
+            route: 'YourTeam',
+            params: { segment: 'leave' },
+          });
+        }
+      }
+    });
+
+    it('an owner who is the resolved approver keeps the owner queue', () => {
+      expect(pushTapTargetForEvent('leave.approver_added', null, OWNER)).toEqual({
+        route: 'OwnerLeave',
+        params: { tab: 'requests', filter: 'pending' },
+      });
+    });
+
+    it('job.approver_removed never navigates (the job may have left the branch)', () => {
+      for (const role of [OWNER, EMPLOYEE, VIEWER]) {
+        expect(pushTapTargetForEvent('job.approver_removed', JOB, role)).toBeNull();
+      }
+    });
+
+    it('job.approver_added still opens the job for the role', () => {
+      expect(pushTapTargetForEvent('job.approver_added', JOB, EMPLOYEE)).toEqual({
+        route: 'TechJobDetail',
+        params: { jobId: JOB },
+      });
+      expect(pushTapTargetForEvent('job.approver_added', JOB, VIEWER)).toEqual({
+        route: 'JobDetail',
+        params: { jobId: JOB },
+      });
+    });
   });
 
   describe('unknown types with an id (registry fallback)', () => {

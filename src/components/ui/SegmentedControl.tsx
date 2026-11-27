@@ -30,6 +30,12 @@ export type SegmentOption<V extends string> = {
   value: V;
   label: string;
   badge?: number;
+  /**
+   * Optional screen-reader-only label. Use when the segment carries extra
+   * context that must be announced but not painted (Your team's
+   * `"Leave, 2"` counts). Falls back to `label`.
+   */
+  accessibilityLabel?: string;
   /** Optional leading glyph (the attendance page's calendar glyphs) —
    *  rendered before the label, in caller-chosen colors. */
   icon?: ReactNode;
@@ -70,6 +76,7 @@ export function SegmentedControl<V extends string>({
             {index > 0 && !active && !prevActive ? <View style={styles.divider} /> : null}
             <Pressable
             accessibilityRole="button"
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
             accessibilityState={{ selected: active }}
             // No-op on the already-active segment: a view switch control
             // shouldn't re-announce a view you're already on (and callers

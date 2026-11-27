@@ -53,7 +53,12 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../src/services', () => ({
-  jobService: { getById: jest.fn(), list: jest.fn(), advanceWorkflow: jest.fn() },
+  jobService: {
+    getById: jest.fn(),
+    list: jest.fn(),
+    advanceWorkflow: jest.fn(),
+    decidePending: jest.fn(),
+  },
   // The REAL merge helper, not a stub: the advance flow applies the response
   // through it. Its module is type-import-only (no api client/MMKV chain),
   // so requireActual stays noise-free here.
@@ -74,6 +79,14 @@ jest.mock('../src/features/profile', () => ({
   formatPhone: () => '+91 90000 00000',
 }));
 
+// Epic 24 — the screen reads its own id from the profile store snapshot
+// (deep import; the barrel above is stubbed). Null keeps the historical
+// "unknown reader" branch that every earlier test runs.
+let mockMyId: string | null = null;
+jest.mock('../src/features/profile/useMyProfile', () => ({
+  useMyProfileSnapshot: () => (mockMyId == null ? null : { id: mockMyId }),
+}));
+
 // 3.4: PhotoSection is replaced by a capture stub so the screen-level wiring
 // can be asserted — confirm → onPhotosConfirmed → silent refetch — without
 // dragging the whole upload pipeline into a screen test (the hook and grid
@@ -91,13 +104,14 @@ jest.mock('../src/features/technicianApp/components/PhotoSection', () => ({
 }));
 
 import TechJobDetailScreen from '../src/features/technicianApp/TechJobDetailScreen';
+import { WorkflowActionBar } from '../src/features/technicianApp/components/WorkflowActionBar';
 import { jobService } from '../src/services';
 import {
   clearTechnicianJobs,
   loadToday,
   useTechnicianJobs,
 } from '../src/features/technicianApp/useTechnicianJobs';
-import { EmptyState } from '../src/components/ui';
+import { Button } from '../src/components/ui';
 import type { ApiJob, JobDetail, Paginated } from '../src/services';
 
 const getById = jobService.getById as jest.Mock;
@@ -250,6 +264,7 @@ beforeEach(() => {
   mockLastPhotoProps = null;
   mockFocusCbs = [];
   mockFocusFired = false;
+  mockMyId = null;
 });
 
 afterEach(() => {
@@ -696,4 +711,110 @@ it('refocusing (returning from Signature) silently refetches the detail', async 
     mockFocusCbs[mockFocusCbs.length - 1]();
   });
   expect(getById).toHaveBeenCalledTimes(2);
+});
+
+// --- Epic 24 (24-5): the manager's decision bar on a pending job ----------
+
+const decidePending = jobService.decidePending as jest.Mock;
+
+it('a decidable pending job shows the manager bar and approves inline (24-5)', async () => {
+  const pending = makeDetail({
+    status: 'pending_approval',
+    currentStep: null,
+    decision: { canDecide: true, reason: null },
+  });
+  getById.mockResolvedValue(pending);
+  decidePending.mockResolvedValue({ ...pending, status: 'scheduled' });
+
+  const renderer = await mountScreen();
+  const text = renderedText(renderer);
+  expect(text).toContain('Approve it to schedule it like any other job.');
+  // A pending job has no workflow bar to advance.
+  expect(text).not.toContain('Up next');
+
+  const approve = renderer.root.findAll(
+    node => node.type === Button && String(node.props.children) === 'Approve',
+  );
+  expect(approve.length).toBeGreaterThan(0);
+  await ReactTestRenderer.act(async () => {
+    approve[approve.length - 1]!.props.onPress();
+  });
+
+  expect(decidePending).toHaveBeenCalledWith('j-1', 'approve', undefined);
+  // Success re-reads the detail (the decision changed the status).
+  expect(getById).toHaveBeenCalledTimes(2);
+});
+
+it('a pending job someone closer owns shows the quiet reason, never buttons (24-5)', async () => {
+  getById.mockResolvedValue(
+    makeDetail({
+      status: 'pending_approval',
+      decision: { canDecide: false, reason: 'higher_manager' },
+    }),
+  );
+
+  const renderer = await mountScreen();
+  const text = renderedText(renderer);
+  expect(text).toContain('Someone closer to Anil decides this job.');
+  expect(
+    renderer.root.findAll(node => node.type === Button && String(node.props.children) === 'Approve'),
+  ).toHaveLength(0);
+});
+
+it('a pending job with no approver says so, and a legacy row shows nothing (24-5)', async () => {
+  getById.mockResolvedValue(
+    makeDetail({
+      status: 'pending_approval',
+      decision: { canDecide: false, reason: 'unresolved' },
+    }),
+  );
+  let renderer = await mountScreen();
+  expect(renderedText(renderer)).toContain('No approver is set up for this job. Ask your admin.');
+
+  getById.mockResolvedValue(makeDetail({ status: 'pending_approval', decision: undefined }));
+  renderer = await mountScreen();
+  const text = renderedText(renderer);
+  expect(text).not.toContain('Approve it to schedule it');
+  expect(text).not.toContain('Someone closer to');
+});
+
+describe("a manager reading a report's job (Epic 24)", () => {
+  it('sees the record but no advance, no photo capture and no shared-store write', async () => {
+    mockMyId = 'mgr-1';
+    getById.mockResolvedValue(
+      makeDetail({
+        status: 'scheduled',
+        technicianId: 'tech-1',
+        currentStep: 'on_my_way',
+      }),
+    );
+
+    const renderer = await mountScreen();
+
+    // The workflow belongs to the assignee: no action bar, and the photo
+    // capture slot is read-only (a manager cannot write to the report's job).
+    expect(renderer.root.findAllByType(WorkflowActionBar)).toHaveLength(0);
+    expect(mockLastPhotoProps?.readOnly).toBe(true);
+    // The report's job never lands in the manager's own Today list.
+    expect(storeSnapshot!.today.some(job => job.id === 'j-1')).toBe(false);
+  });
+
+  it('does get the decision bar on a pending job they can decide', async () => {
+    mockMyId = 'mgr-1';
+    getById.mockResolvedValue(
+      makeDetail({
+        status: 'pending_approval',
+        technicianId: 'tech-1',
+        currentStep: null,
+        decision: { canDecide: true, reason: null },
+      }),
+    );
+
+    const renderer = await mountScreen();
+    const approve = renderer.root
+      .findAllByType(Button)
+      .find(button => button.props.children === 'Approve');
+
+    expect(approve).toBeDefined();
+  });
 });

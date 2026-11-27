@@ -17,6 +17,7 @@
  * never a crash, never `undefined` on screen.
  */
 import type { ApiNotification, UserRole } from '../../services';
+import { isAdminRole, isViewerRole } from '../auth/roles';
 import {
   formatLeaveDate,
   formatLeaveRange,
@@ -41,6 +42,20 @@ export const LEAVE_EMPLOYEE_EVENTS = [
   'leave.cancelled_by_disable',
 ] as const;
 
+/**
+ * Epic 24 (24-4/24-5) — the tree-change notices to a manager whose approver
+ * set changed. Recipients are tree-derived (any role, including a viewer),
+ * so these cards are built for every role and land on the team queue.
+ */
+export const LEAVE_APPROVER_EVENTS = [
+  'leave.approver_added',
+  'leave.approver_removed',
+] as const;
+
+export function isLeaveApproverEvent(eventType: string): boolean {
+  return (LEAVE_APPROVER_EVENTS as readonly string[]).includes(eventType);
+}
+
 export function isLeaveOwnerEvent(eventType: string): boolean {
   return (LEAVE_OWNER_EVENTS as readonly string[]).includes(eventType);
 }
@@ -60,7 +75,12 @@ export type LeaveCardIconName =
   | 'Clock';
 
 /** The card's tap target (the screen owns the actual navigation). */
-export type LeaveCardTap = 'owner-pending' | 'owner-all' | 'attendance-guarded';
+export type LeaveCardTap =
+  | 'owner-pending'
+  | 'owner-all'
+  | 'attendance-guarded'
+  /** Epic 24 — the manager's team queue (Your team · Leave). */
+  | 'team-pending';
 
 export interface LeaveNotificationCardData {
   kind: 'leave';
@@ -230,7 +250,8 @@ function copyFor(eventType: string, payload: Record<string, unknown>): LeaveEven
       };
     case 'leave.pending_reminder': {
       // 19-4 — the daily "n leave requests waiting" nudge lands on the
-      // actionable queue (Pending), like leave.applied.
+      // actionable queue (Pending), like leave.applied. Epic 24: a manager
+      // recipient lands on the team queue instead (the tap model splits).
       const count = payload.pendingCount;
       if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) {
         return null;
@@ -240,6 +261,24 @@ function copyFor(eventType: string, payload: Record<string, unknown>): LeaveEven
         message: `${count} leave request${count === 1 ? '' : 's'} waiting for approval.`,
         icon: 'Clock',
         tap: 'owner-pending',
+      };
+    }
+    // Epic 24 — the tree changed under a pending request. Informational for
+    // the manager who gained or lost it; both land on the team queue where
+    // the row either appears (or reads read-only) or is gone.
+    case 'leave.approver_added':
+    case 'leave.approver_removed': {
+      const who = isText(payload.employeeName) ? payload.employeeName : null;
+      const dates = datesOf(payload);
+      const message = [who, dates].filter((v): v is string => v !== null).join(' · ') || null;
+      return {
+        title:
+          eventType === 'leave.approver_added'
+            ? 'Now waiting for your approval'
+            : 'No longer yours to approve',
+        message,
+        icon: eventType === 'leave.approver_added' ? 'Clock' : 'Undo2',
+        tap: 'team-pending',
       };
     }
     default:
@@ -259,14 +298,16 @@ export function buildLeaveCards(
   items: ApiNotification[],
   role: UserRole,
 ): LeaveNotificationCardData[] {
-  // Admin sees the review events, an employee the decision events, and a
-  // viewer neither (a viewer cannot read leave requests).
-  const matches =
-    role === 'company_admin'
-      ? isLeaveOwnerEvent
-      : role === 'employee'
-        ? isLeaveEmployeeEvent
-        : () => false;
+  // Epic 24 — the recipient sets are tree-derived, so a manager can be an
+  // admin, an employee OR a viewer. The registry already classified these
+  // rows as leave cards; the old role-keyed whitelist dropped a viewer
+  // manager's and an employee manager's owner-event cards into the generic
+  // bucket. Every enumerated leave event now builds its card for every
+  // role; the TAP splits by role in `notificationTapModel`.
+  const matches = (eventType: string) =>
+    isLeaveOwnerEvent(eventType) ||
+    isLeaveEmployeeEvent(eventType) ||
+    isLeaveApproverEvent(eventType);
   return items
     .filter(n => matches(n.eventType))
     .map(n => {
@@ -279,7 +320,15 @@ export function buildLeaveCards(
         title,
         message: copy?.message ?? null,
         icon: copy?.icon ?? 'CalendarX',
-        tap: copy?.tap ?? (role === 'company_admin' ? 'owner-all' : 'attendance-guarded'),
+        tap:
+          copy?.tap ??
+          // A drifted payload keeps the role's home: the owner's queue, a
+          // viewer manager's team queue, the employee's guarded tab.
+          (isAdminRole(role)
+            ? 'owner-all'
+            : isViewerRole(role)
+              ? 'team-pending'
+              : 'attendance-guarded'),
         latestCreatedAt: n.createdAt,
         isUnread: n.readAt === null,
         unreadIds: n.readAt === null ? [n.id] : [],

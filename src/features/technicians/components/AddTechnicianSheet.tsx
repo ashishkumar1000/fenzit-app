@@ -16,20 +16,23 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
+  Pressable,
   StyleSheet,
   Text,
   View,
   type TextInputInstance,
 } from 'react-native';
-import { Phone, User } from 'lucide-react-native';
+import { ChevronRight, Phone, User } from 'lucide-react-native';
 import { pickContact } from 'react-native-pick-contact';
 import { Button, Input, MultiSelect, PickContactButton, Sheet } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
-import type { ApiError } from '../../../services';
+import { membersService } from '../../../services';
+import type { ApiError, CompanyMember } from '../../../services';
 import { loadSkills, useSkills } from '../../skills';
 import { DIAL_CODE, PHONE_LENGTH } from '../constants';
 import { toLocalMobile } from '../pickedPhone';
 import type { NewTechnicianInput } from '../types';
+import { ManagerPickerStage } from './ManagerPickerStage';
 
 /** API caps `skillIds` at 20 per invite — enforced client-side too so the multi-select can't collect a selection the backend will just reject. */
 const MAX_SKILLS = 20;
@@ -64,6 +67,24 @@ function inviteErrorMessage(err: ApiError): string {
   if (err.status === 403) {
     return "You don't have permission to invite employees.";
   }
+  // Epic 24 — a refused "Reports to" (the manager assignment is validated in
+  // the invite transaction, so the refusal cancels the invite itself). The
+  // server's plain-English line is the truth here; the fixed transport line
+  // would invite the owner to retry a permanent refusal.
+  if (
+    err.code === 'MANAGER_NOT_ACTIVE' ||
+    err.code === 'MEMBER_IS_ADMIN' ||
+    err.code === 'HIERARCHY_CYCLE' ||
+    err.code === 'HIERARCHY_DEPTH' ||
+    err.code === 'RESOURCE_NOT_FOUND'
+  ) {
+    // The manager assignment is validated inside the invite transaction, so
+    // a refusal cancels the whole invite — say that, never imply a retry
+    // sent nothing. Give the server line its full stop when it arrived
+    // without one (the ownerLeaveModel precedent).
+    const line = (err.message || 'The reporting manager could not be set.').trim();
+    return `${/[.!?…]$/.test(line) ? line : `${line}.`} No invite was sent.`;
+  }
   return 'Could not send the invite. Try again.';
 }
 
@@ -71,6 +92,17 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [skillIds, setSkillIds] = useState<string[]>([]);
+
+  // Epic 24 — the optional "Reports to". The directory is fetched when the
+  // picker first opens (not on every sheet mount); the chosen member's id
+  // rides the invite POST, and an absent choice omits the key.
+  const [stage, setStage] = useState<'form' | 'manager'>('form');
+  const [manager, setManager] = useState<CompanyMember | null>(null);
+  const [pickedManager, setPickedManager] = useState<CompanyMember | null>(null);
+  const [members, setMembers] = useState<CompanyMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  const [membersLoaded, setMembersLoaded] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   // Same-frame double-tap guard: `submitting` (and the Button's disabled)
@@ -116,6 +148,34 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     setSubmitError('');
     setPickError('');
     setNameFromPick(false);
+    setStage('form');
+    setManager(null);
+    setPickedManager(null);
+    setMembersLoaded(false);
+    setMembers([]);
+    setMembersError(null);
+  };
+
+  const loadMembers = () => {
+    setMembersLoading(true);
+    setMembersError(null);
+    membersService
+      .listMembers()
+      .then(rows => {
+        setMembers(rows);
+        setMembersLoaded(true);
+      })
+      .catch((err: ApiError) => {
+        setMembersError(err?.message || "Couldn't load your team.");
+      })
+      .finally(() => setMembersLoading(false));
+  };
+
+  const openManagerPicker = () => {
+    if (submitting) return;
+    setPickedManager(manager);
+    setStage('manager');
+    if (!membersLoaded && !membersLoading) loadMembers();
   };
 
   const handleClose = () => {
@@ -200,7 +260,12 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     setSubmitError('');
     const editsAtSubmit = editCount.current;
     try {
-      await onSubmit({ name: name.trim(), phone, skillIds });
+      await onSubmit({
+        name: name.trim(),
+        phone,
+        skillIds,
+        ...(manager ? { managerId: manager.userId } : {}),
+      });
       reset();
       onClose();
     } catch (err) {
@@ -226,14 +291,32 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
     <Sheet
       visible={visible}
       onClose={handleClose}
-      // While the invite POST is in flight, drag-down and Android back are
-      // blocked at the native level — `handleClose`'s veto alone fires too
-      // late (the native sheet has already dismissed, leaving the parent
-      // stuck). A mid-flight dismissal would also skip the reset, so a
-      // reopen would show stale form values.
-      dismissible={!submitting}
-      title="Add employee"
-      subtitle="They'll get an SMS invite to download the Fenzit app and come online.">
+      dismissible={!submitting && stage === 'form'}
+      title={stage === 'manager' ? 'Reports to' : 'Add employee'}
+      subtitle={
+        stage === 'manager'
+          ? 'Who this person reports to'
+          : "They'll get an SMS invite to download the Fenzit app and come online."
+      }>
+      {stage === 'manager' ? (
+        <ManagerPickerStage
+          members={members}
+          loading={membersLoading}
+          loadError={membersError}
+          onRetry={loadMembers}
+          memberId={null}
+          selected={pickedManager}
+          onSelect={setPickedManager}
+          saving={false}
+          saveError={null}
+          onSave={() => {
+            setManager(pickedManager);
+            setStage('form');
+          }}
+          onCancel={() => setStage('form')}
+        />
+      ) : (
+        <>
       <View style={styles.form}>
         <Input
           label="Name"
@@ -278,6 +361,24 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
           disabled={loadingSkills || skills.length === 0}
           searchable
         />
+
+        {/* Epic 24 — optional "Reports to". Opens the picker as a stage in
+            this same sheet; the chosen id rides the invite POST only when
+            set. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Reports to ${manager?.name ?? 'not set'}`}
+          onPress={openManagerPicker}
+          style={({ pressed }) => [styles.managerRow, pressed ? styles.managerRowPressed : null]}>
+          <View style={styles.managerTexts}>
+            <Text style={styles.managerLabel}>Reports to</Text>
+            <Text style={styles.managerValue} numberOfLines={1}>
+              {manager?.name?.trim() || 'Not set'}
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} strokeWidth={2} />
+        </Pressable>
+        <Text style={styles.managerHelper}>Optional. You can change this later.</Text>
       </View>
 
       {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}
@@ -290,6 +391,8 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
         onPress={handleSubmit}>
         {submitting ? 'Sending…' : 'Send invite'}
       </Button>
+        </>
+      )}
     </Sheet>
   );
 }
@@ -315,6 +418,38 @@ const styles = StyleSheet.create({
   submitError: {
     ...typography.bodySm,
     color: colors.danger,
+    marginTop: -spacing.s2,
+  },
+  managerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.s3,
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: 10,
+    paddingHorizontal: spacing.s3,
+    backgroundColor: colors.surfaceCard,
+  },
+  managerRowPressed: {
+    backgroundColor: colors.surfaceSunken,
+  },
+  managerTexts: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  managerLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  managerValue: {
+    ...typography.bodyStrong,
+    color: colors.textStrong,
+  },
+  managerHelper: {
+    ...typography.caption,
+    color: colors.textMuted,
     marginTop: -spacing.s2,
   },
 });

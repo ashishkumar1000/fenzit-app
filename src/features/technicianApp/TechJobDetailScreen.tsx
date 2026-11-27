@@ -18,6 +18,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AccessibilityInfo,
+  Alert,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -34,19 +36,22 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Badge, IconButton } from '../../components/ui';
+import { Badge, Button, IconButton } from '../../components/ui';
 import { colors, radius, spacing, typography } from '../../theme';
 import { jobService } from '../../services';
 import type { ApiError, JobDetail } from '../../services';
 import type { TechnicianRootStackParamList } from '../../navigation/types';
+import { useMyProfileSnapshot } from '../profile/useMyProfile';
 import { apiJobOf, loadToday, upsertTechnicianJob } from './useTechnicianJobs';
 import { upsertJob } from '../jobs/useJobs';
+import { jobDetailDecisionNote } from '../team/teamModel';
 import { statusToBadge } from '../jobs/format';
 import { actionBarAction } from './workflowActionBarModel';
 import { useWorkflowAdvance } from './useWorkflowAdvance';
 import { FailedView, NotFoundView, UnassignedView } from './components/DetailErrorViews';
 import { TechJobDetailContent } from './components/TechJobDetailContent';
 import { WorkflowActionBar } from './components/WorkflowActionBar';
+import { RejectJobSheet } from '../jobDetail/components/RejectJobSheet';
 import { isAbort } from '../../utils';
 
 type Navigation = NativeStackNavigationProp<TechnicianRootStackParamList, 'TechJobDetail'>;
@@ -67,9 +72,24 @@ export default function TechJobDetailScreen() {
   // nothing to show — pop back instead of crashing.
   const jobId = useRoute<RouteProp<TechnicianRootStackParamList, 'TechJobDetail'>>().params?.jobId;
 
+  // Epic 24 — a reporting manager may open a report's job from "Your team".
+  // That job is READ-ONLY here: the workflow bar, the stepper advances and
+  // the shared-store upserts belong to the assignee. The profile is the
+  // caller's own id, read from the store the shell already loaded (this
+  // screen never starts a `/users/me` of its own); a missing profile keeps
+  // the pre-24-5 behaviour rather than hiding a technician's bar.
+  const profile = useMyProfileSnapshot();
+  const myId = profile?.id ?? null;
+  const myIdRef = useRef<string | null>(myId);
+  myIdRef.current = myId;
+
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // Epic 24 — the manager's decision bar on a pending job they may decide.
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [deciding, setDeciding] = useState<'approve' | 'reject' | null>(null);
+  const decideLatch = useRef(false);
 
   // The in-flight load's promise: new loads chain behind it (never silently
   // dropped — the advance failure paths MUST land their refetch) but never
@@ -134,9 +154,14 @@ export default function TechJobDetailScreen() {
           // stores so the lists stay honest without a refetch: Today's
           // replace-in-place row, and the Jobs tab's `useJobs` row (its
           // today-scope prepend is a no-op elsewhere — same limits the
-          // owner's JobDetail accepts).
-          upsertTechnicianJob(apiJobOf(fresh));
-          upsertJob(apiJobOf(fresh));
+          // owner's JobDetail accepts). Epic 24: ONLY the assignee's own
+          // read writes these stores — a manager reading a report's job
+          // must not prepend it into their own Today list.
+          const mine = myIdRef.current;
+          if (mine == null || fresh.technicianId === mine) {
+            upsertTechnicianJob(apiJobOf(fresh));
+            upsertJob(apiJobOf(fresh));
+          }
         } catch (caught) {
           const apiError = caught as ApiError;
           if (isAbort(apiError, signal)) return;
@@ -158,6 +183,43 @@ export default function TechJobDetailScreen() {
       return request;
     },
     [jobId, showUnassigned],
+  );
+
+  /**
+   * Epic 24 — approve/decline a pending job from the record screen. Success
+   * reloads the detail (the decision changed the status); a 409 means the
+   * job was decided elsewhere, so the reload reconciles instead of shouting.
+   */
+  const decide = useCallback(
+    async (kind: 'approve' | 'reject', reason?: string) => {
+      if (detail == null || decideLatch.current) return;
+      decideLatch.current = true;
+      setDeciding(kind);
+      try {
+        await jobService.decidePending(detail.id, kind, reason);
+        if (!mountedRef.current) return;
+        AccessibilityInfo.announceForAccessibility(
+          kind === 'approve' ? 'Job approved' : 'Job declined',
+        );
+        setRejectOpen(false);
+        void load(false);
+      } catch (caught) {
+        const apiError = caught as ApiError;
+        if (apiError.code === 'JOB_NOT_PENDING') {
+          setRejectOpen(false);
+          void load(false);
+          return;
+        }
+        Alert.alert(
+          "Couldn't save the decision",
+          apiError.message || 'Please try again.',
+        );
+      } finally {
+        decideLatch.current = false;
+        if (mountedRef.current) setDeciding(null);
+      }
+    },
+    [detail, load],
   );
 
   // Fetch on mount; the in-flight request is aborted if the screen unmounts.
@@ -258,7 +320,14 @@ export default function TechJobDetailScreen() {
     ? detail.attachments.filter(a => a.type === 'photo').length
     : 0;
   const action = detail ? actionBarAction(detail, detail.activityLog, photoCount) : null;
-  const barAction = action && action.kind !== 'none' ? action : null;
+  // Epic 24 — the workflow belongs to the assignee. A manager reading a
+  // report's job sees the record, never a "Start job" they cannot post.
+  const isOwnJob =
+    myId == null ||
+    detail == null ||
+    detail.technicianId === myId ||
+    detail.createdBy === myId;
+  const barAction = action && action.kind !== 'none' && isOwnJob ? action : null;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -331,8 +400,9 @@ export default function TechJobDetailScreen() {
             ) : null}
             <TechJobDetailContent
               detail={detail}
-              onAdvance={advance}
-              pendingStep={pendingStep}
+              canAct={isOwnJob}
+              onAdvance={isOwnJob ? advance : undefined}
+              pendingStep={isOwnJob ? pendingStep : null}
               // 3.4 — a confirmed photo upload refetches the detail (no
               // spinner): the grid re-renders from server truth, including a
               // fresh read URL for the just-uploaded photo.
@@ -356,6 +426,53 @@ export default function TechJobDetailScreen() {
               onDismissError={clearActionError}
             />
           ) : null}
+
+          {/* Epic 24 — the manager's decision bar for a pending job. The
+              workflow bar above never coexists (a pending job has no
+              advance), and a row somebody closer owns shows the quiet
+              reason instead of buttons. */}
+          {detail.status === 'pending_approval' && detail.decision?.canDecide === true ? (
+            <SafeAreaView edges={['bottom']} style={styles.decisionFooter}>
+              <Text style={styles.decisionNote}>
+                Approve it to schedule it like any other job.
+              </Text>
+              <View style={styles.decisionRow}>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  style={styles.decisionButton}
+                  disabled={deciding != null}
+                  loading={deciding === 'reject'}
+                  onPress={() => setRejectOpen(true)}>
+                  Decline
+                </Button>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  style={styles.decisionButton}
+                  disabled={deciding != null}
+                  loading={deciding === 'approve'}
+                  onPress={() => void decide('approve')}>
+                  Approve
+                </Button>
+              </View>
+            </SafeAreaView>
+          ) : detail.status === 'pending_approval' && detail.decision != null ? (
+            <SafeAreaView edges={['bottom']} style={styles.decisionFooter}>
+              <Text style={styles.decisionNote}>
+                {jobDetailDecisionNote(detail.decision, detail.technician?.name) ?? ''}
+              </Text>
+            </SafeAreaView>
+          ) : null}
+
+          <RejectJobSheet
+            visible={rejectOpen}
+            jobNumber={detail.jobNumber}
+            employeeName={detail.technician?.name ?? null}
+            submitting={deciding === 'reject'}
+            onClose={() => setRejectOpen(false)}
+            onConfirm={reason => void decide('reject', reason || undefined)}
+          />
         </>
       )}
     </SafeAreaView>
@@ -378,6 +495,26 @@ const styles = StyleSheet.create({
   rejectionText: {
     ...typography.body,
     color: colors.status.rejected.fg,
+  },
+  decisionFooter: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderDefault,
+    backgroundColor: colors.surfaceCard,
+    paddingHorizontal: spacing.s4,
+    paddingTop: spacing.s3,
+    paddingBottom: spacing.s3,
+    gap: spacing.s2,
+  },
+  decisionNote: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+  },
+  decisionRow: {
+    flexDirection: 'row',
+    gap: spacing.s3,
+  },
+  decisionButton: {
+    flex: 1,
   },
   // Back header pattern (spec §0): icon button + title@20 + trailing badge,
   // hairline under.

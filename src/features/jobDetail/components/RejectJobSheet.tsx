@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Input, Sheet } from '../../../components/ui';
+import { Button, InlineError, Input, Sheet } from '../../../components/ui';
 import { colors, spacing } from '../../../theme';
 
 type Props = {
@@ -18,6 +18,8 @@ type Props = {
   employeeName: string | null;
   /** True while the rejection request is in flight. */
   submitting: boolean;
+  /** A failed write's message — shown in place so the typed reason survives. */
+  error?: string | null;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 };
@@ -27,6 +29,7 @@ export function RejectJobSheet({
   jobNumber,
   employeeName,
   submitting,
+  error = null,
   onClose,
   onConfirm,
 }: Props) {
@@ -63,6 +66,9 @@ export function RejectJobSheet({
           maxLength={500}
           accessibilityLabel="Rejection reason"
         />
+        {/* A failed write stays here with the reason intact (the manager's
+            queue keeps the sheet open rather than closing over its error). */}
+        {error != null ? <InlineError message={error} /> : null}
         {/* The destructive-text confirm (ghost + red label), not brand blue:
             blue is the app's "go" colour and this is the decline path — the
             confirm must not read more positive than the footer that opened

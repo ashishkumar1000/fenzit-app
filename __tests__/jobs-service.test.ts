@@ -82,6 +82,30 @@ it('passes cursor, date, technicianId and limit through untouched', async () => 
   });
 });
 
+it('forwards teamOnly to the wire (the manager queue\'s tenant-leak guard)', async () => {
+  await jobService.list({
+    scope: 'all',
+    status: ['pending_approval'],
+    teamOnly: true,
+    limit: 20,
+  });
+  expect(get).toHaveBeenCalledWith('/jobs', {
+    params: {
+      scope: 'all',
+      status: ['pending_approval'],
+      teamOnly: true,
+      limit: 20,
+    },
+  });
+});
+
+it('omits teamOnly when it is not requested (the owner console keeps the tenant read)', async () => {
+  await jobService.list({ scope: 'all', status: ['pending_approval'] });
+  expect(get).toHaveBeenCalledWith('/jobs', {
+    params: { scope: 'all', status: ['pending_approval'] },
+  });
+});
+
 it('getById hits /jobs/:id and forwards the abort signal', async () => {
   const controller = new AbortController();
   await jobService.getById('j-1', controller.signal);

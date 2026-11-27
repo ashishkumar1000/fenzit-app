@@ -3,15 +3,23 @@
  * ScreenHeader, the "Team member" section with a read-only selected
  * employee Card (Avatar + name + office + ghost "Change"), the shared
  * `LeaveApplyFields` body, and a pinned footer holding the inline-error
- * slot above the primary lg **"Approve"** — the AC's born-approved submit
- * (never "Submit for approval"). Since 23-14 the form renders the REAL
- * live preview: the owner route `GET /attendance/leave/on-behalf/preview`
- * (the technician-scoped `me` preview still 403s an owner JWT) returns
- * the working-days count and — when the request would be refused (an
- * insufficient balance on the target, a locked payroll month, an
- * overlap) — the server's message verbatim in the count slot, with the
- * Approve button gated while it stands. The EmployeePickerSheet opens
- * automatically on a cold entry and re-opens from "Change".
+ * slot above the primary lg submit.
+ *
+ * Epic 24 (24-5): the same screen now serves two callers. An ADMIN's filing
+ * is born approved — the label stays "Approve" and its helper says so. An
+ * employee MANAGER's filing is PENDING (the server routes it to the nearest
+ * eligible manager above the subject), so the label is "Apply leave" and the
+ * helper does not claim an approval. The picker and the leave-type catalog
+ * also branch by caller (see useApplyOnBehalf).
+ *
+ * Since 23-14 the form renders the REAL live preview: the owner route
+ * `GET /attendance/leave/on-behalf/preview` (the technician-scoped `me`
+ * preview still 403s an owner JWT) returns the working-days count and — when
+ * the request would be refused (an insufficient balance on the target, a
+ * locked payroll month, an overlap) — the server's message verbatim in the
+ * count slot, with the submit button gated while it stands. The
+ * EmployeePickerSheet opens automatically on a cold entry and re-opens from
+ * "Change".
  */
 import {
   KeyboardAvoidingView,
@@ -25,7 +33,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Avatar, Button, InlineError, SectionHead } from '../../../components/ui';
 import { colors, spacing, typography } from '../../../theme';
-import type { RootStackParamList } from '../../../navigation/types';
+import type { RootStackParamList, TechnicianRootStackParamList } from '../../../navigation/types';
 import ScreenHeader from '../offices/ScreenHeader';
 import { EmployeePickerSheet } from './EmployeePickerSheet';
 import { LeaveApplyFields } from './LeaveApplyFields';
@@ -33,7 +41,10 @@ import { LeaveBalancesCard } from './LeaveBalancesCard';
 import { LeaveTypePickerSheet } from './LeaveTypePickerSheet';
 import { useApplyOnBehalf } from './useApplyOnBehalf';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'ApplyOnBehalf'>;
+type Props = NativeStackScreenProps<
+  RootStackParamList & TechnicianRootStackParamList,
+  'ApplyOnBehalf'
+>;
 
 export default function ApplyOnBehalfScreen({ navigation, route }: Props) {
   const form = useApplyOnBehalf({ navigation, route });
@@ -121,8 +132,13 @@ export default function ApplyOnBehalfScreen({ navigation, route }: Props) {
             loading={form.submitting}
             size="lg"
             fullWidth>
-            Approve
+            {form.isAdmin ? 'Approve' : 'Apply leave'}
           </Button>
+          <Text style={styles.footerHelper}>
+            {form.isAdmin
+              ? 'This leave is recorded as approved.'
+              : "It goes to their manager's approval."}
+          </Text>
         </View>
       </KeyboardAvoidingView>
 
@@ -205,5 +221,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceCard,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle,
+  },
+  footerHelper: {
+    ...typography.bodySm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
 });
