@@ -93,9 +93,10 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
   const [phone, setPhone] = useState('');
   const [skillIds, setSkillIds] = useState<string[]>([]);
 
-  // Epic 24 — the optional "Reports to". The directory is fetched when the
-  // picker first opens (not on every sheet mount); the chosen member's id
-  // rides the invite POST, and an absent choice omits the key.
+  // Epic 24 — "Reports to", defaulting to the company owner (24-8). The
+  // directory is fetched when the picker first opens (not on every sheet
+  // mount); the chosen member's id rides the invite POST, and an absent
+  // choice omits the key.
   const [stage, setStage] = useState<'form' | 'manager'>('form');
   const [manager, setManager] = useState<CompanyMember | null>(null);
   const [pickedManager, setPickedManager] = useState<CompanyMember | null>(null);
@@ -362,23 +363,23 @@ export function AddTechnicianSheet({ visible, onClose, onSubmit }: Props) {
           searchable
         />
 
-        {/* Epic 24 — optional "Reports to". Opens the picker as a stage in
+        {/* Epic 24 — "Reports to", defaulting to the company owner (24-8). Opens the picker as a stage in
             this same sheet; the chosen id rides the invite POST only when
             set. */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Reports to ${manager?.name ?? 'not set'}`}
+          accessibilityLabel={`Reports to ${manager?.name ?? 'the company owner'}`}
           onPress={openManagerPicker}
           style={({ pressed }) => [styles.managerRow, pressed ? styles.managerRowPressed : null]}>
           <View style={styles.managerTexts}>
             <Text style={styles.managerLabel}>Reports to</Text>
             <Text style={styles.managerValue} numberOfLines={1}>
-              {manager?.name?.trim() || 'Not set'}
+              {manager?.name?.trim() || 'The company owner'}
             </Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} strokeWidth={2} />
         </Pressable>
-        <Text style={styles.managerHelper}>Optional. You can change this later.</Text>
+        <Text style={styles.managerHelper}>Default. You can change this later.</Text>
       </View>
 
       {submitError ? <Text style={styles.submitError}>{submitError}</Text> : null}

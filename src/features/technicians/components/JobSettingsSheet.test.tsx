@@ -3,7 +3,8 @@
  * Reporting manager section). Pins:
  *
  *  - the section renders above the job switches for every non-removed member
- *    (a viewer can hold a manager too), with "Reports to" / "Not set" and the
+ *    (a viewer can hold a manager too), with "Reports to" / "The company
+ *    owner" and the
  *    "No one above them in the team yet." line at the top of the tree;
  *  - a set manager prints the name, the upward chain (the owner marked) and
  *    the report headcount;
@@ -129,7 +130,7 @@ describe('JobSettingsSheet — the Reporting manager section', () => {
     const copy = texts(renderer.root);
     expect(copy).toContain('Reporting manager');
     expect(copy).toContain('Reports to');
-    expect(copy).toContain('Not set');
+    expect(copy).toContain('The company owner');
     expect(copy).toContain('No one above them in the team yet.');
     // The switches still follow the section.
     expect(copy).toContain('Can create jobs');
@@ -170,7 +171,7 @@ describe('JobSettingsSheet — the picker stage', () => {
     const renderer = await renderSheet();
 
     await act(async () => {
-      managerRow(renderer.root, 'Reports to not set').props.onPress();
+      managerRow(renderer.root, 'Reports to the company owner').props.onPress();
     });
 
     const stage = renderer.root.findByType(ManagerPickerStage);
@@ -183,7 +184,7 @@ describe('JobSettingsSheet — the picker stage', () => {
     ]);
     // The stage's own copy: the neutral option and the viewer fact once chosen.
     const copy = texts(renderer.root);
-    expect(copy).toContain('No reporting manager');
+    expect(copy).toContain('The company owner');
     expect(copy).toContain('PQA Viewer Meena Iyer');
     expect(copy.some(line => line.endsWith('· Viewer'))).toBe(true);
 
@@ -208,7 +209,7 @@ describe('JobSettingsSheet — the picker stage', () => {
     const renderer = await renderSheet();
 
     await act(async () => {
-      managerRow(renderer.root, 'Reports to not set').props.onPress();
+      managerRow(renderer.root, 'Reports to the company owner').props.onPress();
     });
     act(() => {
       renderer.root.findByType(ManagerPickerStage).props.onSelect(MEENA);
@@ -254,7 +255,7 @@ describe('JobSettingsSheet — the picker stage', () => {
     });
 
     expect(setManager).toHaveBeenCalledWith('u-nisha', null);
-    expect(texts(renderer.root)).toContain('Not set');
+    expect(texts(renderer.root)).toContain('The company owner');
   });
 
   it('a refusal keeps the stage open with the server message and the previous value', async () => {
@@ -267,7 +268,7 @@ describe('JobSettingsSheet — the picker stage', () => {
     const renderer = await renderSheet();
 
     await act(async () => {
-      managerRow(renderer.root, 'Reports to not set').props.onPress();
+      managerRow(renderer.root, 'Reports to the company owner').props.onPress();
     });
     act(() => {
       renderer.root.findByType(ManagerPickerStage).props.onSelect(PRIYA);

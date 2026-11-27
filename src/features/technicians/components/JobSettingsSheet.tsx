@@ -204,7 +204,7 @@ export function JobSettingsSheet({ visible, technician, onClose }: Props) {
                 ) : (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`Reports to ${member.managerName ?? 'not set'}`}
+                    accessibilityLabel={`Reports to ${member.managerName ?? 'the company owner'}`}
                     onPress={openManagerPicker}
                     style={({ pressed }) => [
                       styles.managerRow,
@@ -213,7 +213,7 @@ export function JobSettingsSheet({ visible, technician, onClose }: Props) {
                     <View style={styles.managerTexts}>
                       <Text style={styles.managerLabel}>Reports to</Text>
                       <Text style={styles.managerValue} numberOfLines={1}>
-                        {member.managerName ?? 'Not set'}
+                        {member.managerName ?? 'The company owner'}
                       </Text>
                     </View>
                     <ChevronRight size={18} color={colors.textMuted} strokeWidth={2} />

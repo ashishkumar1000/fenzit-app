@@ -387,7 +387,7 @@ describe('AddTechnicianSheet — the optional Reports to (24-5)', () => {
     const onSubmit = jest.fn().mockResolvedValue(undefined);
     const root = renderSheet({ visible: true, onSubmit });
 
-    expect(root.findAll(n => n.props.accessibilityLabel === 'Reports to not set').length).toBeGreaterThan(0);
+    expect(root.findAll(n => n.props.accessibilityLabel === 'Reports to the company owner').length).toBeGreaterThan(0);
 
     fillValidForm(root);
     await act(async () => {
@@ -409,7 +409,7 @@ describe('AddTechnicianSheet — the optional Reports to (24-5)', () => {
     const root = renderSheet({ visible: true, onSubmit });
 
     await act(async () => {
-      root.findAll(n => n.props.accessibilityLabel === 'Reports to not set')[0]!.props.onPress();
+      root.findAll(n => n.props.accessibilityLabel === 'Reports to the company owner')[0]!.props.onPress();
     });
     // The picker stage renders inside the same sheet (no nested native sheet).
     expect(listMembers).toHaveBeenCalledTimes(1);
@@ -446,7 +446,7 @@ describe('AddTechnicianSheet — the optional Reports to (24-5)', () => {
     const root = renderSheet({ visible: true, onSubmit });
 
     await act(async () => {
-      root.findAll(n => n.props.accessibilityLabel === 'Reports to not set')[0]!.props.onPress();
+      root.findAll(n => n.props.accessibilityLabel === 'Reports to the company owner')[0]!.props.onPress();
     });
     act(() => {
       root.findByType(ManagerPickerStage).props.onSelect(meena);

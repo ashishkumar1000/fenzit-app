@@ -108,7 +108,10 @@ export function ManagerPickerStage(input: {
             accessibilityState={{ selected: selected == null }}
             onPress={() => onSelect(null)}
             style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}>
-            <Text style={styles.rowName}>No reporting manager</Text>
+            <Text style={styles.rowName}>The company owner</Text>
+            <Text style={styles.rowSub} numberOfLines={1}>
+              The default when nobody else is chosen.
+            </Text>
             {selected == null ? <Check size={18} color={colors.primary} strokeWidth={2} /> : null}
           </Pressable>
           {candidates.map(member => {
